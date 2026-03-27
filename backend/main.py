@@ -3,9 +3,11 @@
 Provides:
 - GET  /health              — liveness check
 - GET  /api/status          — AI service health (Ollama + Whisper)
-- POST /speech              — audio upload → Whisper transcription → sign names
-- POST /rights/analyze      — incident description → rights analysis (Claude)
-- POST /rights/letter       — full details → formal complaint letter (Claude)
+- POST /speech              — audio upload → Whisper transcription → SASL signs
+- POST /rights/analyze      — incident description → rights analysis (Gemini)
+- POST /rights/letter       — full details → formal complaint letter (Gemini)
+- POST /api/sasl/translate  — English text → SASL gloss + tokens
+- GET  /api/sasl/health     — SASL transformer health
 - WS   /ws/{sessionId}/{role} — main real-time communication channel
 """
 import sys
@@ -13,20 +15,48 @@ import os
 import json
 import re
 import logging
+import logging.handlers
 
 # Ensure project root is in sys.path regardless of working directory
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 
-logging.basicConfig(level=logging.INFO)
+# ── Logging: console + rotating file ────────────────────────────────────────
+_log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
+os.makedirs(_log_dir, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.handlers.RotatingFileHandler(
+            os.path.join(_log_dir, "amandla.log"),
+            maxBytes=5 * 1024 * 1024,  # 5 MB per file
+            backupCount=3,
+            encoding="utf-8",
+        ),
+    ],
+)
 logger = logging.getLogger(__name__)
 
+# 10 MB upload cap for audio files
+_MAX_AUDIO_BYTES = 10 * 1024 * 1024
+
 app = FastAPI(title="AMANDLA Backend")
+
+# ── SASL transformer routes ────────────────────────────────────────
+try:
+    from sasl_transformer.routes import router as sasl_router
+    app.include_router(sasl_router, prefix="/api/sasl")
+    logger.info("SASL transformer routes registered at /api/sasl/*")
+except Exception as _e:
+    logger.error(f"SASL transformer routes not loaded: {_e}", exc_info=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,6 +106,7 @@ async def _check_ollama() -> bool:
         return False
 
 
+
 def _check_whisper() -> bool:
     """Check whether the Whisper model is already loaded (does not trigger load)."""
     try:
@@ -83,6 +114,56 @@ def _check_whisper() -> bool:
         return whisper_service._model is not None
     except Exception:
         return False
+
+
+# ── SASL PIPELINE ─────────────────────────────────────────
+
+# Module-level SASL transformer singleton (lazy init on first use)
+_sasl_transformer = None
+
+
+async def _text_to_sasl_signs(text: str) -> dict:
+    """
+    Convert English text → SASL-ordered sign names + gloss text.
+
+    Fallback chain:
+      1. SASL transformer (Gemini) — proper SOV grammar, time-first, aspect markers
+      2. classify_text_to_signs (Ollama → Gemini → rule-based word map)
+
+    Returns:
+      { signs: [...], text: "<SASL gloss>", original_english: "<English>" }
+    """
+    global _sasl_transformer
+    if not text:
+        return {"signs": [], "text": "", "original_english": ""}
+
+    # 1. Try SASL transformer (proper grammar ordering via Gemini)
+    try:
+        from sasl_transformer.transformer import SASLTransformer
+        from sasl_transformer.models import TranslationRequest
+        if _sasl_transformer is None:
+            _sasl_transformer = SASLTransformer()
+        transformer = _sasl_transformer
+        response = await transformer.translate(TranslationRequest(english_text=text))
+        sign_names = [tok.gloss for tok in response.tokens]
+        if sign_names:
+            logger.info(f"[SASL] '{text[:50]}' → '{response.gloss_text}'")
+            return {
+                "signs": sign_names,
+                "text": response.gloss_text,
+                "original_english": text,
+            }
+    except Exception as e:
+        logger.warning(f"[SASL] Transformer failed, falling back: {e}")
+
+    # 2. Fallback: raw sign name list (no grammar reordering)
+    from backend.services.ollama_client import classify_text_to_signs
+    sign_names = await classify_text_to_signs(text)
+    return {
+        "signs": sign_names,
+        "text": " ".join(sign_names),
+        "original_english": text,
+    }
 
 
 # ── SPEECH → SIGNS ────────────────────────────────────────
@@ -97,6 +178,8 @@ async def upload_speech(
     Returns: { text, signs, language, confidence }
     """
     content = await audio.read()
+    if len(content) > _MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Audio file too large (max 10 MB)")
     logger.info(f"[Speech] Received {audio.filename} size={len(content)} mime={mime_type}")
 
     try:
@@ -107,11 +190,13 @@ async def upload_speech(
             logger.warning(f"[Speech] Transcription returned error: {result['error']}")
 
         text = result.get("text", "").strip()
-        signs = sentence_to_sign_names(text) if text else []
+        sasl = await _text_to_sasl_signs(text)
 
         return {
-            "text": text,
-            "signs": signs,
+            "text": text,                        # original English — for hearing window display
+            "original_english": text,
+            "sasl_gloss": sasl["text"],          # SASL grammar — for deaf window only
+            "signs": sasl["signs"],
             "language": result.get("language", "en"),
             "confidence": result.get("confidence", 0.0)
         }
@@ -157,6 +242,163 @@ async def rights_letter(req: LetterRequest):
     return result
 
 
+# ── DEAF → HEARING SIGN RECONSTRUCTION ───────────────────
+# Per-session buffers: accumulate signs from deaf user, then
+# reconstruct to natural English and send to hearing with TTS.
+
+import asyncio as _asyncio
+
+_sign_buffers: Dict[str, list] = {}   # sessionId → [sign_names]
+_sign_tasks:   Dict[str, Any]  = {}   # sessionId → asyncio.Task
+
+
+def _simple_signs_to_english(signs: list) -> str:
+    """Rule-based SASL sign sequence → natural English sentence (no network).
+
+    For single known signs, returns a complete proper sentence.
+    For sequences, builds the best English it can from a word map.
+    """
+    # Single-sign → complete natural English sentence
+    _sentence_map = {
+        "HELP":      "I need help.",
+        "WATER":     "I need water.",
+        "DOCTOR":    "I need a doctor.",
+        "NURSE":     "I need a nurse.",
+        "HOSPITAL":  "I need to go to the hospital.",
+        "SICK":      "I am not feeling well.",
+        "PAIN":      "I am in pain.",
+        "HURT":      "I am hurt.",
+        "MEDICINE":  "I need medicine.",
+        "AMBULANCE": "Please call an ambulance.",
+        "EMERGENCY": "This is an emergency.",
+        "HAPPY":     "I am happy.",
+        "SAD":       "I am sad.",
+        "ANGRY":     "I am angry.",
+        "SCARED":    "I am scared.",
+        "TIRED":     "I am tired.",
+        "HUNGRY":    "I am hungry.",
+        "THIRSTY":   "I am thirsty.",
+        "WORRIED":   "I am worried.",
+        "CONFUSED":  "I am confused.",
+        "STOP":      "Please stop.",
+        "WAIT":      "Please wait.",
+        "REPEAT":    "Please repeat that.",
+        "UNDERSTAND":"I understand.",
+        "YES":       "Yes.",
+        "NO":        "No.",
+        "PLEASE":    "Please.",
+        "THANK YOU": "Thank you.",
+        "SORRY":     "I am sorry.",
+        "HELLO":     "Hello.",
+        "GOODBYE":   "Goodbye.",
+        "HOME":      "I want to go home.",
+        "GO":        "I need to go.",
+        "COME":      "Please come here.",
+        "RIGHTS":    "I know my rights.",
+        "LAW":       "This is against the law.",
+        "EQUAL":     "I deserve equal treatment.",
+        "GOOD":      "I am doing well.",
+        "BAD":       "Things are not good.",
+    }
+
+    # Single sign — use the full-sentence map
+    if len(signs) == 1:
+        key = signs[0].upper()
+        if key in _sentence_map:
+            return _sentence_map[key]
+
+    # Multi-sign — word-level map + basic SVO reconstruction
+    _word_map = {
+        "I": "I", "YOU": "you", "WE": "we", "THEY": "they",
+        "WANT": "need", "HELP": "help", "WATER": "water",
+        "DOCTOR": "a doctor", "NURSE": "a nurse", "HOSPITAL": "the hospital",
+        "SICK": "sick", "PAIN": "in pain", "HURT": "hurt",
+        "MEDICINE": "medicine", "AMBULANCE": "an ambulance",
+        "EMERGENCY": "an emergency", "HAPPY": "happy", "SAD": "sad",
+        "ANGRY": "angry", "SCARED": "scared", "TIRED": "tired",
+        "HUNGRY": "hungry", "THIRSTY": "thirsty", "WORRIED": "worried",
+        "CONFUSED": "confused", "GOOD": "good", "BAD": "bad",
+        "YES": "yes", "NO": "no", "PLEASE": "please",
+        "THANK YOU": "thank you", "SORRY": "sorry",
+        "STOP": "stop", "WAIT": "wait", "COME": "come", "GO": "go",
+        "HOME": "home", "SCHOOL": "school", "WORK": "work",
+    }
+    words = [_word_map.get(s.upper(), s.lower()) for s in signs]
+    sentence = " ".join(words)
+    return sentence[0].upper() + sentence[1:] + ("." if not sentence.endswith(".") else "") if sentence else ""
+
+
+async def _ollama_signs_to_english(signs: list) -> str:
+    """Use local Ollama model to reconstruct SASL signs → English."""
+    try:
+        import httpx
+        from dotenv import load_dotenv
+        load_dotenv()
+        base  = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        model = os.getenv("OLLAMA_MODEL", "amandla")
+        sign_str = " ".join(signs)
+        prompt = (
+            f"Convert these SASL sign names to a single natural English sentence.\n"
+            f"Signs: {sign_str}\n"
+            f"Rules: reorder to English SVO, add pronouns/articles/helpers, keep it short.\n"
+            f"Reply with ONLY the English sentence.\n"
+            f"Example: SICK DOCTOR → 'I am sick and need a doctor'"
+        )
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.post(
+                f"{base}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False, "temperature": 0.2}
+            )
+            if r.status_code == 200:
+                text = r.json().get("response", "").strip().split("\n")[0].strip()
+                if text and len(text) < 250:
+                    return text
+    except Exception as e:
+        logger.debug(f"[Signs2English] Ollama failed: {e}")
+    return None
+
+
+async def _signs_to_english(signs: list) -> str:
+    """Reconstruct SASL sign sequence to natural English. Gemini → rule-based."""
+    if not signs:
+        return ""
+
+    # 1. Gemini — best grammar reconstruction (has SASL grammar understanding)
+    try:
+        from backend.services.gemini_service import signs_to_english as gemini_s2e
+        result = await gemini_s2e(signs)
+        if result:
+            logger.info(f"[Signs2English] Gemini: {signs} → {result!r}")
+            return result
+    except Exception as e:
+        logger.debug(f"[Signs2English] Gemini unavailable: {e}")
+
+    # 2. Rule-based fallback (Ollama skipped — unreliable for reverse SASL→English task)
+    result = _simple_signs_to_english(signs)
+    logger.info(f"[Signs2English] Rule-based: {signs} → {result!r}")
+    return result
+
+
+async def _debounce_and_flush(session_id: str, session: dict):
+    """Wait 1.5s after last sign, then reconstruct and send to hearing."""
+    await _asyncio.sleep(1.5)
+    signs = _sign_buffers.pop(session_id, [])
+    _sign_tasks.pop(session_id, None)
+    if not signs:
+        return
+    english = await _signs_to_english(signs)
+    if not english:
+        return
+    hearing_ws = session["users"].get("hearing")
+    if hearing_ws:
+        await _send_safe(hearing_ws, {
+            "type":   "deaf_speech",
+            "text":   english,
+            "signs":  signs,
+        })
+        logger.info(f"[Signs2English] Sent to hearing: {english!r}")
+
+
 # ── WEBSOCKET ─────────────────────────────────────────────
 
 @app.websocket("/ws/{sessionId}/{role}")
@@ -165,6 +407,8 @@ async def websocket_endpoint(websocket: WebSocket, sessionId: str, role: str):
     logger.info(f"[WS] connect session={sessionId} role={role}")
 
     session = sessions.setdefault(sessionId, {"users": {}, "queue": []})
+    if role in session["users"]:
+        logger.warning(f"[WS] Role '{role}' already taken in session {sessionId} — replacing stale connection")
     session["users"][role] = websocket
 
     try:
@@ -179,17 +423,18 @@ async def websocket_endpoint(websocket: WebSocket, sessionId: str, role: str):
             except Exception:
                 msg = {"type": "raw", "data": data}
 
-            # Hearing user sends text → convert to signs → broadcast to deaf
+            # Hearing user sends text → convert to SASL signs → broadcast to deaf
             if msg.get("type") in ("text", "speech_text") and role == "hearing":
                 text     = msg.get("text", "")
                 language = msg.get("language")   # Whisper-detected language code, e.g. "zu"
-                sign_names = sentence_to_sign_names(text)
+                sasl = await _text_to_sasl_signs(text)
                 out = {
-                    "type":       "signs",
-                    "signs":      sign_names,
-                    "text":       text,
-                    "language":   language,
-                    "session_id": sessionId
+                    "type":             "signs",
+                    "signs":            sasl["signs"],
+                    "text":             sasl["text"],
+                    "original_english": sasl["original_english"],
+                    "language":         language,
+                    "session_id":       sessionId
                 }
                 await _broadcast(session, websocket, out)
                 # Also echo turn indicator to both sides
@@ -230,8 +475,18 @@ async def websocket_endpoint(websocket: WebSocket, sessionId: str, role: str):
                         logger.warning(f"[WS] Landmark recognition error: {e}")
                 continue
 
-            # Deaf quick-sign button → echo turn indicator
+            # Deaf quick-sign button → buffer for English reconstruction + forward raw sign
             if msg.get("type") == "sign" and role == "deaf":
+                sign_text = msg.get("text", "")
+                # Buffer non-emergency signs for reconstruction
+                if sign_text and sign_text != "EMERGENCY":
+                    existing = _sign_tasks.get(sessionId)
+                    if existing and not existing.done():
+                        existing.cancel()
+                    _sign_buffers.setdefault(sessionId, []).append(sign_text)
+                    _sign_tasks[sessionId] = _asyncio.create_task(
+                        _debounce_and_flush(sessionId, session)
+                    )
                 await _broadcast(session, websocket, msg)
                 await _broadcast_all(session, {"type": "turn", "speaker": "deaf"})
                 continue
@@ -250,24 +505,28 @@ async def websocket_endpoint(websocket: WebSocket, sessionId: str, role: str):
             logger.info(f"[WS] session {sessionId} cleaned up")
 
 
+async def _send_safe(ws, msg: dict):
+    """Send a JSON message to a single WebSocket, swallowing errors."""
+    try:
+        await ws.send_json(msg)
+    except Exception:
+        pass
+
+
 async def _broadcast(session: dict, sender_ws, msg: dict):
-    """Send msg to all users in session except sender."""
-    for ws in list(session["users"].values()):
-        if ws is sender_ws:
-            continue
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            pass
+    """Send msg to all users in session except sender (parallel)."""
+    import asyncio
+    targets = [ws for ws in session["users"].values() if ws is not sender_ws]
+    if targets:
+        await asyncio.gather(*(_send_safe(ws, msg) for ws in targets))
 
 
 async def _broadcast_all(session: dict, msg: dict):
-    """Send msg to every user in session (including sender — for turn indicators etc.)."""
-    for ws in list(session["users"].values()):
-        try:
-            await ws.send_json(msg)
-        except Exception:
-            pass
+    """Send msg to every user in session including sender (parallel)."""
+    import asyncio
+    targets = list(session["users"].values())
+    if targets:
+        await asyncio.gather(*(_send_safe(ws, msg) for ws in targets))
 
 
 # ── SENTENCE → SIGNS ──────────────────────────────────────

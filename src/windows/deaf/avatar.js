@@ -1,32 +1,31 @@
 // AMANDLA Avatar — Deaf window only
-// Three-phase animation: APPROACH → HOLD → RELEASE
-// Spring easing with gentle overshoot, head tilt, breathing idle
+// v2.0: TransitionEngine — SLERP quaternions, coarticulation, joint limits
+// Three-phase replaced with: TRANSITIONING → HOLDING → GAP → IDLE
 
 (function () {
-  'use strict';
+  'use strict'
 
   // ── CONSTANTS ─────────────────────────────────────────────
-  const SIGN_DURATION   = 0.72   // seconds per full sign cycle
-  const SIGN_GAP        = 0.22   // pause between signs
-  const SIGN_FS_DUR     = 0.32   // fingerspell duration
-  const SIGN_FS_GAP     = 0.10   // fingerspell gap
-
-  // Fraction of SIGN_DURATION for each phase
-  const PHASE_APPROACH  = 0.38   // 0→38%: move into sign pose
-  const PHASE_HOLD      = 0.68   // 38→68%: hold sign (oscillation runs here)
-  // 68→100%: slight release / prep for next
+  const SIGN_HOLD    = 0.38   // seconds to hold a sign at full pose
+  const SIGN_FS_HOLD = 0.08   // hold for fingerspelling
+  const SIGN_GAP     = 0.18   // pause after last sign before returning to idle
 
   // ── STATE ─────────────────────────────────────────────────
   let scene, camera, renderer, animFrameId
-  let avatarBones = {}           // { R, L, head, torso }
+  let avatarBones = {}    // { R, L, head, torso }
   let signQueue   = []
   let currentSign = null
-  let signProgress = 0
+  let finalPose   = null  // last pose from TransitionEngine, applied during HOLDING
+  let idleSign    = null  // idle pose as v2-compatible sign (has _Rq, _Lq)
+  let animState   = 'idle' // 'idle' | 'transitioning' | 'holding' | 'gap'
+  let holdTimer   = 0
   let gapTimer    = 0
-  let isInGap     = false
   let oscTime     = 0
   let lastFrameTime = performance.now()
   let initialized = false
+
+  let targetHeadZ = 0
+  let targetHeadX = 0
 
   // ── INIT ──────────────────────────────────────────────────
   function initAvatar(containerId) {
@@ -84,7 +83,7 @@
     scene.add(rim)
 
     buildAvatarSkeleton()
-    applyIdlePose()
+    buildIdleSign()
     animate()
 
     window.addEventListener('resize', function () {
@@ -94,7 +93,32 @@
       renderer.setSize(W2, H2, false)
     })
 
-    console.log('[Avatar] initialized — deaf window')
+    console.log('[Avatar] v2 initialized — deaf window')
+  }
+
+  // ── IDLE SIGN — v2-compatible pose object ─────────────────
+  function buildIdleSign() {
+    const lib = window.AMANDLA_SIGNS
+    if (!lib || !lib.armToQuat) {
+      setTimeout(buildIdleSign, 100)
+      return
+    }
+    const idleR = { sh:{x:0.05,y:0,z:-0.24}, el:{x:0.08,y:0,z:0}, wr:{x:0,y:0,z:0} }
+    const idleL = { sh:{x:0.05,y:0,z: 0.24}, el:{x:0.08,y:0,z:0}, wr:{x:0,y:0,z:0} }
+    idleSign = {
+      name: 'IDLE',
+      R: { sh:idleR.sh, el:idleR.el, wr:idleR.wr, hand:lib.HS.rest },
+      L: { sh:idleL.sh, el:idleL.el, wr:idleL.wr, hand:lib.HS.rest },
+      _Rq: { end: lib.armToQuat(idleR), start: lib.armToQuat(idleR) },
+      _Lq: { end: lib.armToQuat(idleL), start: lib.armToQuat(idleL) },
+      osc: null,
+      isFingerspell: false,
+    }
+    // Apply initial idle pose to bones
+    applyPoseDirect({
+      R: { sh:idleR.sh, el:idleR.el, wr:idleR.wr, hand:lib.HS.rest },
+      L: { sh:idleL.sh, el:idleL.el, wr:idleL.wr, hand:lib.HS.rest },
+    })
   }
 
   // ── SKELETON BUILD ────────────────────────────────────────
@@ -106,7 +130,6 @@
       purple: new THREE.MeshPhongMaterial({ color: 0x8B6FD4, shininess: 30 }),
     }
 
-    // Torso (pivots slightly for body lean)
     const torsoGroup = new THREE.Group()
     torsoGroup.position.set(0, -0.1, 0)
     scene.add(torsoGroup)
@@ -115,12 +138,10 @@
     torsoGroup.add(torsoMesh)
     avatarBones.torso = torsoGroup
 
-    // Neck
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 0.14, 8), mat.skin)
     neck.position.set(0, 0.60, 0)
     torsoGroup.add(neck)
 
-    // Head (pivots for head tilt/nod)
     const headGroup = new THREE.Group()
     headGroup.position.set(0, 0.78, 0)
     torsoGroup.add(headGroup)
@@ -129,7 +150,6 @@
     headGroup.add(headMesh)
     avatarBones.head = headGroup
 
-    // Eyes
     const eyeGeo = new THREE.SphereGeometry(0.028, 8, 8)
     const eyeMat = new THREE.MeshPhongMaterial({ color: 0x111111 })
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
@@ -139,7 +159,6 @@
     eyeR.position.set( 0.085, 0.04, 0.18)
     headGroup.add(eyeR)
 
-    // Arms (attached to torsoGroup so body lean carries arms)
     avatarBones.R = buildArm('R', -0.34, mat, torsoGroup)
     avatarBones.L = buildArm('L',  0.34, mat, torsoGroup)
   }
@@ -220,41 +239,22 @@
   }
 
   // ── POSE APPLICATION ──────────────────────────────────────
-  function applyIdlePose() {
-    const hs = window.AMANDLA_SIGNS ? window.AMANDLA_SIGNS.HS.rest : null
-    const idle = {
-      R: { sh: { x: 0.05, y: 0, z: -0.24 }, el: { x: 0.08, y: 0, z: 0 }, wr: { x: 0, y: 0, z: 0 }, hand: hs },
-      L: { sh: { x: 0.05, y: 0, z:  0.24 }, el: { x: 0.08, y: 0, z: 0 }, wr: { x: 0, y: 0, z: 0 }, hand: hs },
-    }
-    applySignPose(idle, 1.0)
-  }
-
-  function applySignPose(signObj, t) {
-    if (!signObj || !avatarBones.R) return
+  // Direct-set from TransitionEngine output — no lerp, engine handles blending
+  function applyPoseDirect(pose) {
+    if (!pose || !avatarBones.R) return
     for (const side of ['R', 'L']) {
       const arm  = avatarBones[side]
-      const data = signObj[side]
+      const data = pose[side]
       if (!arm || !data) continue
-      lerpRotation(arm.shoulder, data.sh, t)
-      lerpRotation(arm.elbow,    data.el, t)
-      lerpRotation(arm.wrist,    data.wr, t)
-      if (data.hand) applyHandshape(arm.fingers, data.hand, t)
+      if (data.sh) arm.shoulder.rotation.set(data.sh.x, data.sh.y, data.sh.z)
+      if (data.el) arm.elbow.rotation.set(data.el.x, data.el.y, data.el.z)
+      if (data.wr) arm.wrist.rotation.set(data.wr.x, data.wr.y, data.wr.z)
+      if (data.hand) applyHandshapeDirect(arm.fingers, data.hand)
     }
   }
 
-  function lerpRotation(obj, target, t) {
-    if (!obj || !target) return
-    const s = Math.min(t * 1.6, 1.0)
-    obj.rotation.x += (target.x - obj.rotation.x) * s
-    obj.rotation.y += (target.y - obj.rotation.y) * s
-    obj.rotation.z += (target.z - obj.rotation.z) * s
-  }
-
-  function lerpVal(cur, target, t) {
-    return cur + (target - cur) * Math.min(t * 1.6, 1.0)
-  }
-
-  function applyHandshape(fingers, hs, t) {
+  function applyHandshapeDirect(fingers, hs) {
+    if (!hs) return
     const keys = ['t', 'i', 'm', 'r', 'p']
     for (let f = 0; f < 5; f++) {
       const segs = hs[keys[f]]
@@ -262,17 +262,17 @@
       for (let s = 0; s < 3 && s < segs.length; s++) {
         const seg = fingers[f].segments[s]
         if (!seg) continue
-        seg.pivot.rotation.x += ((segs[s] || 0) - seg.pivot.rotation.x) * Math.min(t * 1.6, 1.0)
+        seg.pivot.rotation.x = segs[s] || 0
       }
     }
   }
 
+  // ── OSCILLATION ───────────────────────────────────────────
   function applyOscillation(signObj, time) {
     if (!signObj || !signObj.osc) return
     const { j, ax, amp, freq } = signObj.osc
     const val = Math.sin(time * freq * Math.PI * 2) * amp
 
-    // Full amplitude — was incorrectly multiplied by 0.04 before
     if      (j === 'R_wr'    && avatarBones.R) avatarBones.R.wrist.rotation[ax]    = val
     else if (j === 'L_wr'    && avatarBones.L) avatarBones.L.wrist.rotation[ax]    = val
     else if (j === 'R_sh'    && avatarBones.R) avatarBones.R.shoulder.rotation[ax] += val * 0.5
@@ -289,29 +289,52 @@
     }
   }
 
-  // ── EASING ────────────────────────────────────────────────
-  // Approach phase: easeOutBack — smooth with gentle overshoot/snap
-  function easeOutBack(t) {
-    const c1 = 1.28
-    const c3 = c1 + 1
-    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
+  function lerpVal(cur, target, t) {
+    return cur + (target - cur) * Math.min(t * 1.6, 1.0)
+  }
+
+  // ── HEAD TILT ─────────────────────────────────────────────
+  function computeHeadTarget(signObj) {
+    if (!signObj || !signObj.R || !signObj.R.sh) { targetHeadZ = 0; targetHeadX = 0; return }
+    const rUp = signObj.R.sh.x < -0.3
+    const lUp = signObj.L && signObj.L.sh && signObj.L.sh.x < -0.3
+    if      (rUp && !lUp) { targetHeadZ =  0.09; targetHeadX = 0.04 }
+    else if (lUp && !rUp) { targetHeadZ = -0.09; targetHeadX = 0.04 }
+    else if (rUp && lUp)  { targetHeadZ =  0;    targetHeadX = 0.06 }
+    else                  { targetHeadZ =  0;    targetHeadX = 0 }
   }
 
   // ── SIGN QUEUE ────────────────────────────────────────────
   function resolveSign(item) {
     if (!item) return null
-    if (typeof item === 'object') return item
+    if (typeof item === 'object' && item._Rq) return item  // already v2 sign
     const lib = window.AMANDLA_SIGNS
-    if (lib && lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[item]) return lib.SIGN_LIBRARY[item]
-    if (item.length === 1) {
-      const alpha = lib && lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[item.toUpperCase()]
-      return alpha || { name: item.toUpperCase(), isFingerspell: true, desc: 'Letter ' + item.toUpperCase(), R: null, L: null, osc: null }
+    if (!lib) return null
+    // Try library lookup first
+    const name = typeof item === 'string' ? item : item.name || ''
+    if (lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[name])       return lib.SIGN_LIBRARY[name]
+    if (lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[name.toUpperCase()]) return lib.SIGN_LIBRARY[name.toUpperCase()]
+    // Fall back to fingerspell (returns v2-compatible signs with _Rq/_Lq)
+    if (lib.fingerspell) {
+      const fs = lib.fingerspell(name)
+      if (fs && fs.length > 0) return fs[0]
     }
-    return { name: item, isFingerspell: false, desc: item, R: null, L: null, osc: null }
+    return null
   }
 
-  function queueSign(signObj)       { signQueue.push(resolveSign(signObj)) }
-  function queueSentence(text)      {
+  function queueSign(signObj) {
+    if (typeof signObj === 'string') {
+      // May be a multi-letter word — use sentenceToSigns for proper lookup + fingerspell
+      const lib = window.AMANDLA_SIGNS
+      if (lib && lib.sentenceToSigns) {
+        lib.sentenceToSigns(signObj).forEach(function (s) { signQueue.push(s) })
+        return
+      }
+    }
+    const s = resolveSign(signObj)
+    if (s) signQueue.push(s)
+  }
+  function queueSentence(text) {
     const lib = window.AMANDLA_SIGNS
     if (!lib) return
     const signs = lib.sentenceToSigns(text)
@@ -320,6 +343,15 @@
   }
   function playSignNow(signNameOrObj) {
     signQueue = []
+    const lib = window.AMANDLA_SIGNS
+    if (lib && typeof signNameOrObj === 'string') {
+      const signs = lib.sentenceToSigns(signNameOrObj)
+      if (signs.length > 0) {
+        signs.forEach(function (s) { signQueue.push(s) })
+        updateLabel(signs[0].name)
+        return
+      }
+    }
     const s = resolveSign(signNameOrObj)
     if (s) { signQueue.push(s); updateLabel(s.name) }
   }
@@ -329,20 +361,18 @@
     if (el) el.textContent = text || ''
   }
 
-  // ── HEAD TILT ─────────────────────────────────────────────
-  // Tilt toward dominant signing hand based on shoulder z
-  let targetHeadZ = 0
-  let targetHeadX = 0
-
-  function computeHeadTarget(signObj) {
-    if (!signObj || !signObj.R || !signObj.R.sh) { targetHeadZ = 0; targetHeadX = 0; return }
-    // Right arm raised (sh.x negative = up) → head tilts right (z positive)
-    const rUp = signObj.R.sh.x < -0.3
-    const lUp = signObj.L && signObj.L.sh && signObj.L.sh.x < -0.3
-    if (rUp && !lUp) { targetHeadZ =  0.09; targetHeadX = 0.04 }
-    else if (lUp && !rUp) { targetHeadZ = -0.09; targetHeadX = 0.04 }
-    else if (rUp && lUp)  { targetHeadZ =  0;    targetHeadX = 0.06 }
-    else                  { targetHeadZ =  0;    targetHeadX = 0 }
+  // ── START NEXT TRANSITION ─────────────────────────────────
+  function startNextTransition(fromOverride) {
+    const TE = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.TransitionEngine
+    if (!TE || signQueue.length === 0) return
+    const from = fromOverride || currentSign || idleSign
+    if (!from) return
+    currentSign = signQueue.shift()
+    const next  = signQueue[0] || null
+    TE.begin(from, currentSign, next)
+    animState = 'transitioning'
+    updateLabel(currentSign ? currentSign.name : '')
+    computeHeadTarget(currentSign)
   }
 
   // ── ANIMATION LOOP ────────────────────────────────────────
@@ -355,89 +385,70 @@
     lastFrameTime = now
     oscTime += dt
 
-    const isFS    = currentSign && currentSign.isFingerspell
-    const dur     = isFS ? SIGN_FS_DUR : SIGN_DURATION
-    const gap     = isFS ? SIGN_FS_GAP : SIGN_GAP
+    const TE = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.TransitionEngine
 
-    // ── Sign queue state machine ─────────────────────────
-    if (isInGap) {
+    // ── Sign state machine ─────────────────────────────────
+    if (animState === 'transitioning' && TE) {
+      const pose = TE.tick(dt)
+      if (pose) applyPoseDirect(pose)
+      if (TE.isDone()) {
+        finalPose = pose
+        const isFS = currentSign && currentSign.isFingerspell
+        holdTimer = isFS ? SIGN_FS_HOLD : SIGN_HOLD
+        animState = 'holding'
+      }
+
+    } else if (animState === 'holding') {
+      if (finalPose) applyPoseDirect(finalPose)
+      if (currentSign) applyOscillation(currentSign, oscTime)
+      holdTimer -= dt
+      if (holdTimer <= 0) {
+        if (signQueue.length > 0) {
+          startNextTransition()
+        } else {
+          animState = 'gap'
+          gapTimer  = SIGN_GAP
+        }
+      }
+
+    } else if (animState === 'gap') {
+      // Hold last pose during gap (no oscillation)
+      if (finalPose) applyPoseDirect(finalPose)
       gapTimer -= dt
       if (gapTimer <= 0) {
-        isInGap = false
-        if (signQueue.length > 0) {
-          currentSign  = signQueue.shift()
-          signProgress = 0
-          updateLabel(currentSign ? currentSign.name : '')
-          computeHeadTarget(currentSign)
+        // Transition back to idle
+        if (TE && idleSign && currentSign) {
+          TE.begin(currentSign, idleSign, null)
+          animState = 'transitioning'
+          currentSign = idleSign
         } else {
-          currentSign = null
-          applyIdlePose()
-          updateLabel('')
-          targetHeadZ = 0
-          targetHeadX = 0
+          animState = 'idle'
         }
-      }
-    } else if (currentSign) {
-      signProgress += dt / dur
-
-      if (signProgress >= 1.0) {
-        signProgress = 1.0
-        applySignPose(currentSign, 1.0)
-        isInGap  = true
-        gapTimer = gap
-      } else {
-        const t = signProgress
-
-        if (t < PHASE_APPROACH) {
-          // Phase 1: Approach — spring into sign pose
-          const local = t / PHASE_APPROACH
-          applySignPose(currentSign, easeOutBack(local))
-
-        } else if (t < PHASE_HOLD) {
-          // Phase 2: Hold — maintain pose fully, run oscillation
-          applySignPose(currentSign, 1.0)
-          applyOscillation(currentSign, oscTime)
-
-        } else {
-          // Phase 3: Release — slight softening, continue oscillation
-          const local = (t - PHASE_HOLD) / (1.0 - PHASE_HOLD)
-          applySignPose(currentSign, 1.0 - local * 0.12)
-          applyOscillation(currentSign, oscTime)
-        }
+        updateLabel('')
+        targetHeadZ = 0
+        targetHeadX = 0
       }
 
-    } else if (signQueue.length > 0) {
-      currentSign  = signQueue.shift()
-      signProgress = 0
-      updateLabel(currentSign ? currentSign.name : '')
-      computeHeadTarget(currentSign)
+    } else { // idle
+      if (signQueue.length > 0 && idleSign && TE) {
+        startNextTransition(idleSign)
+      }
     }
 
-    // ── Idle motion (only when not actively signing approach) ─
-    const signing = currentSign && signProgress < PHASE_HOLD
-    if (!signing && avatarBones.R) {
+    // ── Idle breathing/sway — only when idle ──────────────
+    if (animState === 'idle' && avatarBones.R) {
       const sway   = Math.sin(oscTime * 0.40) * 0.016
-      const breathY = Math.sin(oscTime * 0.26 * Math.PI * 2) * 0.008  // breathing
-      avatarBones.R.shoulder.rotation.z = lerpVal(
-        avatarBones.R.shoulder.rotation.z, -0.24 + sway, 0.08
-      )
-      avatarBones.L.shoulder.rotation.z = lerpVal(
-        avatarBones.L.shoulder.rotation.z,  0.24 - sway, 0.08
-      )
-      // Subtle shoulder lift with breath
-      avatarBones.R.shoulder.rotation.x = lerpVal(
-        avatarBones.R.shoulder.rotation.x, 0.05 + breathY, 0.06
-      )
-      avatarBones.L.shoulder.rotation.x = lerpVal(
-        avatarBones.L.shoulder.rotation.x, 0.05 + breathY, 0.06
-      )
+      const breathY = Math.sin(oscTime * 0.26 * Math.PI * 2) * 0.008
+      avatarBones.R.shoulder.rotation.z = lerpVal(avatarBones.R.shoulder.rotation.z, -0.24 + sway, 0.08)
+      avatarBones.L.shoulder.rotation.z = lerpVal(avatarBones.L.shoulder.rotation.z,  0.24 - sway, 0.08)
+      avatarBones.R.shoulder.rotation.x = lerpVal(avatarBones.R.shoulder.rotation.x, 0.05 + breathY, 0.06)
+      avatarBones.L.shoulder.rotation.x = lerpVal(avatarBones.L.shoulder.rotation.x, 0.05 + breathY, 0.06)
     }
 
-    // ── Head tilt — always smoothly interpolated ───────────
+    // ── Head tilt — always smooth ──────────────────────────
     if (avatarBones.head) {
       avatarBones.head.rotation.z = lerpVal(avatarBones.head.rotation.z, targetHeadZ, 0.06)
       avatarBones.head.rotation.x = lerpVal(avatarBones.head.rotation.x, targetHeadX, 0.06)
-      // Micro head oscillation for life
       avatarBones.head.rotation.y = Math.sin(oscTime * 0.19 * Math.PI * 2) * 0.012
     }
 

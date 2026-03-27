@@ -1166,21 +1166,6 @@ const SIGN_LIBRARY = {
     {x:-0.62,y:0,z:0.28},{x:-0.72,y:0,z:0},{x:0,y:0,z:0}, HS.yhand,
     {j:'both_sh', ax:'x', amp:0.25, freq:2.0}),
 
-  'YESTERDAY': sign('YESTERDAY','Y-hand arcs backward from cheek','Y-hand at cheek moves backward — yesterday',4,
-    {x:-1.10,y:0,z:-0.08},{x:-0.08,y:0,z:0},{x:0,y:0,z:0}, HS.yhand,
-    IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'y', amp:-0.18, freq:1.4}),
-
-  'TOMORROW': sign('TOMORROW','Y-hand arcs forward from cheek','Y-hand at cheek moves forward — tomorrow',4,
-    {x:-1.10,y:0,z:-0.08},{x:-0.05,y:0,z:0},{x:0,y:0,z:0}, HS.yhand,
-    IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'y', amp:0.18, freq:1.4}),
-
-  'LATER': sign('LATER','L-hand points, right moves forward','Right L-hand glides forward from chin — later / after',4,
-    {x:-0.62,y:0,z:-0.30},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.lhand,
-    {x:-0.55,y:0,z:0.40},{x:-0.35,y:0,z:0},{x:0,y:0.30,z:0}, HS.flat,
-    {j:'R_sh', ax:'x', amp:-0.12, freq:1.3}),
-
   'MORNING': sign('MORNING','Flat-hand rises at forearm crook','Show sun rising — flat hand rises from elbow crook',4,
     {x:-0.45,y:0,z:0.35},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     {x:-0.80,y:0,z:-0.40},{x:-0.30,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
@@ -1190,55 +1175,6 @@ const SIGN_LIBRARY = {
     {x:-0.50,y:0,z:-0.28},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     {x:-0.50,y:0,z:0.28},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     {j:'both_sh', ax:'x', amp:0.15, freq:1.2}),
-
-  // ── GRAMMAR MARKERS (SASL aspect / modal / negation) ──────────────
-
-  'FINISH': sign('FINISH','Both flat-hands sweep outward','Both flat-hands brush out from body — done / already / past',5,
-    {x:-0.55,y:0,z:-0.42},{x:-0.20,y:0,z:0},{x:0.12,y:0,z:0}, HS.flat,
-    {x:-0.55,y:0,z:0.42},{x:-0.20,y:0,z:0},{x:0.12,y:0,z:0}, HS.flat,
-    {j:'both_sh', ax:'z', amp:0.15, freq:1.6}),
-
-  'WILL': sign('WILL','Flat-hand sweeps forward from face','Open hand at cheek sweeps forward — future / will',4,
-    {x:-1.18,y:0,z:-0.10},{x:-0.05,y:0,z:0},{x:0,y:-0.15,z:0}, HS.flat,
-    IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:-0.10, freq:1.2}),
-
-  'NOT': sign('NOT','A-hand sweeps from chin outward','A-hand at chin sweeps forward and down — negation',5,
-    {x:-1.20,y:0,z:-0.12},{x:-0.08,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
-    IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:-0.12, freq:2.2}),
-
-  'CAN': sign('CAN','Both S-hands push down','Both S-hands push firmly downward — ability / can',4,
-    {x:-0.52,y:0,z:-0.35},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
-    {x:-0.52,y:0,z:0.35},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
-    {j:'both_sh', ax:'x', amp:0.15, freq:2.0}),
-
-  'MUST': sign('MUST','X-hand bends downward','Right X-hand rotates firmly downward — obligation / must',4,
-    {x:-0.45,y:0,z:-0.22},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.xhand,
-    IL.sh,IL.el,IL.wr, NL,
-    {j:'R_el', ax:'x', amp:0.18, freq:2.0}),
-
-  'VERY': sign('VERY','Both V-hands spread apart','V-hands separate from each other — intensifier',4,
-    {x:-0.52,y:0,z:-0.35},{x:-0.28,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
-    {x:-0.52,y:0,z:0.35},{x:-0.28,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
-    {j:'both_sh', ax:'z', amp:0.22, freq:1.5}),
-
-  'ALSO': sign('ALSO','Both index fingers point and align','Both index fingers tap together — also / too / and',4,
-    {x:-0.52,y:0,z:-0.22},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
-    {x:-0.52,y:0,z:0.22},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
-    {j:'R_sh', ax:'y', amp:0.22, freq:1.8}),
-
-  // ── NEW / OLD ────────────────────────────────────────────────────
-
-  'NEW': sign('NEW','Curved hand brushes flat palm','Curved right hand sweeps forward over flat left palm',4,
-    {x:-0.65,y:0,z:-0.38},{x:-0.22,y:0,z:0},{x:0.12,y:0,z:0}, HS.chand,
-    {x:-0.58,y:0,z:0.38},{x:-0.38,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    {j:'R_sh', ax:'x', amp:0.12, freq:1.5}),
-
-  'OLD': sign('OLD','C-hand at chin pulls downward','Right C-hand at chin draws downward — beard gesture',4,
-    {x:-1.18,y:0,z:-0.12},{x:-0.08,y:0,z:0},{x:-0.15,y:0,z:0}, HS.chand,
-    IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.14, freq:1.3}),
 
 };
 
@@ -1397,26 +1333,8 @@ const WORD_MAP = {
 
   // Time
   'today': 'TODAY', 'now': 'NOW', 'currently': 'NOW',
-  'yesterday': 'YESTERDAY', 'last night': 'YESTERDAY', 'the other day': 'YESTERDAY',
-  'tomorrow': 'TOMORROW', 'next day': 'TOMORROW',
-  'later': 'LATER', 'after': 'LATER', 'soon': 'LATER', 'eventually': 'LATER',
   'morning': 'MORNING', 'afternoon': 'MORNING', 'evening': 'NIGHT',
   'night': 'NIGHT', 'tonight': 'NIGHT',
-
-  // Grammar markers
-  'finish': 'FINISH', 'finished': 'FINISH', 'done': 'FINISH',
-  'already': 'FINISH', 'complete': 'FINISH', 'completed': 'FINISH',
-  'will': 'WILL', 'future': 'WILL', 'shall': 'WILL',
-  'not': 'NOT', "don't": 'NOT', 'dont': 'NOT',
-  'never': 'NOT', 'cannot': 'NOT', "can't": 'NOT', 'cant': 'NOT',
-  'can': 'CAN', 'able': 'CAN', 'could': 'CAN', 'capable': 'CAN',
-  'must': 'MUST', 'should': 'MUST', 'have to': 'MUST',
-  'very': 'VERY', 'really': 'VERY', 'extremely': 'VERY',
-  'also': 'ALSO', 'too': 'ALSO', 'as well': 'ALSO',
-
-  // Descriptions
-  'new': 'NEW', 'novel': 'NEW', 'fresh': 'NEW', 'modern': 'NEW',
-  'old': 'OLD', 'elderly': 'OLD', 'aged': 'OLD', 'ancient': 'OLD',
 
   // Greetings continued
   "how are you": 'HOW ARE YOU', 'howzit': 'HOW ARE YOU',
@@ -1506,8 +1424,7 @@ function getSignsByCategory(category) {
     EMOTIONS:     ['HAPPY','SAD','ANGRY','SCARED','LOVE','I LOVE YOU','EXCITED','TIRED','HUNGRY','THIRSTY','WORRIED','PROUD','CONFUSED'],
     QUESTIONS:    ['WHO','WHAT','WHERE','WHEN','WHY','HOW','WHICH'],
     ACTIONS:      ['HELP','WAIT','STOP','REPEAT','UNDERSTAND','COME','GO','LISTEN','LOOK','KNOW','WANT','GIVE','EAT','DRINK','SLEEP','SIT','STAND','WALK','RUN','WORK','WASH','WRITE','READ','SIGN','TELL','LAUGH','CRY','HUG','OPEN','CLOSE'],
-    DESCRIPTIONS: ['GOOD','BAD','BIG','SMALL','HOT','COLD','QUIET','FAST','SLOW','WATER','NEW','OLD','VERY'],
-    GRAMMAR:      ['FINISH','WILL','NOT','CAN','MUST','ALSO','YESTERDAY','TOMORROW','TODAY','NOW','LATER'],
+    DESCRIPTIONS: ['GOOD','BAD','BIG','SMALL','HOT','COLD','QUIET','FAST','SLOW','WATER'],
     PLACES:       ['SCHOOL','HOME','HOSPITAL','CHURCH','POLICE'],
     FAMILY:       ['FAMILY','MOM','DAD','BABY','FRIEND','CHILD','PERSON'],
     RIGHTS:       ['RIGHTS','LAW','EQUAL','SHARE','FREE'],

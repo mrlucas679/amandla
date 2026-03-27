@@ -78,13 +78,28 @@
       letter-spacing: 1px; pointer-events: none;
       position: absolute; top: 10px; left: 0; right: 0;
     }
+    /* SASL gloss — prominent display, all caps */
+    #gloss-display {
+      position: absolute;
+      bottom: 28px; left: 0; right: 0;
+      padding: 4px 16px;
+      font-size: 22px; font-weight: 800;
+      color: #C4B5FD; letter-spacing: 3px;
+      text-align: center; pointer-events: none;
+      text-shadow: 0 2px 8px #000a;
+      white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Original English — smaller, below the SASL gloss */
     #sentence-display {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      padding: 9px 16px;
+      padding: 4px 16px;
       background: linear-gradient(transparent, #000c);
-      font-size: 16px; color: #F5F0E8;
-      text-align: center; pointer-events: none; min-height: 40px;
+      font-size: 12px; color: #888;
+      text-align: center; pointer-events: none; min-height: 28px;
+      font-style: italic;
     }
 
     /* ── CAMERA PANEL ── */
@@ -209,6 +224,44 @@
     }
     .emg-dismiss:hover { background: rgba(255,255,255,0.35); }
 
+    /* ── CSS VARIABLES (used by AssistEngine UI) ── */
+    :root {
+      --color-background-primary:   #0D0D0D;
+      --color-background-secondary: #1a1a1a;
+      --color-background-tertiary:  #252525;
+      --color-background-info:      #1a1230;
+      --color-background-success:   #0f2e20;
+      --color-border-secondary:     #333;
+      --color-border-tertiary:      #2a2a2a;
+      --color-border-info:          #8B6FD4;
+      --color-border-success:       #2EA88080;
+      --color-text-primary:         #F5F0E8;
+      --color-text-secondary:       #aaa;
+      --color-text-tertiary:        #666;
+      --color-text-success:         #2EA880;
+      --font-sans:                  Arial, Helvetica, sans-serif;
+    }
+
+    /* ── ASSIST CONTAINER ── */
+    #assistContainer {
+      flex: 1;
+      min-height: 0;
+      background: #0D0D0D;
+      overflow-y: auto;
+    }
+
+    /* ── MODE TOGGLE BUTTON ── */
+    #modeToggleBtn {
+      font-size: 11px; font-weight: 700;
+      padding: 4px 10px; border-radius: 5px;
+      border: 1px solid #8B6FD480;
+      background: #1a1230; color: #C4B5FD;
+      cursor: pointer; letter-spacing: 0.3px;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    #modeToggleBtn:hover { background: #8B6FD430; border-color: #8B6FD4; }
+
     /* ── STARTUP OVERLAY ── */
     #startup-overlay {
       position: fixed; inset: 0; z-index: 9998;
@@ -251,6 +304,7 @@
     <div class="right">
       <span id="conn-status">connecting…</span>
       <div id="status-dot" title="AI status"></div>
+      <button id="modeToggleBtn" onclick="ModeController.toggle()">Assist Mode</button>
     </div>
   </div>
 
@@ -262,8 +316,12 @@
     <div id="avatar-canvas"></div>
     <div id="avatar-sign-label"></div>
     <div id="detected-sign"></div>
+    <div id="gloss-display"></div>
     <div id="sentence-display"></div>
   </div>
+
+  <!-- Assist mode: AAC-style phrase completion (hidden by default) -->
+  <div id="assistContainer" style="display:none"></div>
 
   <!-- Camera panel: deaf person's hand shown with MediaPipe skeleton -->
   <div id="camera-panel">
@@ -288,6 +346,8 @@
   <!-- Signs library and avatar -->
   <script src="../../../signs_library.js"></script>
   <script src="avatar.js"></script>
+  <!-- Mode controller (sign ↔ assist) — must load before inline script -->
+  <script src="mode_controller.js"></script>
 
   <script>
     // ── DOM REFS ──────────────────────────────────────────────
@@ -296,6 +356,7 @@
     const connStatus    = document.getElementById('conn-status')
     const statusDot     = document.getElementById('status-dot')
     const sentenceEl    = document.getElementById('sentence-display')
+    const glossEl       = document.getElementById('gloss-display')
     const turnEl        = document.getElementById('turn-indicator')
     const camPanel      = document.getElementById('camera-panel')
     const camVideo      = document.getElementById('camera-video')
@@ -342,28 +403,31 @@
     window.amandla.onMessage(function (msg) {
       if (!msg) return
 
-      // Hearing person spoke → signs arrive
+      // Hearing person spoke → SASL signs arrive
+      // Deaf window shows SASL grammar only — no original English, no audio (deaf users can't hear)
       if (msg.type === 'signs') {
+        const signCount = Array.isArray(msg.signs) ? msg.signs.length : 1
+        const clearAfter = (signCount * 700) + 1200
+
+        // Show SASL gloss — this is the language the deaf person understands
         if (msg.text) {
-          sentenceEl.textContent = msg.text
-          const clearAfter = ((msg.signs ? msg.signs.length : 1) * 700) + 1200
-          setTimeout(function () { sentenceEl.textContent = '' }, clearAfter)
-          speakText(msg.text)
+          glossEl.textContent = msg.text
+          setTimeout(function () { glossEl.textContent = '' }, clearAfter)
         }
+
+        // Track detected language for internal use (no UI side-effect)
+        if (msg.language) setDetectedLanguage(msg.language)
+
+        // Drive the avatar with the sign sequence
         if (Array.isArray(msg.signs) && msg.signs.length > 0) {
-          if (window.AmandlaAvatar) {
-            msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
-          } else {
-            // Avatar not ready — show sign names as text fallback
-            sentenceEl.textContent = (msg.text || '') + '\n[' + msg.signs.join(' → ') + ']'
+          if (ModeController.isSign()) {
+            if (window.AmandlaAvatar) {
+              msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
+            } else {
+              glossEl.textContent = msg.text || msg.signs.join(' ')
+            }
           }
         }
-        return
-      }
-
-      if (msg.type === 'text' || msg.type === 'speech_text') {
-        sentenceEl.textContent = msg.text || ''
-        if (msg.text) speakText(msg.text)
         return
       }
 
@@ -653,6 +717,14 @@
       u.rate = 0.95
       window.speechSynthesis.speak(u)
     }
+
+    // ── ASSIST MODE — send confirmed phrase via WebSocket ─────
+    window.addEventListener('amandla:assistPhrase', function (e) {
+      const phrase = e.detail && e.detail.phrase
+      if (!phrase) return
+      window.amandla.send({ type: 'text', text: phrase, sender: 'deaf', timestamp: Date.now() })
+      speakText(phrase)
+    })
 
     // ── STATUS POLLING ────────────────────────────────────────
     async function pollStatus() {

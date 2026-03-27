@@ -103,7 +103,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
     Returns dict with 'text', 'language', 'confidence', 'duration_ms'.
     """
     start = time.time()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     try:
         # Load model in executor so it never blocks the event loop

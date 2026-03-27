@@ -295,20 +295,23 @@
     window.amandla.onMessage(function (msg) {
       if (!msg) return
 
-      // Deaf user tapped quick-sign OR MediaPipe recognised a sign
-      if (msg.type === 'sign' && msg.sender === 'deaf') {
-        const signText = msg.text || ''
-        if (signText) {
-          transcriptEl.textContent = '🤟 ' + signText
-              + (msg.source === 'mediapipe' ? '  (camera)' : '')
-          addMessage('🤟 ' + signText, 'in', msg.source === 'mediapipe' ? 'via camera' : null)
-          speakText(signText)
-        }
+      // Deaf user tapped quick-sign — show a neutral indicator while English
+      // reconstruction is in progress (arrives as 'deaf_speech' ~1.5s later).
+      if (msg.type === 'sign' && msg.sender === 'deaf' && msg.source !== 'mediapipe') {
+        transcriptEl.textContent = '🤟 Signer is communicating…'
         return
       }
 
       // Signs echoed back from our own speech — no avatar on this side
       if (msg.type === 'signs') return
+
+      // Deaf person's signs reconstructed to natural English — show + speak
+      if (msg.type === 'deaf_speech' && msg.text) {
+        addMessage('🤟 ' + msg.text, 'in', 'via signs')
+        transcriptEl.textContent = '🤟 ' + msg.text
+        speakText(msg.text)
+        return
+      }
 
       // Turn indicator
       if (msg.type === 'turn') {

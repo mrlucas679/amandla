@@ -622,6 +622,8 @@ const SIGN_LIBRARY = {
 
   // ── NATURE & WEATHER ────────────────────────────────────
 
+
+
   'RAIN': sign('RAIN','Open-5-hands flutter downward','Flutter fingers of open-5-hands as you move hands downward',5,
     {x:-0.55,y:0,z:-0.22},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     {x:-0.55,y:0,z:0.22},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.open5,

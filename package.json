@@ -6,7 +6,7 @@
   "scripts": {
     "start": "concurrently \"npm run backend\" \"wait-on http-get://localhost:8000/health && electron .\"",
     "electron": "electron .",
-    "backend": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload",
+    "backend": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000",
     "dev": "electron . --inspect",
     "build": "electron-builder"
   },
