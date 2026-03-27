@@ -1,0 +1,31 @@
+{
+  "name": "amandla",
+  "version": "1.0.0",
+  "description": "AMANDLA — Communication bridge for disabled South Africans",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"wait-on http://localhost:8000/health && electron .\"",
+    "electron": "electron .",
+    "backend": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev": "electron . --inspect",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0",
+    "date-fns": "^4.1.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0",
+    "wait-on": "^7.0.0"
+  },
+  "build": {
+    "appId": "co.za.amandla",
+    "productName": "AMANDLA",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icons/icon.ico"
+    }
+  }
+}

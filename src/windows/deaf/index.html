@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AMANDLA — Deaf</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{margin:0;background:#0D0D0D;color:#F5F0E8;font-family:Arial,Helvetica,sans-serif}
+    .container{padding:24px}
+    .header{font-size:28px;margin-bottom:18px}
+    #display{font-size:48px;line-height:1.1;padding:20px;background:#08100F;border-radius:12px;min-height:160px;display:flex;align-items:center;justify-content:center}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">AMANDLA — Deaf view</div>
+    <div id="display">Waiting for messages...</div>
+  </div>
+
+  <script src="../../../signs_library.js"></script>
+  <script src="signs_library.js"></script>
+  <script src="avatar.js"></script>
+  <script>
+    const display = document.getElementById('display')
+
+    // Get session ID from main process and auto-connect
+    window.amandla.getSessionId().then(sessionId => {
+      if (sessionId) {
+        window.amandla.connect(sessionId, 'deaf')
+      } else {
+        // Fallback for manual testing
+        window.amandla.connect('demo', 'deaf')
+      }
+    }).catch(err => {
+      console.warn('[Deaf] Could not get session from main, using demo:', err)
+      window.amandla.connect('demo', 'deaf')
+    })
+
+    // Initialize avatar if available
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.AMANDLA_SIGNS && typeof window.avatarInit === 'function') {
+        window.avatarInit()
+      }
+    })
+
+    window.amandla.onMessage(msg => {
+      // If a signs payload arrives, enqueue to avatar for playback
+      if (msg && msg.type === 'signs' && window.avatarPlaySigns) {
+        // msg.signs is expected to be array of sign names or full sign objects
+        window.avatarPlaySigns(msg.signs, msg.text)
+        return
+      }
+
+      if (msg && msg.type === 'text') {
+        display.textContent = msg.text
+      } else if (msg && msg.type === 'raw') {
+        display.textContent = String(msg.data)
+      } else {
+        display.textContent = JSON.stringify(msg)
+      }
+
+      // For blind users we could call TTS here
+      try {
+        const utter = new SpeechSynthesisUtterance(display.textContent)
+        utter.lang = 'en-ZA'
+        window.speechSynthesis.cancel()
+        window.speechSynthesis.speak(utter)
+      } catch (e) {
+        // ignore
+      }
+    })
+  </script>
+</body>
+</html>

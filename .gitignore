@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Electron
+dist/
+out/
+
+# Python
+venv/
+env/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Audio files (for testing)
+*.wav
+*.webm
+*.mp3
+*.ogg
+
+# Cache
+.cache/
+*.cache
+

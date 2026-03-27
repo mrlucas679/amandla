@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AMANDLA — Hearing</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{margin:0;background:#0D0D0D;color:#F5F0E8;font-family:Arial,Helvetica,sans-serif}
+    .container{padding:24px}
+    .header{font-size:28px;margin-bottom:18px}
+    .row{display:flex;gap:8px;align-items:center}
+    input[type=text]{flex:1;padding:12px;border-radius:8px;border:1px solid #2EA880;background:#0B0B0B;color:#fff}
+    button{padding:10px 14px;border-radius:8px;border:none;background:#2EA880;color:#082018;cursor:pointer;font-weight:700}
+    #log{margin-top:18px;background:#08100F;padding:12px;border-radius:8px;min-height:120px}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">AMANDLA — Hearing view</div>
+    <div class="row">
+      <label for="sessionId" class="sr-only">Session ID</label>
+      <input id="sessionId" type="text" placeholder="session id (e.g. demo)" value="demo" />
+
+      <label for="role" class="sr-only">Role</label>
+      <select id="role"><option value="hearing">hearing</option><option value="deaf">deaf</option></select>
+
+      <button id="connectBtn">Connect</button>
+    </div>
+
+    <div style="height:18px"></div>
+
+    <div class="row">
+      <label for="messageInput" class="sr-only">Message</label>
+      <input id="messageInput" type="text" placeholder="Type text to send" />
+      <button id="sendBtn">Send</button>
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+  <script src="../../signs_library.js"></script>
+
+  <script>
+    const connectBtn = document.getElementById('connectBtn')
+    const sendBtn = document.getElementById('sendBtn')
+    const sessionEl = document.getElementById('sessionId')
+    const roleEl = document.getElementById('role')
+    const messageInput = document.getElementById('messageInput')
+    const log = document.getElementById('log')
+
+    function appendLog(text) {
+      const p = document.createElement('div')
+      p.textContent = text
+      log.appendChild(p)
+    }
+
+    // Try to get session ID from main process first
+    window.amandla.getSessionId().then(sessionId => {
+      if (sessionId) {
+        sessionEl.value = sessionId
+        sessionEl.disabled = true
+        roleEl.disabled = true
+        connectBtn.style.display = 'none'
+        // Auto-connect with the session ID from main
+        window.amandla.connect(sessionId, 'hearing')
+      }
+    }).catch(err => {
+      console.warn('[Hearing] Could not get session from main:', err)
+      // Fallback: manual connect
+    })
+
+    connectBtn.addEventListener('click', () => {
+      const sessionId = sessionEl.value || 'demo'
+      const role = roleEl.value || 'hearing'
+      window.amandla.connect(sessionId, role)
+    })
+
+    window.amandla.onConnectionChange(connected => {
+      appendLog('Connection: ' + (connected ? 'CONNECTED' : 'DISCONNECTED'))
+    })
+
+    window.amandla.onMessage(msg => {
+      appendLog('Recv: ' + JSON.stringify(msg))
+    })
+
+    sendBtn.addEventListener('click', () => {
+      const text = messageInput.value.trim()
+      if (!text) return
+      const payload = { type: 'text', text, sender: 'hearing', timestamp: Date.now() }
+      window.amandla.send(payload)
+      appendLog('Sent: ' + JSON.stringify(payload))
+      messageInput.value = ''
+    })
+
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendBtn.click()
+      }
+    })
+  </script>
+</body>
+</html>
