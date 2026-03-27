@@ -479,6 +479,14 @@ Every way AMANDLA can fail at the hackathon, what it looks like, and how to prev
 **Root cause:** Electron's default CSP blocks the Three.js CDN.  
 **Prevention:** Add to `src/main.js`, inside the `hearingWin` BrowserWindow creation:
 
+
+
+
+
+
+
+
+
 ```javascript
 hearingWin = new BrowserWindow({
   // ...

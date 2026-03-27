@@ -1,16 +1,644 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>AMANDLA — RIGHTS (placeholder)</title>
+  <title>AMANDLA — Know Your Rights</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>body{margin:0;background:#0D0D0D;color:#F5F0E8;font-family:Arial,Helvetica,sans-serif}
-  .container{padding:24px}</style>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0D0D0D;
+      color: #F5F0E8;
+      font-family: Arial, Helvetica, sans-serif;
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* ── HEADER ── */
+    #header {
+      background: #111;
+      border-bottom: 2px solid #8B6FD4;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #header h1 { font-size: 22px; color: #8B6FD4; letter-spacing: 1px; }
+    #header .subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+
+    /* ── STEPPER ── */
+    #stepper {
+      display: flex;
+      align-items: center;
+      padding: 20px 28px;
+      gap: 0;
+    }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #555;
+    }
+    .step.active   { color: #8B6FD4; }
+    .step.done     { color: #2EA880; }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 2px solid currentColor;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px; flex-shrink: 0;
+    }
+    .step.done .step-num { background: #2EA880; border-color: #2EA880; color: #082018; }
+    .step.active .step-num { background: #8B6FD430; }
+    .step-divider {
+      flex: 1; height: 2px; background: #333; margin: 0 10px;
+    }
+    .step-divider.done { background: #2EA880; }
+
+    /* ── PANELS ── */
+    .panel {
+      display: none;
+      padding: 24px 28px;
+      max-width: 760px;
+    }
+    .panel.active { display: block; }
+
+    .panel h2 { font-size: 18px; margin-bottom: 6px; }
+    .panel .hint { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.5; }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 5px;
+      margin-top: 14px;
+    }
+    label:first-child { margin-top: 0; }
+
+    input[type=text], input[type=date], textarea, select {
+      width: 100%;
+      padding: 11px 14px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #0B0B0B;
+      color: #F5F0E8;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    input[type=text]:focus, input[type=date]:focus, textarea:focus {
+      outline: none;
+      border-color: #8B6FD4;
+    }
+    textarea {
+      resize: vertical;
+      min-height: 140px;
+      line-height: 1.5;
+    }
+
+    /* ── BUTTONS ── */
+    .btn {
+      padding: 12px 28px;
+      border-radius: 8px;
+      border: none;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-primary { background: #8B6FD4; color: #fff; }
+    .btn-primary:hover { background: #7058bc; }
+    .btn-primary:disabled { background: #444; color: #888; cursor: not-allowed; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid #8B6FD4;
+      color: #8B6FD4;
+    }
+    .btn-secondary:hover { background: #8B6FD420; }
+    .btn-green { background: #2EA880; color: #082018; }
+    .btn-green:hover { background: #26966f; }
+
+    .btn-row {
+      margin-top: 22px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* ── ANALYSIS CARD ── */
+    #analysis-card {
+      background: #0B1520;
+      border: 1px solid #1a3050;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    #analysis-card .field { margin-bottom: 14px; }
+    #analysis-card .field-label { font-size: 12px; color: #8B6FD4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    #analysis-card .field-value { font-size: 15px; }
+    .severity-minor    { color: #68D391; }
+    .severity-moderate { color: #F6E05E; }
+    .severity-serious  { color: #FC8181; }
+
+    .law-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 4px;
+      background: #8B6FD430;
+      border: 1px solid #8B6FD460;
+      color: #C4B5FD;
+      font-size: 12px;
+      margin: 3px 4px 3px 0;
+    }
+
+    /* ── LOADING ── */
+    #loading-msg {
+      text-align: center;
+      padding: 40px;
+      color: #888;
+      font-size: 15px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 3px solid #333;
+      border-top-color: #8B6FD4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── LETTER OUTPUT ── */
+    #letter-box {
+      background: #fff;
+      color: #111;
+      border-radius: 8px;
+      padding: 32px 36px;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 14px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 55vh;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+
+    #laws-cited {
+      margin-bottom: 18px;
+    }
+
+    /* ── ERROR BANNER ── */
+    #error-banner {
+      display: none;
+      background: #FC818120;
+      border: 1px solid #FC8181;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #FC8181;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>RIGHTS mode — placeholder</h1>
-    <p>This window will implement the 3-step RIGHTS flow (incident input → AI analysis → letter output).</p>
+
+  <div id="header">
+    <div>
+      <h1>AMANDLA — Know Your Rights</h1>
+      <div class="subtitle">South African disability rights complaint assistant</div>
+    </div>
   </div>
+
+  <!-- Stepper -->
+  <div id="stepper">
+    <div class="step active" id="step-1-indicator">
+      <div class="step-num">1</div>
+      <span>Your Incident</span>
+    </div>
+    <div class="step-divider" id="div-1"></div>
+    <div class="step" id="step-2-indicator">
+      <div class="step-num">2</div>
+      <span>Rights Analysis</span>
+    </div>
+    <div class="step-divider" id="div-2"></div>
+    <div class="step" id="step-3-indicator">
+      <div class="step-num">3</div>
+      <span>Formal Letter</span>
+    </div>
+  </div>
+
+  <div id="error-banner"></div>
+
+  <!-- ── STEP 1: INCIDENT FORM ── -->
+  <div class="panel active" id="panel-1">
+    <h2>Tell us what happened</h2>
+    <p class="hint">
+      Describe the discrimination or rights violation you experienced.
+      All information stays on your device — nothing is sent to external servers
+      unless you have an API key configured.
+    </p>
+
+    <label for="your-name">Your name (optional)</label>
+    <input id="your-name" type="text" placeholder="e.g. Thabo Nkosi" autocomplete="off" />
+
+    <label for="org-name">Organisation / employer involved *</label>
+    <input id="org-name" type="text" placeholder="e.g. XYZ Company (Pty) Ltd" autocomplete="off" />
+
+    <label for="incident-date">Date of incident *</label>
+    <input id="incident-date" type="date" />
+
+    <label for="incident-type">Type of discrimination</label>
+    <select id="incident-type">
+      <option value="workplace">Workplace / employment</option>
+      <option value="public">Public place / services</option>
+      <option value="healthcare">Healthcare</option>
+      <option value="education">Education</option>
+      <option value="housing">Housing</option>
+      <option value="other">Other</option>
+    </select>
+
+    <label for="incident-desc">Describe what happened *</label>
+    <textarea id="incident-desc"
+      placeholder="Be specific: what was said, who was involved, what access or service was denied, how it affected you…"></textarea>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="analyse-btn">Analyse My Rights →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 2: ANALYSIS ── -->
+  <div class="panel" id="panel-2">
+    <h2>Rights Analysis</h2>
+    <p class="hint">Based on South African law, here is an assessment of your situation.</p>
+
+    <div id="loading-msg" style="display:none;">
+      <span class="spinner"></span> Analysing your rights…
+    </div>
+
+    <div id="analysis-card">
+      <div class="field">
+        <div class="field-label">What happened</div>
+        <div class="field-value" id="a-what"></div>
+      </div>
+      <div class="field">
+        <div class="field-label">Location / context</div>
+        <div class="field-value" id="a-location"></div>
+      </div>
+      <div class="field">
+        <div class="field-label">Severity</div>
+        <div class="field-value" id="a-severity"></div>
+      </div>
+      <div class="field">
+        <div class="field-label">Likely laws violated</div>
+        <div class="field-value" id="a-laws"></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="back-1-btn">← Back</button>
+      <button class="btn btn-primary" id="generate-btn">Generate Formal Letter →</button>
+    </div>
+  </div>
+
+  <!-- ── STEP 3: LETTER ── -->
+  <div class="panel" id="panel-3">
+    <h2>Formal Complaint Letter</h2>
+    <p class="hint">
+      This letter cites specific South African laws. Print it, sign it, and send it
+      to the organisation or submit it to the CCMA / Commission for Gender Equality.
+    </p>
+
+    <div id="loading-msg-2" style="display:none;">
+      <span class="spinner"></span> Generating your letter…
+    </div>
+
+    <div id="laws-cited"></div>
+    <div id="letter-box"></div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="back-2-btn">← Back</button>
+      <button class="btn btn-green" id="copy-btn">Copy Letter</button>
+      <button class="btn btn-green" id="print-btn">Print / Save PDF</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    // ── STATE ─────────────────────────────────────────────────
+    let analysisData = null
+    let letterText   = ''
+
+    // ── STEP NAVIGATION ───────────────────────────────────────
+    function goToStep(n) {
+      document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active') })
+      document.getElementById('panel-' + n).classList.add('active')
+
+      for (let i = 1; i <= 3; i++) {
+        const ind = document.getElementById('step-' + i + '-indicator')
+        ind.className = 'step' + (i === n ? ' active' : i < n ? ' done' : '')
+      }
+      document.getElementById('div-1').className = 'step-divider' + (n > 1 ? ' done' : '')
+      document.getElementById('div-2').className = 'step-divider' + (n > 2 ? ' done' : '')
+    }
+
+    function showError(msg) {
+      const b = document.getElementById('error-banner')
+      b.textContent = msg
+      b.style.display = 'block'
+    }
+
+    function clearError() {
+      document.getElementById('error-banner').style.display = 'none'
+    }
+
+    // ── STEP 1 → 2: ANALYSE ───────────────────────────────────
+    document.getElementById('analyse-btn').addEventListener('click', async function () {
+      clearError()
+      const desc = document.getElementById('incident-desc').value.trim()
+      const org  = document.getElementById('org-name').value.trim()
+      if (!desc) { showError('Please describe what happened (required).'); return }
+      if (!org)  { showError('Please enter the organisation or employer name (required).'); return }
+
+      goToStep(2)
+      document.getElementById('analysis-card').style.display = 'none'
+      document.getElementById('loading-msg').style.display = 'block'
+
+      try {
+        const result = await analyseIncident(desc)
+        analysisData = result
+
+        document.getElementById('a-what').textContent     = result.what_happened || desc.substring(0, 120)
+        document.getElementById('a-location').textContent = result.location       || getIncidentType()
+        const sev = (result.severity || 'serious').toLowerCase()
+        const sevEl = document.getElementById('a-severity')
+        sevEl.textContent = sev.charAt(0).toUpperCase() + sev.slice(1)
+        sevEl.className = 'field-value severity-' + sev
+
+        const lawsEl = document.getElementById('a-laws')
+        lawsEl.innerHTML = ''
+        const laws = result.laws_likely_violated || defaultLaws()
+        laws.forEach(function (law) {
+          const tag = document.createElement('span')
+          tag.className = 'law-tag'
+          tag.textContent = law
+          lawsEl.appendChild(tag)
+        })
+
+        document.getElementById('analysis-card').style.display = 'block'
+      } catch (err) {
+        // Fallback: show heuristic analysis
+        analysisData = heuristicAnalysis()
+        populateAnalysis(analysisData)
+        document.getElementById('analysis-card').style.display = 'block'
+      } finally {
+        document.getElementById('loading-msg').style.display = 'none'
+      }
+    })
+
+    function populateAnalysis(result) {
+      document.getElementById('a-what').textContent     = result.what_happened || ''
+      document.getElementById('a-location').textContent = result.location      || ''
+      const sev = (result.severity || 'serious').toLowerCase()
+      const sevEl = document.getElementById('a-severity')
+      sevEl.textContent = sev.charAt(0).toUpperCase() + sev.slice(1)
+      sevEl.className = 'field-value severity-' + sev
+      const lawsEl = document.getElementById('a-laws')
+      lawsEl.innerHTML = ''
+      const laws = result.laws_likely_violated || defaultLaws()
+      laws.forEach(function (law) {
+        const tag = document.createElement('span')
+        tag.className = 'law-tag'
+        tag.textContent = law
+        lawsEl.appendChild(tag)
+      })
+    }
+
+    // ── STEP 2 → 3: GENERATE LETTER ───────────────────────────
+    document.getElementById('generate-btn').addEventListener('click', async function () {
+      clearError()
+      goToStep(3)
+      document.getElementById('letter-box').style.display = 'none'
+      document.getElementById('laws-cited').style.display = 'none'
+      document.getElementById('loading-msg-2').style.display = 'block'
+
+      try {
+        const result = await generateLetter()
+        letterText = result.letter || result
+
+        const lawsDiv = document.getElementById('laws-cited')
+        if (result.laws_cited && result.laws_cited.length > 0) {
+          lawsDiv.innerHTML = '<div style="margin-bottom:8px;font-size:12px;color:#8B6FD4;text-transform:uppercase;letter-spacing:1px;">Laws cited</div>'
+          result.laws_cited.forEach(function (law) {
+            const tag = document.createElement('span')
+            tag.className = 'law-tag'
+            tag.textContent = law
+            lawsDiv.appendChild(tag)
+          })
+          lawsDiv.style.display = 'block'
+        }
+
+        document.getElementById('letter-box').textContent = letterText
+        document.getElementById('letter-box').style.display = 'block'
+      } catch (err) {
+        letterText = buildTemplateLetter()
+        document.getElementById('letter-box').textContent = letterText
+        document.getElementById('letter-box').style.display = 'block'
+      } finally {
+        document.getElementById('loading-msg-2').style.display = 'none'
+      }
+    })
+
+    // ── BACK BUTTONS ──────────────────────────────────────────
+    document.getElementById('back-1-btn').addEventListener('click', function () { goToStep(1) })
+    document.getElementById('back-2-btn').addEventListener('click', function () { goToStep(2) })
+
+    // ── COPY ──────────────────────────────────────────────────
+    document.getElementById('copy-btn').addEventListener('click', function () {
+      navigator.clipboard.writeText(letterText).then(function () {
+        const btn = document.getElementById('copy-btn')
+        const orig = btn.textContent
+        btn.textContent = 'Copied!'
+        setTimeout(function () { btn.textContent = orig }, 2000)
+      }).catch(function () {
+        // Fallback: select text in letter box
+        const range = document.createRange()
+        range.selectNodeContents(document.getElementById('letter-box'))
+        window.getSelection().removeAllRanges()
+        window.getSelection().addRange(range)
+      })
+    })
+
+    // ── PDF DOWNLOAD ──────────────────────────────────────────
+    document.getElementById('print-btn').addEventListener('click', function () {
+      if (window.jspdf && window.jspdf.jsPDF) {
+        downloadPDF()
+      } else {
+        // Fallback to browser print if jsPDF failed to load
+        window.print()
+      }
+    })
+
+    function downloadPDF() {
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+
+      // Header bar
+      doc.setFillColor(139, 111, 212)  // #8B6FD4
+      doc.rect(0, 0, 210, 18, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('AMANDLA — Know Your Rights', 14, 12)
+
+      // Letter body
+      doc.setTextColor(20, 20, 20)
+      doc.setFont('times', 'normal')
+      doc.setFontSize(11)
+
+      const margin   = 20
+      const maxWidth = 170   // mm
+      const lines    = doc.splitTextToSize(letterText || '(No letter generated)', maxWidth)
+
+      let y = 26
+      for (let i = 0; i < lines.length; i++) {
+        if (y > 275) {
+          doc.addPage()
+          y = 20
+        }
+        doc.text(lines[i], margin, y)
+        y += 6
+      }
+
+      // Footer
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p)
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text(
+          'Generated by AMANDLA — South African Sign Language Communication Bridge  |  Page ' + p + ' of ' + pageCount,
+          14, 290
+        )
+      }
+
+      const org = (document.getElementById('org-name').value || 'complaint').replace(/[^a-z0-9]/gi, '_')
+      doc.save('AMANDLA_' + org + '_letter.pdf')
+    }
+
+    // ── API CALLS ─────────────────────────────────────────────
+    async function analyseIncident(description) {
+      const resp = await fetch('http://localhost:8000/rights/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: description,
+          incident_type: getIncidentType()
+        })
+      })
+      if (!resp.ok) throw new Error('Analysis failed')
+      return resp.json()
+    }
+
+    async function generateLetter() {
+      const resp = await fetch('http://localhost:8000/rights/letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description:   document.getElementById('incident-desc').value.trim(),
+          user_name:     document.getElementById('your-name').value.trim() || 'The Complainant',
+          employer_name: document.getElementById('org-name').value.trim(),
+          incident_date: document.getElementById('incident-date').value || todayString(),
+          analysis:      analysisData
+        })
+      })
+      if (!resp.ok) throw new Error('Letter generation failed')
+      return resp.json()
+    }
+
+    // ── HEURISTICS (offline fallback) ─────────────────────────
+    function getIncidentType() {
+      const sel = document.getElementById('incident-type')
+      return sel.options[sel.selectedIndex].text
+    }
+
+    function defaultLaws() {
+      const type = document.getElementById('incident-type').value
+      if (type === 'workplace' || type === 'other') {
+        return ['Employment Equity Act s.6', 'Constitution s.9(3)', 'Labour Relations Act s.191']
+      }
+      return ['Promotion of Equality Act s.7', 'Constitution s.9(3)']
+    }
+
+    function heuristicAnalysis() {
+      const desc = document.getElementById('incident-desc').value.trim()
+      return {
+        what_happened: desc.length > 150 ? desc.substring(0, 150) + '…' : desc,
+        location: getIncidentType(),
+        severity: 'serious',
+        laws_likely_violated: defaultLaws()
+      }
+    }
+
+    function todayString() {
+      return new Date().toISOString().split('T')[0]
+    }
+
+    function buildTemplateLetter() {
+      const yourName = document.getElementById('your-name').value.trim() || 'The Complainant'
+      const orgName  = document.getElementById('org-name').value.trim() || '[Organisation Name]'
+      const date     = document.getElementById('incident-date').value || todayString()
+      const desc     = document.getElementById('incident-desc').value.trim()
+      const year     = new Date().getFullYear()
+      const ref      = 'AMANDLA-RIGHTS-' + year + '-' + String(Math.floor(Math.random() * 900) + 100)
+
+      return `${todayString()}
+
+[YOUR ADDRESS]
+[CITY, PROVINCE, POSTAL CODE]
+[EMAIL ADDRESS]
+
+${orgName}
+[ORGANISATION ADDRESS]
+[CITY, PROVINCE, POSTAL CODE]
+
+Reference: ${ref}
+
+Dear Sir/Madam,
+
+RE: FORMAL COMPLAINT OF UNFAIR DISCRIMINATION AGAINST A PERSON WITH A DISABILITY
+
+I, ${yourName}, hereby lodge a formal complaint of unfair discrimination in terms of the following legislation:
+
+1. The Employment Equity Act, No. 55 of 1998, Section 6, which prohibits unfair discrimination on the basis of disability.
+2. The Promotion of Equality and Prevention of Unfair Discrimination Act, No. 4 of 2000 (PEPUDA), Section 7.
+3. The Constitution of the Republic of South Africa, Section 9(3), which guarantees the right to equality and prohibits discrimination on the grounds of disability.
+
+On or about ${date}, the following incident occurred:
+
+${desc}
+
+This conduct constitutes unfair discrimination in terms of the above-mentioned legislation. As a person with a disability, I have a constitutional and statutory right to be treated with dignity and to have equal access to [services/employment/public facilities].
+
+DEMANDS:
+1. A written apology acknowledging the discriminatory conduct.
+2. Confirmation of steps taken to prevent recurrence.
+3. Compliance with all applicable disability rights legislation.
+
+I request your written response within 14 (fourteen) days of receipt of this letter. Should I not receive a satisfactory response within this period, I reserve the right to refer the matter to the Commission for Conciliation, Mediation and Arbitration (CCMA), the South African Human Rights Commission (SAHRC), or the Equality Court.
+
+Yours faithfully,
+
+${yourName}
+[SIGNATURE]
+[DATE]
+
+---
+This letter was generated by AMANDLA — South African Sign Language Communication Bridge
+Ref: ${ref}`
+    }
+  </script>
 </body>
 </html>

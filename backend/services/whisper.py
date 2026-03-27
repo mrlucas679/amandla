@@ -1,32 +1,52 @@
 """Whisper service wrapper for AMANDLA.
 
-Provides a simple transcribe_bytes(data: bytes) -> str function.
-
-If `faster_whisper` is available and a model is configured, it may be used; otherwise
-the function returns a mocked transcription for local development.
+Provides transcribe_bytes(data, mime_type) -> str.
+Delegates to whisper_service.py which handles model loading,
+audio conversion, and NVIDIA Parakeet fallback.
 """
-import tempfile
 import os
 import sys
+import tempfile
 
-def transcribe_bytes(data: bytes) -> str:
-    """Return transcribed text from audio bytes.
+# Ensure project root is on path so backend.services imports resolve
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-    This is a development-friendly placeholder. It will try to use faster_whisper if available,
-    but will fall back to returning a mocked string so the backend flow can be tested without heavy models.
+
+def transcribe_bytes(data: bytes, mime_type: str = "audio/wav") -> str:
+    """Transcribe audio bytes to text using Whisper.
+
+    Converts audio to WAV, runs the faster-whisper model, and returns
+    the transcribed string. Returns an empty string on any failure so
+    callers never need to handle exceptions.
+
+    Args:
+        data:      Raw audio bytes (any format supported by ffmpeg).
+        mime_type: MIME type hint for format detection (e.g. "audio/webm").
+
+    Returns:
+        Transcribed text string, or '' on failure.
     """
-    # Try to use faster_whisper if installed (but model files are required and may not be present)
     try:
-        from faster_whisper import WhisperModel
-        # Note: using faster-whisper requires a model (e.g., 'small', 'medium') to be available locally.
-        # We avoid automatic model downloads here to keep the dev environment light.
-        print('[Whisper] faster_whisper present but model loading is disabled in scaffold; using mock')
-    except Exception:
-        # Not available or not configured — return mocked text
-        print('[Whisper] faster_whisper not available; returning mock transcription')
-        return 'mock transcription'
+        from backend.services.whisper_service import convert_audio_to_wav, get_model
 
-    # If faster_whisper were fully configured, you'd load model and transcribe here.
-    # To keep this scaffold fast and reliable we skip that step.
-    return 'mock transcription'
+        # Convert to 16 kHz mono WAV
+        wav_bytes = convert_audio_to_wav(data, mime_type)
 
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(wav_bytes)
+            tmp_path = tmp.name
+
+        try:
+            model = get_model()  # lazy-loads; thread-safe after first call
+            segments, _info = model.transcribe(tmp_path, beam_size=5, language=None)
+            text = " ".join(seg.text for seg in segments).strip()
+            return text
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    except Exception as e:
+        print(f"[Whisper] transcribe_bytes error: {e}")
+        return ""

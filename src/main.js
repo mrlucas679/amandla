@@ -26,6 +26,7 @@ function createWindows() {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,  // Allow CDN scripts (Three.js) — dev only
     }
   })
   hearingWin.loadFile('src/windows/hearing/index.html')
@@ -48,6 +49,7 @@ function createWindows() {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,  // Allow CDN scripts (Three.js) — dev only
     }
   })
   deafWin.loadFile('src/windows/deaf/index.html')
@@ -83,6 +85,7 @@ ipcMain.handle('open-rights', () => {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,  // Allow CDN scripts (jsPDF) — dev only
     }
   })
   rightsWin.loadFile('src/windows/rights/index.html')

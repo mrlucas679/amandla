@@ -1,107 +1,162 @@
 """
 Whisper Speech-to-Text Service
-Transcribes audio using faster-whisper (local, no API key needed)
+Primary: faster-whisper (local, no API key needed).
+Fallback: NVIDIA Parakeet via NIM API (activates when NVIDIA_ENABLED=true and Whisper times out).
+Model is lazy-loaded on first use to avoid hanging startup.
 """
-import io
 import os
 import time
 import tempfile
 import asyncio
 import subprocess
 import logging
-from faster_whisper import WhisperModel
+
 from dotenv import load_dotenv
-import imageio_ffmpeg
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
-WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
+WHISPER_DEVICE     = os.getenv("WHISPER_DEVICE", "cpu")
+NVIDIA_ENABLED     = os.getenv("NVIDIA_ENABLED", "false").lower() == "true"
+NVIDIA_API_KEY     = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_BASE_URL    = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 
-# Load model once on startup
-logger.info(f"Loading Whisper model: {WHISPER_MODEL_SIZE} on {WHISPER_DEVICE}")
-try:
-    model = WhisperModel(WHISPER_MODEL_SIZE, device=WHISPER_DEVICE, compute_type="int8")
-    logger.info("Whisper model loaded successfully")
-except Exception as e:
-    logger.warning(f"Failed to load Whisper model: {e}")
-    model = None
+WHISPER_TIMEOUT_S  = 120.0  # CPU transcription of short clips can take 30–60 s on 'small' model
+
+# Lazy-loaded — None until first use
+_model = None
 
 
-def convert_audio_to_wav(audio_bytes: bytes) -> bytes:
+def get_model():
+    """Return the Whisper model, loading it on first call."""
+    global _model
+    if _model is not None:
+        return _model
+    try:
+        from faster_whisper import WhisperModel
+        logger.info(f"[Whisper] Loading model '{WHISPER_MODEL_SIZE}' on '{WHISPER_DEVICE}'…")
+        _model = WhisperModel(WHISPER_MODEL_SIZE, device=WHISPER_DEVICE, compute_type="int8")
+        logger.info("[Whisper] Model ready")
+    except Exception as e:
+        logger.warning(f"[Whisper] Could not load model: {e}")
+        _model = None
+    return _model
+
+
+def convert_audio_to_wav(audio_bytes: bytes, mime_type: str = "audio/webm") -> bytes:
     """
-    Convert any audio format (webm, ogg, mp4) to wav using ffmpeg.
-    Browser MediaRecorder outputs webm/opus — Whisper needs wav.
+    Convert any audio format (webm, ogg, mp4, wav) to 16 kHz mono wav for Whisper.
+    Strips codec suffix from mime_type (e.g. 'audio/webm;codecs=opus' → 'audio/webm').
     """
-    with tempfile.NamedTemporaryFile(suffix='.webm', delete=False) as inp:
+    ext_map = {
+        "audio/webm":  ".webm",
+        "audio/ogg":   ".ogg",
+        "audio/mp4":   ".mp4",
+        "audio/mpeg":  ".mp3",
+        "audio/wav":   ".wav",
+        "audio/x-wav": ".wav",
+    }
+    base_mime = mime_type.split(";")[0].strip().lower()
+    ext = ext_map.get(base_mime, ".webm")
+
+    if ext == ".wav":
+        return audio_bytes
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as inp:
         inp.write(audio_bytes)
         inp_path = inp.name
 
-    out_path = inp_path.replace('.webm', '.wav')
+    out_path = inp_path[:-len(ext)] + ".wav"
 
     try:
-        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        ffmpeg_exe = _get_ffmpeg()
         result = subprocess.run(
-            [ffmpeg_exe, '-y', '-i', inp_path, '-ar', '16000', '-ac', '1', '-f', 'wav', out_path],
-            capture_output=True, timeout=15
+            [ffmpeg_exe, "-y", "-i", inp_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path],
+            capture_output=True, timeout=20
         )
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg failed: {result.stderr.decode()}")
-
-        with open(out_path, 'rb') as f:
+        with open(out_path, "rb") as f:
             return f.read()
     finally:
-        try:
-            os.unlink(inp_path)
-            os.unlink(out_path)
-        except Exception:
-            pass
+        for p in (inp_path, out_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
 
 
-async def transcribe_audio(audio_bytes: bytes) -> dict:
+def _get_ffmpeg() -> str:
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") -> dict:
     """
-    Transcribe audio bytes using Whisper.
-    Returns dict with 'text', 'language', and 'confidence'.
+    Full pipeline: convert audio → wav → Whisper transcription.
+    Falls back to NVIDIA Parakeet if Whisper times out or fails and NVIDIA_ENABLED=true.
+    Returns dict with 'text', 'language', 'confidence', 'duration_ms'.
     """
-    if not model:
-        return {
-            'text': '',
-            'language': 'en',
-            'confidence': 0.0,
-            'error': 'Whisper model not loaded'
-        }
-
     start = time.time()
+    loop = asyncio.get_event_loop()
 
     try:
-        # Convert from webm/opus to wav
-        wav_bytes = await asyncio.get_event_loop().run_in_executor(
-            None, convert_audio_to_wav, audio_bytes
+        # Load model in executor so it never blocks the event loop
+        model = await loop.run_in_executor(None, get_model)
+
+        if model is None and not NVIDIA_ENABLED:
+            return {
+                "text": "",
+                "language": "en",
+                "confidence": 0.0,
+                "error": "Whisper model not loaded and NVIDIA fallback disabled"
+            }
+
+        # Convert audio format in executor (may call ffmpeg)
+        wav_bytes = await loop.run_in_executor(
+            None, lambda: convert_audio_to_wav(audio_bytes, mime_type)
         )
 
-        # Write wav to temp file for Whisper
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp.write(wav_bytes)
             tmp_path = tmp.name
 
         try:
-            # Transcribe
-            segments, info = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: model.transcribe(tmp_path, beam_size=5)
-            )
+            if model is None:
+                raise RuntimeError("Whisper model unavailable")
 
+            # Run transcription in executor with timeout.
+            # IMPORTANT: consume the segment generator inside the executor —
+            # faster-whisper returns a lazy generator; iterating it outside the
+            # executor would block the event loop.
+            def _run_transcription():
+                segs_gen, inf = model.transcribe(tmp_path, beam_size=5)
+                segs = list(segs_gen)   # force full computation here in the thread
+                return segs, inf
+
+            try:
+                segments, info = await asyncio.wait_for(
+                    loop.run_in_executor(None, _run_transcription),
+                    timeout=WHISPER_TIMEOUT_S
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"[Whisper] Transcription timed out after {WHISPER_TIMEOUT_S}s")
+                raise TimeoutError("Whisper timeout")
+
+            text = " ".join(seg.text.strip() for seg in segments)
             elapsed = time.time() - start
-            text = " ".join([seg.text.strip() for seg in segments])
-
-            logger.info(f"Transcribed {len(wav_bytes)} bytes in {elapsed:.2f}s: '{text[:50]}...'")
-
+            logger.info(f"[Whisper] Transcribed in {elapsed:.2f}s: '{text[:60]}'")
             return {
-                'text': text,
-                'language': info.language,
-                'confidence': 0.85,  # Whisper doesn't return per-utterance confidence
-                'duration_ms': int(elapsed * 1000)
+                "text": text,
+                "language": info.language,
+                "confidence": 0.85,
+                "duration_ms": int(elapsed * 1000),
+                "engine": "whisper"
             }
         finally:
             try:
@@ -109,12 +164,74 @@ async def transcribe_audio(audio_bytes: bytes) -> dict:
             except Exception:
                 pass
 
-    except Exception as e:
-        logger.error(f"Transcription failed: {e}")
-        return {
-            'text': '',
-            'language': 'en',
-            'confidence': 0.0,
-            'error': str(e)
-        }
+    except Exception as whisper_err:
+        # ── NVIDIA PARAKEET FALLBACK ──────────────────────────
+        if NVIDIA_ENABLED and NVIDIA_API_KEY:
+            logger.info(f"[Whisper] Falling back to Parakeet — reason: {whisper_err}")
+            try:
+                return await _transcribe_parakeet(audio_bytes, mime_type)
+            except Exception as parakeet_err:
+                logger.error(f"[Parakeet] Fallback failed: {parakeet_err}")
+                return {
+                    "text": "",
+                    "language": "en",
+                    "confidence": 0.0,
+                    "error": f"Whisper: {whisper_err} | Parakeet: {parakeet_err}"
+                }
+        else:
+            logger.error(f"[Whisper] Transcription failed (no fallback): {whisper_err}")
+            return {
+                "text": "",
+                "language": "en",
+                "confidence": 0.0,
+                "error": str(whisper_err)
+            }
 
+
+async def _transcribe_parakeet(audio_bytes: bytes, mime_type: str) -> dict:
+    """
+    Transcribe audio using NVIDIA Parakeet via NIM API (OpenAI-compatible).
+    Only called when NVIDIA_ENABLED=true and Whisper fails/times out.
+    """
+    import httpx
+
+    start = time.time()
+
+    # Convert to wav for upload
+    try:
+        wav_bytes = convert_audio_to_wav(audio_bytes, mime_type)
+    except Exception:
+        wav_bytes = audio_bytes
+
+    # Write temp file for upload
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(wav_bytes)
+        tmp_path = tmp.name
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            with open(tmp_path, "rb") as f:
+                resp = await client.post(
+                    f"{NVIDIA_BASE_URL}/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {NVIDIA_API_KEY}"},
+                    files={"file": ("audio.wav", f, "audio/wav")},
+                    data={"model": "nvidia/parakeet-ctc-0.6b-asr"}
+                )
+            resp.raise_for_status()
+            data = resp.json()
+
+        text = data.get("text", "")
+        elapsed = time.time() - start
+        logger.info(f"[Parakeet] Transcribed in {elapsed:.2f}s: '{text[:60]}'")
+        return {
+            "text": text,
+            "language": "en",
+            "confidence": 0.90,
+            "duration_ms": int(elapsed * 1000),
+            "engine": "parakeet"
+        }
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass

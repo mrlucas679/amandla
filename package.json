@@ -4,7 +4,7 @@
   "description": "AMANDLA — Communication bridge for disabled South Africans",
   "main": "src/main.js",
   "scripts": {
-    "start": "concurrently \"npm run backend\" \"wait-on http://localhost:8000/health && electron .\"",
+    "start": "concurrently \"npm run backend\" \"wait-on http-get://localhost:8000/health && electron .\"",
     "electron": "electron .",
     "backend": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload",
     "dev": "electron . --inspect",
