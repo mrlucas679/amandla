@@ -124,6 +124,7 @@ TypeScript enforces strict rules that cause errors blocking your app from runnin
 
 Open your terminal (PowerShell or Command Prompt on Windows) and run each command:
 
+
 ```powershell
 # Check Python
 python --version
@@ -217,7 +218,8 @@ amandla-desktop/
 │       ├── hearing/
 │       │   └── index.html      ← Hearing person's screen
 │       ├── deaf/
-│       │   └── index.html      ← Deaf/signer's screen
+│       │   └── in
+dex.html      ← Deaf/signer's screen
 │       └── rights/
 │           └── index.html      ← RIGHTS mode screen
 ├── assets/

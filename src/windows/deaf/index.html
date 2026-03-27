@@ -4,14 +4,18 @@
   <meta charset="utf-8" />
   <title>AMANDLA — Deaf</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Allow MediaPipe WASM to execute (required in Electron 28 / Chromium 120+) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob: https: http://localhost:* ws://localhost:*;"  />
+
+  <link rel="stylesheet" href="../../styles/design-system.css" />
+  <link rel="stylesheet" href="../../styles/animations.css" />
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    /* ── LAYOUT ── */
     body {
-      background: #0D0D0D;
-      color: #F5F0E8;
-      font-family: Arial, Helvetica, sans-serif;
+      background: var(--void);
+      color: var(--cream);
+      font-family: var(--font-body);
       height: 100vh;
       display: flex;
       flex-direction: column;
@@ -23,77 +27,141 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 7px 14px;
-      background: #111;
-      border-bottom: 1px solid #222;
+      padding: 6px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--purple-border);
+      box-shadow: 0 1px 0 rgba(176,110,243,0.08);
       flex-shrink: 0;
       gap: 10px;
     }
-    #topbar .brand { font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #8B6FD4; white-space: nowrap; }
-    #topbar .right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-    #conn-status { font-size: 11px; color: #888; }
-    #conn-status.connected { color: #2EA880; }
-    #status-dot {
-      width: 9px; height: 9px; border-radius: 50%;
-      background: #2EA880; flex-shrink: 0;
-      transition: background 0.3s;
+    #topbar .brand {
+      font-family: var(--font-display);
+      font-size: 13px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: var(--purple); white-space: nowrap;
     }
-    #status-dot.offline { background: #FC8181; }
+    #topbar .brand-icon {
+      width: 22px; height: 22px; border-radius: var(--r-sm);
+      background: var(--purple-bg);
+      border: 1px solid var(--purple-border);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; margin-right: 6px; vertical-align: middle;
+    }
+    #topbar .right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    #conn-status {
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--muted);
+      padding: 3px 10px; border-radius: var(--r-pill);
+      background: var(--surface2); border: 1px solid var(--barrier);
+      transition: color var(--t-med) var(--ease), border-color var(--t-med) var(--ease);
+    }
+    #conn-status.connected {
+      color: var(--teal);
+      border-color: var(--teal-border);
+      background: var(--teal-bg);
+    }
+    #status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--teal); flex-shrink: 0;
+      box-shadow: 0 0 8px rgba(0,212,163,0.7);
+      transition: background var(--t-med) var(--ease);
+    }
+    #status-dot.offline {
+      background: var(--crimson);
+      box-shadow: 0 0 8px rgba(255,64,96,0.5);
+    }
 
     /* ── TURN INDICATOR ── */
     #turn-indicator {
       flex-shrink: 0;
       text-align: center;
-      padding: 5px 14px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      color: #555;
-      background: #0a0a0a;
-      border-bottom: 1px solid #1a1a1a;
-      transition: color 0.3s;
+      padding: 4px 14px;
+      font-family: var(--font-display);
+      font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--dim);
+      background: var(--surface);
+      border-bottom: 1px solid var(--barrier);
+      transition: color var(--t-med) var(--ease);
     }
-    #turn-indicator.hearing { color: #2EA880; }
-    #turn-indicator.deaf    { color: #8B6FD4; }
+    #turn-indicator.hearing { color: var(--teal); }
+    #turn-indicator.deaf    { color: var(--purple); }
 
-    /* ── AVATAR fills most of the height ── */
+    /* ── AVATAR panel ── */
     #avatar-panel {
       flex: 1;
       position: relative;
       min-height: 0;
     }
     #avatar-canvas { width: 100%; height: 100%; display: block; }
+    /* GLB loading skeleton shimmer (shown while avatar.glb streams in) */
+    #avatar-canvas.skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+      background-size: 200% 100%;
+      animation: skeleton-shimmer 1.4s ease infinite;
+    }
+    @keyframes skeleton-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
 
     #avatar-sign-label {
       position: absolute;
-      bottom: 50px; left: 50%; transform: translateX(-50%);
-      font-size: 24px; font-weight: 700;
-      color: #fff; text-shadow: 0 2px 12px #000;
+      bottom: 52px; left: 50%; transform: translateX(-50%);
+      font-family: var(--font-display);
+      font-size: 20px; font-weight: 700;
+      color: var(--cream); text-shadow: 0 2px 16px rgba(0,0,0,0.9);
       letter-spacing: 2px; pointer-events: none; white-space: nowrap;
     }
+
+    /* Sign burst overlay — flashes on detection */
     #detected-sign {
-      font-size: 42px; font-weight: 700; color: #2EA880;
+      position: absolute; top: 12px; left: 0; right: 0;
+      font-family: var(--font-display);
+      font-size: 38px; font-weight: 700;
       text-align: center; opacity: 0;
-      transition: opacity 0.3s; margin: 6px 0;
       letter-spacing: 1px; pointer-events: none;
-      position: absolute; top: 10px; left: 0; right: 0;
+      text-shadow: 0 0 24px currentColor;
+      transition: opacity var(--t-med) var(--ease);
     }
+    #detected-sign.show {
+      animation: sign-burst 0.45s var(--spring) both;
+      opacity: 1;
+    }
+    #detected-sign.high  { color: var(--teal); }
+    #detected-sign.low   { color: var(--gold); }
+
+    /* SASL gloss — prominent, all caps, purple */
+    #gloss-display {
+      position: absolute;
+      bottom: 30px; left: 0; right: 0;
+      padding: 4px 16px;
+      font-family: var(--font-display);
+      font-size: 20px; font-weight: 800;
+      color: var(--purple); letter-spacing: 3px;
+      text-align: center; pointer-events: none;
+      text-shadow: 0 2px 12px rgba(176,110,243,0.4);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* Original English — smaller italic below */
     #sentence-display {
       position: absolute;
       bottom: 0; left: 0; right: 0;
-      padding: 9px 16px;
-      background: linear-gradient(transparent, #000c);
-      font-size: 16px; color: #F5F0E8;
-      text-align: center; pointer-events: none; min-height: 40px;
+      padding: 4px 16px;
+      background: linear-gradient(transparent, rgba(5,8,16,0.85));
+      font-size: 11px; color: var(--muted);
+      text-align: center; pointer-events: none; min-height: 28px;
+      font-style: italic;
     }
 
     /* ── CAMERA PANEL ── */
     #camera-panel {
       flex-shrink: 0;
       position: relative;
-      height: 130px;
-      background: #000;
-      border-top: 1px solid #222;
+      height: 128px;
+      background: var(--void);
+      border-top: 1px solid var(--barrier);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -102,14 +170,12 @@
     #camera-panel.hidden { display: none; }
 
     #camera-video {
-      height: 100%;
-      width: auto;
+      height: 100%; width: auto;
       display: block;
-      transform: scaleX(-1);   /* mirror for natural feel */
+      transform: scaleX(-1);
     }
     #camera-canvas {
-      position: absolute;
-      top: 0; left: 0;
+      position: absolute; top: 0; left: 0;
       height: 100%; width: 100%;
       pointer-events: none;
       transform: scaleX(-1);
@@ -117,114 +183,180 @@
     #camera-label {
       position: absolute;
       top: 6px; left: 10px;
-      font-size: 11px; color: #8B6FD4;
-      font-weight: 700; letter-spacing: 0.5px;
-      pointer-events: none;
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--purple); pointer-events: none;
     }
     #sign-preview {
       position: absolute;
       top: 6px; right: 10px;
-      font-size: 13px; font-weight: 700;
-      color: #2EA880;
-      pointer-events: none;
+      font-family: var(--font-display);
+      font-size: 12px; font-weight: 700;
+      color: var(--teal); pointer-events: none;
     }
     #cam-toggle {
       position: absolute;
       bottom: 6px; right: 8px;
-      font-size: 11px; color: #555; cursor: pointer;
-      background: #111; border: 1px solid #333;
-      border-radius: 4px; padding: 2px 7px;
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+      color: var(--muted); cursor: pointer;
+      background: var(--surface2); border: 1px solid var(--barrier);
+      border-radius: var(--r-sm); padding: 2px 8px;
+      transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
     }
-    #cam-toggle:hover { color: #8B6FD4; border-color: #8B6FD4; }
+    #cam-toggle:hover { color: var(--purple); border-color: var(--purple-border); }
 
     /* ── CATEGORY TABS ── */
     #category-tabs {
       flex-shrink: 0;
       display: flex; gap: 2px; padding: 4px 8px 0;
-      background: #0a0a0a;
-      border-top: 1px solid #1c1c1c;
+      background: var(--surface);
+      border-top: 1px solid var(--barrier);
       overflow-x: auto;
     }
     .cat-tab {
       background: transparent; border: none;
-      color: #6B5C48; font-size: 11px; font-weight: 700;
-      padding: 5px 9px; cursor: pointer;
+      font-family: var(--font-display);
+      color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 5px 10px; cursor: pointer;
       border-bottom: 2px solid transparent;
-      white-space: nowrap; letter-spacing: 0.3px;
-      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+      transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
       flex-shrink: 0;
     }
-    .cat-tab:hover { color: #F5F0E8; }
-    .cat-tab.active { color: #8B6FD4; border-bottom-color: #8B6FD4; }
+    .cat-tab:hover { color: var(--cream); }
+    .cat-tab.active { color: var(--purple); border-bottom-color: var(--purple); }
 
     /* ── QUICK-SIGN BUTTONS ── */
     #quick-signs {
       flex-shrink: 0;
       display: flex; flex-wrap: wrap;
-      gap: 6px; padding: 6px 10px 8px;
-      background: #0a0a0a;
+      gap: 5px; padding: 6px 10px 8px;
+      background: var(--surface);
       justify-content: center;
       min-height: 44px;
     }
     .qs-btn {
-      padding: 7px 12px; border-radius: 7px;
-      border: 1px solid #8B6FD480;
-      background: #1a1230; color: #C4B5FD;
-      font-size: 12px; font-weight: 700;
-      cursor: pointer; letter-spacing: 0.5px;
-      transition: background 0.15s, transform 0.1s, border-color 0.15s;
+      padding: 6px 12px; border-radius: var(--r-pill);
+      border: 1px solid var(--purple-border);
+      background: var(--purple-bg); color: var(--purple);
+      font-family: var(--font-display);
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: background var(--t-fast) var(--ease),
+                  transform var(--t-fast) var(--ease),
+                  border-color var(--t-fast) var(--ease),
+                  box-shadow var(--t-fast) var(--ease);
       user-select: none;
     }
-    .qs-btn:hover  { background: #8B6FD430; border-color: #8B6FD4; }
-    .qs-btn:active { transform: scale(0.94); }
-    .qs-btn.sent   { border-color: #2EA880; color: #2EA880; background: #0f2e20; }
+    .qs-btn:hover  { background: rgba(176,110,243,0.18); border-color: var(--purple); box-shadow: var(--shadow-purple); }
+    .qs-btn:active { transform: scale(0.93); }
+    .qs-btn.sent   { border-color: var(--teal-border); color: var(--teal); background: var(--teal-bg); }
     .qs-btn.emergency {
-      border-color: #FC818180; background: #2e0a0a; color: #FCA5A5;
+      border-color: var(--crimson-border);
+      background: var(--crimson-bg);
+      color: var(--crimson);
     }
-    .qs-btn.emergency:hover { background: #FC818130; border-color: #FC8181; }
+    .qs-btn.emergency:hover { background: rgba(255,64,96,0.22); border-color: var(--crimson); box-shadow: var(--shadow-crimson); }
 
     /* ── EMERGENCY OVERLAY ── */
     #emergency-overlay {
       display: none;
-      position: fixed; inset: 0; z-index: 9999;
+      position: fixed; inset: 0; z-index: var(--z-top);
       background: rgba(229,62,62,0.95);
       flex-direction: column; align-items: center;
       justify-content: center; gap: 20px;
       text-align: center; padding: 40px;
-      animation: emg-pulse 1s ease-in-out infinite;
+      animation: emergency-pulse 1s ease-in-out infinite;
     }
     #emergency-overlay.active { display: flex; }
-    @keyframes emg-pulse {
-      0%, 100% { background: rgba(229,62,62,0.95); }
-      50%       { background: rgba(200,30,30,0.98); }
-    }
     .emg-icon  { font-size: 72px; }
-    .emg-title { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: -2px; }
+    .emg-title {
+      font-family: var(--font-display);
+      font-size: 52px; font-weight: 900; color: #fff; letter-spacing: -2px;
+    }
     .emg-sub   { font-size: 20px; color: rgba(255,255,255,0.85); }
     .emg-dismiss {
       background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4);
-      color: #fff; font-size: 15px; font-weight: 700;
-      padding: 14px 36px; border-radius: 12px; cursor: pointer;
+      color: #fff; font-family: var(--font-display);
+      font-size: 15px; font-weight: 700;
+      padding: 14px 36px; border-radius: var(--r-lg); cursor: pointer;
       margin-top: 10px;
+      transition: background var(--t-fast) var(--ease);
     }
     .emg-dismiss:hover { background: rgba(255,255,255,0.35); }
+
+    /* ── ASSIST CONTAINER ── */
+    #assistContainer {
+      flex: 1; min-height: 0;
+      background: var(--void);
+      overflow-y: auto;
+    }
+
+    /* ── MODE TOGGLE BUTTON ── */
+    #modeToggleBtn {
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 4px 10px; border-radius: var(--r-pill);
+      border: 1px solid var(--purple-border);
+      background: var(--purple-bg); color: var(--purple);
+      cursor: pointer;
+      transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    #modeToggleBtn:hover { background: rgba(176,110,243,0.15); border-color: var(--purple); }
 
     /* ── STARTUP OVERLAY ── */
     #startup-overlay {
       position: fixed; inset: 0; z-index: 9998;
-      background: #0D0D0D;
+      background: var(--void);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 22px; padding: 32px;
+      gap: 24px; padding: 32px;
+      animation: fade-in var(--t-slow) var(--ease) both;
     }
-    #startup-overlay h1 { font-size: 30px; color: #8B6FD4; letter-spacing: 2px; }
-    #startup-overlay p  { color: #aaa; text-align: center; max-width: 360px; line-height: 1.5; }
+    #startup-overlay .startup-brand {
+      font-family: var(--font-display);
+      font-size: 32px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase;
+      background: linear-gradient(135deg, var(--purple), var(--teal));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    #startup-overlay p {
+      font-family: var(--font-body);
+      color: var(--muted); text-align: center;
+      max-width: 360px; line-height: 1.6; font-size: 14px;
+    }
     #start-btn {
-      padding: 13px 46px; border-radius: 12px; border: none;
-      background: #8B6FD4; color: #fff; font-size: 19px; font-weight: 700;
-      cursor: pointer; transition: background 0.2s;
+      padding: 13px 46px; border-radius: var(--r-pill); border: none;
+      background: linear-gradient(135deg, var(--purple), #8B4FD0);
+      color: #fff;
+      font-family: var(--font-display);
+      font-size: 16px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 4px 24px rgba(176,110,243,0.45);
+      transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
     }
-    #start-btn:hover { background: #7058bc; }
+    #start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(176,110,243,0.65); }
+    #start-btn:active { transform: scale(0.96); }
+
+    /* ── CSS VARIABLES forwarded for AssistEngine ── */
+    :root {
+      --color-background-primary:   var(--void);
+      --color-background-secondary: var(--surface2);
+      --color-background-tertiary:  var(--surface3);
+      --color-background-info:      var(--purple-bg);
+      --color-background-success:   var(--teal-bg);
+      --color-border-secondary:     var(--barrier);
+      --color-border-tertiary:      var(--surface4);
+      --color-border-info:          var(--purple-border);
+      --color-border-success:       var(--teal-border);
+      --color-text-primary:         var(--cream);
+      --color-text-secondary:       var(--muted);
+      --color-text-tertiary:        var(--dim);
+      --color-text-success:         var(--teal);
+      --font-sans:                  var(--font-body);
+    }
   </style>
 </head>
 <body>
@@ -239,7 +371,7 @@
 
   <!-- Startup overlay — unlocks TTS -->
   <div id="startup-overlay">
-    <h1>AMANDLA</h1>
+    <div class="startup-brand">AMANDLA</div>
     <p>Deaf view — signs appear here when the hearing person speaks.<br>
        Use buttons below to reply. Allow camera access for hand tracking.</p>
     <button id="start-btn">READY</button>
@@ -247,10 +379,11 @@
 
   <!-- Top bar -->
   <div id="topbar">
-    <div class="brand">AMANDLA — Deaf</div>
+    <div class="brand"><span class="brand-icon">🤟</span>AMANDLA — Deaf</div>
     <div class="right">
       <span id="conn-status">connecting…</span>
       <div id="status-dot" title="AI status"></div>
+      <button id="modeToggleBtn" onclick="ModeController.toggle()">Assist Mode</button>
     </div>
   </div>
 
@@ -262,14 +395,19 @@
     <div id="avatar-canvas"></div>
     <div id="avatar-sign-label"></div>
     <div id="detected-sign"></div>
+    <div id="gloss-display"></div>
     <div id="sentence-display"></div>
   </div>
+
+  <!-- Assist mode: AAC-style phrase completion (hidden by default) -->
+  <div id="assistContainer" style="display:none"></div>
 
   <!-- Camera panel: deaf person's hand shown with MediaPipe skeleton -->
   <div id="camera-panel">
     <video id="camera-video" playsinline muted></video>
     <canvas id="camera-canvas"></canvas>
     <div id="camera-label">HAND TRACKING</div>
+    <div id="hand-count-badge" style="position:absolute;bottom:6px;right:8px;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,0.55);padding:2px 6px;border-radius:8px;pointer-events:none;letter-spacing:0.5px;"></div>
     <div id="sign-preview"></div>
     <button id="cam-toggle" title="Toggle camera">hide cam</button>
   </div>
@@ -281,13 +419,23 @@
   <!-- ── SCRIPTS: load order is critical ── -->
   <!-- Three.js must come first (for avatar) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <!-- Signs library and avatar -->
+  <!-- GLTFLoader r128 — required for Mixamo GLB avatar (Step 3: Load into Three.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- TF.js hand-pose-detection (WebGL backend — no WASM CDN issues in Electron) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.2.0/dist/tf-core.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.2.0/dist/tf-backend-webgl.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.2.0/dist/tf-converter.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@2.0.1/dist/hand-pose-detection.min.js" crossorigin="anonymous"></script>
+  <!-- Signs library (pose data + TransitionEngine) -->
   <script src="../../../signs_library.js"></script>
+  <!-- signs_library_v2: BONE_MAP extension (attaches to window.AMANDLA_SIGNS) -->
+  <script src="../../../signs_library_v2.js"></script>
+  <!-- AvatarDriver: BONE_MAP + Mixamo axis remap + bone binding (Step 4: Map bone names) -->
+  <script src="avatar_driver.js"></script>
+  <!-- Avatar: GLTFLoader scene + TransitionEngine render loop (Steps 3–4) -->
   <script src="avatar.js"></script>
+  <!-- Mode controller (sign ↔ assist) — must load before inline script -->
+  <script src="mode_controller.js"></script>
 
   <script>
     // ── DOM REFS ──────────────────────────────────────────────
@@ -296,11 +444,13 @@
     const connStatus    = document.getElementById('conn-status')
     const statusDot     = document.getElementById('status-dot')
     const sentenceEl    = document.getElementById('sentence-display')
+    const glossEl       = document.getElementById('gloss-display')
     const turnEl        = document.getElementById('turn-indicator')
     const camPanel      = document.getElementById('camera-panel')
     const camVideo      = document.getElementById('camera-video')
     const camCanvas     = document.getElementById('camera-canvas')
     const signPreview   = document.getElementById('sign-preview')
+    const handBadge     = document.getElementById('hand-count-badge')
     const camToggle     = document.getElementById('cam-toggle')
 
     // ── STARTUP ───────────────────────────────────────────────
@@ -342,28 +492,38 @@
     window.amandla.onMessage(function (msg) {
       if (!msg) return
 
-      // Hearing person spoke → signs arrive
+      // Hearing person spoke → SASL signs arrive
+      // Deaf window shows SASL grammar only — no original English, no audio (deaf users can't hear)
       if (msg.type === 'signs') {
+        const signCount = Array.isArray(msg.signs) ? msg.signs.length : 1
+        const clearAfter = (signCount * 700) + 1200
+
+        // Show SASL gloss — this is the language the deaf person understands
         if (msg.text) {
-          sentenceEl.textContent = msg.text
-          const clearAfter = ((msg.signs ? msg.signs.length : 1) * 700) + 1200
-          setTimeout(function () { sentenceEl.textContent = '' }, clearAfter)
-          speakText(msg.text)
+          glossEl.textContent = msg.text
+          setTimeout(function () { glossEl.textContent = '' }, clearAfter)
         }
+
+        // Track detected language for internal use (no UI side-effect)
+        if (msg.language) setDetectedLanguage(msg.language)
+
+        // Drive the avatar with the sign sequence
         if (Array.isArray(msg.signs) && msg.signs.length > 0) {
-          if (window.AmandlaAvatar) {
-            msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
-          } else {
-            // Avatar not ready — show sign names as text fallback
-            sentenceEl.textContent = (msg.text || '') + '\n[' + msg.signs.join(' → ') + ']'
+          if (ModeController.isSign()) {
+            if (window.AmandlaAvatar) {
+              // Apply NMMs before queuing signs — they must onset with the first sign
+              const nmms = Array.isArray(msg.non_manual_markers) ? msg.non_manual_markers : []
+              if (nmms.length > 0) {
+                // Phrase duration = (hold + gap) per sign + final gap
+                const phraseDur = msg.signs.length * 0.56 + 0.18
+                window.AmandlaAvatar.setNMMs(nmms, phraseDur)
+              }
+              msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
+            } else {
+              glossEl.textContent = msg.text || msg.signs.join(' ')
+            }
           }
         }
-        return
-      }
-
-      if (msg.type === 'text' || msg.type === 'speech_text') {
-        sentenceEl.textContent = msg.text || ''
-        if (msg.text) speakText(msg.text)
         return
       }
 
@@ -477,26 +637,35 @@
       const el = document.getElementById('detected-sign')
       if (!el) return
       el.textContent = signName
-      el.style.opacity = '1'
-      el.style.color = confidence > 0.75 ? '#2EA880' : '#ECC94B'
+      el.className = confidence > 0.75 ? 'show high' : 'show low'
       clearTimeout(el._hideTimer)
-      el._hideTimer = setTimeout(function () { el.style.opacity = '0' }, 2000)
+      el._hideTimer = setTimeout(function () { el.className = '' }, 2000)
     }
 
-    // ── MEDIAPIPE HAND TRACKING ───────────────────────────────
-    let mpHands      = null
-    let mpCamera     = null
-    let camRunning   = false
-    let lastSendTime = 0
+    // ── HAND TRACKING (TF.js — WebGL, no WASM CDN, native 2-hand support) ──
+    let handDetector  = null
+    let camRunning    = false
+    let lastSendTime  = 0
     const SEND_INTERVAL_MS = 600   // send landmarks at most every 600ms
 
+    // Hand skeleton connections (21 keypoints per hand, 0=wrist)
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [0,9],[9,10],[10,11],[11,12],
+      [0,13],[13,14],[14,15],[15,16],
+      [0,17],[17,18],[18,19],[19,20],
+      [5,9],[9,13],[13,17]
+    ]
+
     function initCamera() {
-      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false })
+      // 640×480 for reliable two-hand detection
+      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false })
         .then(function (stream) {
           camVideo.srcObject = stream
           camVideo.play()
           camPanel.classList.remove('hidden')
-          startMediaPipe()
+          startHandDetection()
         })
         .catch(function (err) {
           console.warn('[Camera] Access denied or unavailable:', err)
@@ -504,98 +673,108 @@
         })
     }
 
-    function startMediaPipe() {
-      if (typeof Hands === 'undefined') {
-        console.warn('[MediaPipe] Hands not loaded — hand tracking unavailable')
+    async function startHandDetection() {
+      if (typeof handPoseDetection === 'undefined' || typeof tf === 'undefined') {
+        console.warn('[TF.js] hand-pose-detection not loaded — hand tracking unavailable')
         return
       }
+      try {
+        await tf.setBackend('webgl')
+        await tf.ready()
+        console.log('[TF.js] Backend ready:', tf.getBackend())
 
-      mpHands = new Hands({
-        locateFile: function (file) {
-          return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' + file
-        }
-      })
-
-      mpHands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.5
-      })
-
-      mpHands.onResults(onHandResults)
-
-      if (typeof Camera !== 'undefined') {
-        mpCamera = new Camera(camVideo, {
-          onFrame: async function () {
-            await mpHands.send({ image: camVideo })
-          },
-          width: 320,
-          height: 240
-        })
-        mpCamera.start()
+        handDetector = await handPoseDetection.createDetector(
+          handPoseDetection.SupportedModels.MediaPipeHands,
+          { runtime: 'tfjs', modelType: 'lite', maxHands: 2 }
+        )
+        console.log('[TF.js Hands] Detector created — maxHands=2, runtime=tfjs/WebGL')
         camRunning = true
-        console.log('[MediaPipe] Hand tracking started')
-      } else {
-        // Fallback: manual requestAnimationFrame loop
-        camRunning = true
-        ;(function loop() {
-          if (!camRunning) return
-          if (camVideo.readyState >= 2) {
-            mpHands.send({ image: camVideo }).catch(function () {})
-          }
-          setTimeout(loop, 100)
-        })()
+        detectLoop()
+      } catch (err) {
+        console.error('[TF.js Hands] Failed to create detector:', err)
       }
     }
 
-    function onHandResults(results) {
-      // ── Draw skeleton on canvas ──────────────────────────────
-      const ctx = camCanvas.getContext('2d')
-      camCanvas.width  = camVideo.videoWidth  || 320
-      camCanvas.height = camVideo.videoHeight || 240
+    async function detectLoop() {
+      if (!camRunning || !handDetector) return
+      if (camVideo.readyState >= 2 && camVideo.videoWidth > 0) {
+        try {
+          // flipHorizontal: true because getUserMedia front-camera is mirrored
+          const hands = await handDetector.estimateHands(camVideo, { flipHorizontal: true })
+          onHandResults(hands)
+        } catch (e) { /* skip bad frame */ }
+      }
+      requestAnimationFrame(detectLoop)
+    }
 
+    function onHandResults(hands) {
+      const ctx = camCanvas.getContext('2d')
+      camCanvas.width  = camVideo.videoWidth  || 640
+      camCanvas.height = camVideo.videoHeight || 480
       ctx.clearRect(0, 0, camCanvas.width, camCanvas.height)
 
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        for (let i = 0; i < results.multiHandLandmarks.length; i++) {
-          const landmarks  = results.multiHandLandmarks[i]
-          const handedness = results.multiHandedness && results.multiHandedness[i]
-            ? results.multiHandedness[i].label
-            : 'Right'
+      if (hands && hands.length > 0) {
+        const allPoints     = []
+        const allHandedness = []
+        const W = camCanvas.width
+        const H = camCanvas.height
 
-          const color = handedness === 'Left' ? '#8B6FD4' : '#2EA880'
+        hands.forEach(function (hand, i) {
+          const handLabel = hand.handedness   // 'Left' or 'Right' (user perspective)
+          const color     = handLabel === 'Left' ? '#8B6FD4' : '#2EA880'
+          const kps       = hand.keypoints    // [{x,y,name,score}] in pixel coords
 
-          if (typeof drawConnectors !== 'undefined' && typeof HAND_CONNECTIONS !== 'undefined') {
-            drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: color + '99', lineWidth: 2 })
-            drawLandmarks(ctx, landmarks, { color: color, lineWidth: 1, radius: 3 })
-          } else {
-            // Fallback: draw dots manually
-            landmarks.forEach(function (lm) {
-              ctx.beginPath()
-              ctx.arc(lm.x * camCanvas.width, lm.y * camCanvas.height, 4, 0, Math.PI * 2)
-              ctx.fillStyle = color
-              ctx.fill()
-            })
-          }
+          // Draw skeleton connections
+          ctx.strokeStyle = color + '99'
+          ctx.lineWidth   = 2
+          HAND_CONNECTIONS.forEach(function (pair) {
+            const a = kps[pair[0]], b = kps[pair[1]]
+            if (!a || !b) return
+            ctx.beginPath()
+            ctx.moveTo(a.x, a.y)
+            ctx.lineTo(b.x, b.y)
+            ctx.stroke()
+          })
 
-          // ── Send landmarks via WebSocket (debounced) ─────────
-          const now = Date.now()
-          if (now - lastSendTime >= SEND_INTERVAL_MS) {
-            lastSendTime = now
-            const points = landmarks.map(function (lm, idx) {
-              return { id: idx, x: lm.x, y: lm.y, z: lm.z }
-            })
-            window.amandla.send({
-              type:       'landmarks',
-              landmarks:  points,
-              handedness: handedness,
-              timestamp:  now
-            })
-          }
+          // Draw keypoint dots
+          kps.forEach(function (kp) {
+            ctx.beginPath()
+            ctx.arc(kp.x, kp.y, 4, 0, Math.PI * 2)
+            ctx.fillStyle = color
+            ctx.fill()
+          })
+
+          // Accumulate — normalise to [0,1] for backend compatibility
+          kps.forEach(function (kp, idx) {
+            const kp3d = hand.keypoints3D && hand.keypoints3D[idx]
+            allPoints.push({ id: (i * 21) + idx, x: kp.x / W, y: kp.y / H, z: kp3d ? kp3d.z : 0 })
+          })
+          allHandedness.push(handLabel)
+        })
+
+        // Send ALL hands in ONE WebSocket message (debounced)
+        const now = Date.now()
+        if (now - lastSendTime >= SEND_INTERVAL_MS) {
+          lastSendTime = now
+          window.amandla.send({
+            type:       'landmarks',
+            landmarks:  allPoints,        // up to 42 points (21 per hand)
+            handedness: allHandedness,    // ['Right'], ['Left'], or ['Left','Right']
+            hand_count: hands.length,
+            timestamp:  now
+          })
         }
-        signPreview.textContent = '👁 detecting…'
+
+        const handCount = hands.length
+        console.log('[TF.js Hands] hands=' + handCount + ' labels=' + allHandedness.join(','))
+
+        if (handBadge) {
+          handBadge.textContent     = handCount === 2 ? '2 hands' : handCount + ' hand'
+          handBadge.style.background = handCount === 2 ? 'rgba(46,168,128,0.8)' : 'rgba(236,201,75,0.8)'
+        }
+        signPreview.textContent = handCount === 2 ? 'both hands' : 'detecting...'
       } else {
+        if (handBadge) { handBadge.textContent = '' }
         signPreview.textContent = ''
       }
     }
@@ -653,6 +832,14 @@
       u.rate = 0.95
       window.speechSynthesis.speak(u)
     }
+
+    // ── ASSIST MODE — send confirmed phrase via WebSocket ─────
+    window.addEventListener('amandla:assistPhrase', function (e) {
+      const phrase = e.detail && e.detail.phrase
+      if (!phrase) return
+      window.amandla.send({ type: 'text', text: phrase, sender: 'deaf', timestamp: Date.now() })
+      speakText(phrase)
+    })
 
     // ── STATUS POLLING ────────────────────────────────────────
     async function pollStatus() {

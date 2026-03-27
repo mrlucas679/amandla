@@ -1,0 +1,724 @@
+{
+  "signs": {
+    "HELLO": {
+      "animation_id": "sign_hello",
+      "category": "greetings",
+      "variants": ["HI", "GREET"]
+    },
+    "GOODBYE": {
+      "animation_id": "sign_goodbye",
+      "category": "greetings",
+      "variants": ["BYE"]
+    },
+    "THANK YOU": {
+      "animation_id": "sign_thank_you",
+      "category": "greetings",
+      "variants": ["THANKS", "THANK-YOU"]
+    },
+    "PLEASE": {
+      "animation_id": "sign_please",
+      "category": "greetings",
+      "variants": []
+    },
+    "SORRY": {
+      "animation_id": "sign_sorry",
+      "category": "greetings",
+      "variants": ["APOLOGIZE", "APOLOGY"]
+    },
+    "HOW ARE YOU": {
+      "animation_id": "sign_how_are_you",
+      "category": "greetings",
+      "variants": []
+    },
+    "I'M FINE": {
+      "animation_id": "sign_im_fine",
+      "category": "greetings",
+      "variants": ["IM FINE"]
+    },
+    "I": {
+      "animation_id": "sign_i",
+      "category": "pronouns",
+      "variants": ["ME"]
+    },
+    "YOU": {
+      "animation_id": "sign_you",
+      "category": "pronouns",
+      "variants": []
+    },
+    "HE": {
+      "animation_id": "sign_he",
+      "category": "pronouns",
+      "variants": ["SHE", "HIM", "HER"]
+    },
+    "WE": {
+      "animation_id": "sign_we",
+      "category": "pronouns",
+      "variants": ["US"]
+    },
+    "THEY": {
+      "animation_id": "sign_they",
+      "category": "pronouns",
+      "variants": ["THEM"]
+    },
+    "MY": {
+      "animation_id": "sign_my",
+      "category": "pronouns",
+      "variants": ["MINE"]
+    },
+    "YOUR": {
+      "animation_id": "sign_your",
+      "category": "pronouns",
+      "variants": ["YOURS"]
+    },
+    "WHAT": {
+      "animation_id": "sign_what",
+      "category": "questions",
+      "variants": []
+    },
+    "WHERE": {
+      "animation_id": "sign_where",
+      "category": "questions",
+      "variants": []
+    },
+    "WHEN": {
+      "animation_id": "sign_when",
+      "category": "questions",
+      "variants": []
+    },
+    "WHO": {
+      "animation_id": "sign_who",
+      "category": "questions",
+      "variants": []
+    },
+    "WHY": {
+      "animation_id": "sign_why",
+      "category": "questions",
+      "variants": []
+    },
+    "HOW": {
+      "animation_id": "sign_how",
+      "category": "questions",
+      "variants": []
+    },
+    "WHICH": {
+      "animation_id": "sign_which",
+      "category": "questions",
+      "variants": []
+    },
+    "NAME": {
+      "animation_id": "sign_name",
+      "category": "questions",
+      "variants": []
+    },
+    "GO": {
+      "animation_id": "sign_go",
+      "category": "verbs",
+      "variants": []
+    },
+    "COME": {
+      "animation_id": "sign_come",
+      "category": "verbs",
+      "variants": []
+    },
+    "EAT": {
+      "animation_id": "sign_eat",
+      "category": "verbs",
+      "variants": []
+    },
+    "FOOD": {
+      "animation_id": "sign_food",
+      "category": "verbs",
+      "variants": []
+    },
+    "DRINK": {
+      "animation_id": "sign_drink",
+      "category": "verbs",
+      "variants": []
+    },
+    "WANT": {
+      "animation_id": "sign_want",
+      "category": "verbs",
+      "variants": ["NEED"]
+    },
+    "LIKE": {
+      "animation_id": "sign_like",
+      "category": "verbs",
+      "variants": ["ENJOY"]
+    },
+    "KNOW": {
+      "animation_id": "sign_know",
+      "category": "verbs",
+      "variants": []
+    },
+    "UNDERSTAND": {
+      "animation_id": "sign_understand",
+      "category": "verbs",
+      "variants": []
+    },
+    "LOOK": {
+      "animation_id": "sign_look",
+      "category": "verbs",
+      "variants": ["SEE", "WATCH"]
+    },
+    "LISTEN": {
+      "animation_id": "sign_listen",
+      "category": "verbs",
+      "variants": ["HEAR"]
+    },
+    "HELP": {
+      "animation_id": "sign_help",
+      "category": "verbs",
+      "variants": ["ASSIST"]
+    },
+    "WORK": {
+      "animation_id": "sign_work",
+      "category": "verbs",
+      "variants": ["JOB"]
+    },
+    "LEARN": {
+      "animation_id": "sign_learn",
+      "category": "verbs",
+      "variants": ["STUDY"]
+    },
+    "TEACH": {
+      "animation_id": "sign_teach",
+      "category": "verbs",
+      "variants": []
+    },
+    "GIVE": {
+      "animation_id": "sign_give",
+      "category": "verbs",
+      "variants": []
+    },
+    "MAKE": {
+      "animation_id": "sign_make",
+      "category": "verbs",
+      "variants": ["CREATE"]
+    },
+    "TELL": {
+      "animation_id": "sign_tell",
+      "category": "verbs",
+      "variants": ["SAY", "SPEAK", "TALK"]
+    },
+    "THINK": {
+      "animation_id": "sign_think",
+      "category": "verbs",
+      "variants": []
+    },
+    "FEEL": {
+      "animation_id": "sign_feel",
+      "category": "verbs",
+      "variants": []
+    },
+    "LIVE": {
+      "animation_id": "sign_live",
+      "category": "verbs",
+      "variants": []
+    },
+    "SLEEP": {
+      "animation_id": "sign_sleep",
+      "category": "verbs",
+      "variants": []
+    },
+    "TIRED": {
+      "animation_id": "sign_tired",
+      "category": "verbs",
+      "variants": []
+    },
+    "BUY": {
+      "animation_id": "sign_buy",
+      "category": "verbs",
+      "variants": ["PURCHASE"]
+    },
+    "WAIT": {
+      "animation_id": "sign_wait",
+      "category": "verbs",
+      "variants": []
+    },
+    "SIT": {
+      "animation_id": "sign_sit",
+      "category": "verbs",
+      "variants": []
+    },
+    "STAND": {
+      "animation_id": "sign_stand",
+      "category": "verbs",
+      "variants": []
+    },
+    "WALK": {
+      "animation_id": "sign_walk",
+      "category": "verbs",
+      "variants": []
+    },
+    "RUN": {
+      "animation_id": "sign_run",
+      "category": "verbs",
+      "variants": []
+    },
+    "READ": {
+      "animation_id": "sign_read",
+      "category": "verbs",
+      "variants": []
+    },
+    "WRITE": {
+      "animation_id": "sign_write",
+      "category": "verbs",
+      "variants": []
+    },
+    "WASH": {
+      "animation_id": "sign_wash",
+      "category": "verbs",
+      "variants": []
+    },
+    "CRY": {
+      "animation_id": "sign_cry",
+      "category": "verbs",
+      "variants": []
+    },
+    "LAUGH": {
+      "animation_id": "sign_laugh",
+      "category": "verbs",
+      "variants": []
+    },
+    "HUG": {
+      "animation_id": "sign_hug",
+      "category": "verbs",
+      "variants": []
+    },
+    "SHARE": {
+      "animation_id": "sign_share",
+      "category": "verbs",
+      "variants": []
+    },
+    "STOP": {
+      "animation_id": "sign_stop",
+      "category": "verbs",
+      "variants": []
+    },
+    "REPEAT": {
+      "animation_id": "sign_repeat",
+      "category": "verbs",
+      "variants": ["AGAIN"]
+    },
+    "OPEN": {
+      "animation_id": "sign_open",
+      "category": "verbs",
+      "variants": []
+    },
+    "CLOSE": {
+      "animation_id": "sign_close",
+      "category": "verbs",
+      "variants": []
+    },
+    "SIGN": {
+      "animation_id": "sign_sign",
+      "category": "verbs",
+      "variants": []
+    },
+    "HAPPY": {
+      "animation_id": "sign_happy",
+      "category": "adjectives",
+      "variants": ["GLAD", "JOY"]
+    },
+    "SAD": {
+      "animation_id": "sign_sad",
+      "category": "adjectives",
+      "variants": ["UNHAPPY"]
+    },
+    "GOOD": {
+      "animation_id": "sign_good",
+      "category": "adjectives",
+      "variants": ["FINE", "WELL", "NICE"]
+    },
+    "BAD": {
+      "animation_id": "sign_bad",
+      "category": "adjectives",
+      "variants": []
+    },
+    "BIG": {
+      "animation_id": "sign_big",
+      "category": "adjectives",
+      "variants": ["LARGE"]
+    },
+    "SMALL": {
+      "animation_id": "sign_small",
+      "category": "adjectives",
+      "variants": ["LITTLE"]
+    },
+    "HOT": {
+      "animation_id": "sign_hot",
+      "category": "adjectives",
+      "variants": ["WARM"]
+    },
+    "COLD": {
+      "animation_id": "sign_cold",
+      "category": "adjectives",
+      "variants": ["COOL"]
+    },
+    "NEW": {
+      "animation_id": "sign_new",
+      "category": "adjectives",
+      "variants": []
+    },
+    "OLD": {
+      "animation_id": "sign_old",
+      "category": "adjectives",
+      "variants": []
+    },
+    "FAST": {
+      "animation_id": "sign_fast",
+      "category": "adjectives",
+      "variants": ["QUICK"]
+    },
+    "SLOW": {
+      "animation_id": "sign_slow",
+      "category": "adjectives",
+      "variants": []
+    },
+    "EXPENSIVE": {
+      "animation_id": "sign_expensive",
+      "category": "adjectives",
+      "variants": ["COSTLY"]
+    },
+    "FREE": {
+      "animation_id": "sign_free",
+      "category": "adjectives",
+      "variants": []
+    },
+    "SAFE": {
+      "animation_id": "sign_safe",
+      "category": "adjectives",
+      "variants": ["SAFETY"]
+    },
+    "DANGEROUS": {
+      "animation_id": "sign_dangerous",
+      "category": "adjectives",
+      "variants": ["DANGER"]
+    },
+    "CAREFUL": {
+      "animation_id": "sign_careful",
+      "category": "adjectives",
+      "variants": ["CAUTION"]
+    },
+    "EQUAL": {
+      "animation_id": "sign_equal",
+      "category": "adjectives",
+      "variants": ["EQUALITY", "SAME"]
+    },
+    "EXCITED": {
+      "animation_id": "sign_excited",
+      "category": "adjectives",
+      "variants": []
+    },
+    "WORRIED": {
+      "animation_id": "sign_worried",
+      "category": "adjectives",
+      "variants": ["ANXIOUS", "NERVOUS"]
+    },
+    "PROUD": {
+      "animation_id": "sign_proud",
+      "category": "adjectives",
+      "variants": []
+    },
+    "CONFUSED": {
+      "animation_id": "sign_confused",
+      "category": "adjectives",
+      "variants": []
+    },
+    "ANGRY": {
+      "animation_id": "sign_angry",
+      "category": "adjectives",
+      "variants": ["MAD"]
+    },
+    "SCARED": {
+      "animation_id": "sign_scared",
+      "category": "adjectives",
+      "variants": ["AFRAID", "FEAR"]
+    },
+    "HUNGRY": {
+      "animation_id": "sign_hungry",
+      "category": "adjectives",
+      "variants": []
+    },
+    "THIRSTY": {
+      "animation_id": "sign_thirsty",
+      "category": "adjectives",
+      "variants": []
+    },
+    "SICK": {
+      "animation_id": "sign_sick",
+      "category": "adjectives",
+      "variants": ["ILL"]
+    },
+    "QUIET": {
+      "animation_id": "sign_quiet",
+      "category": "adjectives",
+      "variants": ["SILENT"]
+    },
+    "LOVE": {
+      "animation_id": "sign_love",
+      "category": "emotions",
+      "variants": []
+    },
+    "I LOVE YOU": {
+      "animation_id": "sign_i_love_you",
+      "category": "emotions",
+      "variants": ["ILY"]
+    },
+    "PAIN": {
+      "animation_id": "sign_pain",
+      "category": "health",
+      "variants": []
+    },
+    "HURT": {
+      "animation_id": "sign_hurt",
+      "category": "health",
+      "variants": []
+    },
+    "EMERGENCY": {
+      "animation_id": "sign_emergency",
+      "category": "health",
+      "variants": []
+    },
+    "AMBULANCE": {
+      "animation_id": "sign_ambulance",
+      "category": "health",
+      "variants": []
+    },
+    "MEDICINE": {
+      "animation_id": "sign_medicine",
+      "category": "health",
+      "variants": ["MEDICATION", "DRUG", "PILL", "TABLET"]
+    },
+    "NOT": {
+      "animation_id": "sign_not",
+      "category": "grammar",
+      "variants": ["DONT", "DON'T"]
+    },
+    "FINISH": {
+      "animation_id": "sign_finish",
+      "category": "grammar",
+      "variants": ["DONE", "ALREADY", "COMPLETE"]
+    },
+    "WILL": {
+      "animation_id": "sign_will",
+      "category": "grammar",
+      "variants": ["FUTURE"]
+    },
+    "CAN": {
+      "animation_id": "sign_can",
+      "category": "grammar",
+      "variants": ["ABLE"]
+    },
+    "MUST": {
+      "animation_id": "sign_must",
+      "category": "grammar",
+      "variants": ["SHOULD"]
+    },
+    "VERY": {
+      "animation_id": "sign_very",
+      "category": "grammar",
+      "variants": ["MUCH"]
+    },
+    "ALSO": {
+      "animation_id": "sign_also",
+      "category": "grammar",
+      "variants": ["TOO"]
+    },
+    "TODAY": {
+      "animation_id": "sign_today",
+      "category": "time",
+      "variants": []
+    },
+    "TOMORROW": {
+      "animation_id": "sign_tomorrow",
+      "category": "time",
+      "variants": []
+    },
+    "YESTERDAY": {
+      "animation_id": "sign_yesterday",
+      "category": "time",
+      "variants": []
+    },
+    "NOW": {
+      "animation_id": "sign_now",
+      "category": "time",
+      "variants": []
+    },
+    "LATER": {
+      "animation_id": "sign_later",
+      "category": "time",
+      "variants": []
+    },
+    "MORNING": {
+      "animation_id": "sign_morning",
+      "category": "time",
+      "variants": []
+    },
+    "NIGHT": {
+      "animation_id": "sign_night",
+      "category": "time",
+      "variants": ["EVENING"]
+    },
+    "HOME": {
+      "animation_id": "sign_home",
+      "category": "places",
+      "variants": ["HOUSE"]
+    },
+    "SCHOOL": {
+      "animation_id": "sign_school",
+      "category": "places",
+      "variants": []
+    },
+    "HOSPITAL": {
+      "animation_id": "sign_hospital",
+      "category": "places",
+      "variants": []
+    },
+    "CHURCH": {
+      "animation_id": "sign_church",
+      "category": "places",
+      "variants": []
+    },
+    "SOUTH AFRICA": {
+      "animation_id": "sign_south_africa",
+      "category": "places",
+      "variants": ["SA", "SOUTH-AFRICA"]
+    },
+    "WATER": {
+      "animation_id": "sign_water",
+      "category": "nouns",
+      "variants": []
+    },
+    "MILK": {
+      "animation_id": "sign_milk",
+      "category": "nouns",
+      "variants": []
+    },
+    "BREAD": {
+      "animation_id": "sign_bread",
+      "category": "nouns",
+      "variants": []
+    },
+    "MONEY": {
+      "animation_id": "sign_money",
+      "category": "nouns",
+      "variants": []
+    },
+    "PHONE": {
+      "animation_id": "sign_phone",
+      "category": "nouns",
+      "variants": ["TELEPHONE", "CELL", "CELLPHONE", "MOBILE"]
+    },
+    "BOOK": {
+      "animation_id": "sign_book",
+      "category": "nouns",
+      "variants": []
+    },
+    "CAR": {
+      "animation_id": "sign_car",
+      "category": "nouns",
+      "variants": ["VEHICLE", "DRIVE"]
+    },
+    "BUS": {
+      "animation_id": "sign_bus",
+      "category": "nouns",
+      "variants": []
+    },
+    "TAXI": {
+      "animation_id": "sign_taxi",
+      "category": "nouns",
+      "variants": []
+    },
+    "LAW": {
+      "animation_id": "sign_law",
+      "category": "nouns",
+      "variants": []
+    },
+    "RIGHTS": {
+      "animation_id": "sign_rights",
+      "category": "nouns",
+      "variants": []
+    },
+    "SUN": {
+      "animation_id": "sign_sun",
+      "category": "nouns",
+      "variants": []
+    },
+    "RAIN": {
+      "animation_id": "sign_rain",
+      "category": "nouns",
+      "variants": []
+    },
+    "TREE": {
+      "animation_id": "sign_tree",
+      "category": "nouns",
+      "variants": []
+    },
+    "WIND": {
+      "animation_id": "sign_wind",
+      "category": "nouns",
+      "variants": []
+    },
+    "FIRE": {
+      "animation_id": "sign_fire",
+      "category": "nouns",
+      "variants": []
+    },
+    "MOM": {
+      "animation_id": "sign_mom",
+      "category": "family",
+      "variants": ["MOTHER", "MAMA"]
+    },
+    "DAD": {
+      "animation_id": "sign_dad",
+      "category": "family",
+      "variants": ["FATHER", "PAPA"]
+    },
+    "CHILD": {
+      "animation_id": "sign_child",
+      "category": "family",
+      "variants": ["KID"]
+    },
+    "BABY": {
+      "animation_id": "sign_baby",
+      "category": "family",
+      "variants": []
+    },
+    "FAMILY": {
+      "animation_id": "sign_family",
+      "category": "family",
+      "variants": []
+    },
+    "FRIEND": {
+      "animation_id": "sign_friend",
+      "category": "people",
+      "variants": []
+    },
+    "PERSON": {
+      "animation_id": "sign_person",
+      "category": "people",
+      "variants": ["PEOPLE", "HUMAN"]
+    },
+    "DOCTOR": {
+      "animation_id": "sign_doctor",
+      "category": "people",
+      "variants": []
+    },
+    "NURSE": {
+      "animation_id": "sign_nurse",
+      "category": "people",
+      "variants": []
+    },
+    "TEACHER": {
+      "animation_id": "sign_teacher",
+      "category": "people",
+      "variants": []
+    },
+    "POLICE": {
+      "animation_id": "sign_police",
+      "category": "people",
+      "variants": ["COP", "OFFICER"]
+    }
+  }
+}

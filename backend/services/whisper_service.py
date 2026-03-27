@@ -24,6 +24,7 @@ NVIDIA_API_KEY     = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL    = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 
 WHISPER_TIMEOUT_S  = 120.0  # CPU transcription of short clips can take 30–60 s on 'small' model
+WHISPER_LANGUAGE   = os.getenv("WHISPER_LANGUAGE", "en")   # Force language; empty string = auto-detect
 
 # Lazy-loaded — None until first use
 _model = None
@@ -103,7 +104,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
     Returns dict with 'text', 'language', 'confidence', 'duration_ms'.
     """
     start = time.time()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     try:
         # Load model in executor so it never blocks the event loop
@@ -135,7 +136,10 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
             # faster-whisper returns a lazy generator; iterating it outside the
             # executor would block the event loop.
             def _run_transcription():
-                segs_gen, inf = model.transcribe(tmp_path, beam_size=5)
+                kwargs = {"beam_size": 5}
+                if WHISPER_LANGUAGE:
+                    kwargs["language"] = WHISPER_LANGUAGE
+                segs_gen, inf = model.transcribe(tmp_path, **kwargs)
                 segs = list(segs_gen)   # force full computation here in the thread
                 return segs, inf
 

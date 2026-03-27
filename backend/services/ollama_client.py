@@ -6,11 +6,13 @@ classify_text_to_signs(text) -> list[str]
 """
 import os
 import re
-import sys
+import json
+import logging
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+logger = logging.getLogger(__name__)
 
 # ── rule-based fallback (mirrors _WORD_MAP / _PHRASE_MAP in main.py) ──────────
+# NOTE: main.py holds the canonical, more complete copy. Keep these in sync.
 
 _PHRASE_MAP = {
     "how are you":  ["HOW ARE YOU"],
@@ -165,11 +167,10 @@ def _rule_based_signs(text: str) -> list:
     return result
 
 
-def classify_text_to_signs(text: str) -> list:
+async def classify_text_to_signs(text: str) -> list:
     """Convert English text to an ordered list of SASL sign name strings.
 
-    Calls the local Ollama 'amandla' model for intelligent mapping.
-    Falls back to rule-based word mapping when Ollama is unavailable.
+    Fallback chain: Ollama (local AI) → Gemini (cloud AI) → rule-based word map.
 
     Args:
         text: Transcribed English sentence from hearing user.
@@ -180,75 +181,71 @@ def classify_text_to_signs(text: str) -> list:
     if not text:
         return []
 
-    # Try Ollama for intelligent text-to-signs mapping
-    ollama_result = _try_ollama(text)
+    # 1. Try local Ollama model
+    ollama_result = await _try_ollama(text)
     if ollama_result is not None:
         return ollama_result
 
-    # Rule-based fallback
+    # 2. Try Gemini (cloud)
+    try:
+        from backend.services.gemini_service import classify_text_to_signs as gemini_signs
+        gemini_result = await gemini_signs(text)
+        if gemini_result is not None:
+            return gemini_result
+    except Exception as e:
+        logger.debug(f"[OllamaClient] Gemini text-to-signs unavailable: {e}")
+
+    # 3. Rule-based fallback
     return _rule_based_signs(text)
 
 
-def _try_ollama(text: str):
+async def _try_ollama(text: str):
     """Call the local Ollama amandla model. Returns list or None on failure."""
-    import json
-    import asyncio
-
-    async def _call():
-        try:
-            import httpx
-            from dotenv import load_dotenv
-            load_dotenv()
-
-            base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            model = os.getenv("OLLAMA_MODEL", "amandla")
-
-            prompt = (
-                f'Convert this English sentence to SASL sign names.\n'
-                f'Sentence: "{text}"\n'
-                f'Reply ONLY with a JSON array of uppercase sign name strings.\n'
-                f'Valid signs: HELLO, GOODBYE, PLEASE, THANK YOU, SORRY, YES, NO, HELP, '
-                f'WAIT, STOP, REPEAT, UNDERSTAND, WATER, PAIN, HURT, DOCTOR, NURSE, '
-                f'HOSPITAL, SICK, MEDICINE, AMBULANCE, EMERGENCY, HAPPY, SAD, ANGRY, '
-                f'SCARED, LOVE, I LOVE YOU, TIRED, HUNGRY, THIRSTY, WORRIED, CONFUSED, '
-                f'WHO, WHAT, WHERE, WHEN, WHY, HOW, I, YOU, WE, THEY, COME, GO, LISTEN, '
-                f'LOOK, KNOW, WANT, GIVE, EAT, DRINK, SLEEP, SIT, STAND, WALK, RUN, WORK, '
-                f'WASH, WRITE, READ, SIGN, TELL, LAUGH, CRY, HUG, OPEN, CLOSE, GOOD, BAD, '
-                f'BIG, SMALL, HOT, COLD, QUIET, FAST, SLOW, HOME, SCHOOL, FAMILY, MOM, '
-                f'DAD, BABY, FRIEND, CHILD, MONEY, FREE, RIGHTS, LAW, EQUAL, CAR, TAXI, '
-                f'BUS, TODAY, NOW, MORNING, NIGHT.\n'
-                f'Example: ["HELLO", "HOW ARE YOU"]'
-            )
-
-            async with httpx.AsyncClient(timeout=6.0) as client:
-                r = await client.post(
-                    f"{base}/api/generate",
-                    json={"model": model, "prompt": prompt, "stream": False, "temperature": 0.1}
-                )
-                if r.status_code != 200:
-                    return None
-
-                raw = r.json().get("response", "").strip()
-
-                # Extract the JSON array from the response
-                start = raw.find("[")
-                end = raw.rfind("]") + 1
-                if start < 0 or end <= start:
-                    return None
-
-                signs = json.loads(raw[start:end])
-                if isinstance(signs, list) and all(isinstance(s, str) for s in signs):
-                    return [s.upper() for s in signs]
-
-        except Exception as e:
-            print(f"[OllamaClient] Ollama call failed: {e}")
-
-        return None
-
     try:
-        return asyncio.run(_call())
-    except RuntimeError:
-        # Already inside a running event loop — skip Ollama, use rule-based
-        return None
-    except Exception:
-        return None
+        import httpx
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        model = os.getenv("OLLAMA_MODEL", "amandla")
+
+        prompt = (
+            f'Convert this English sentence to SASL sign names.\n'
+            f'Sentence: "{text}"\n'
+            f'Reply ONLY with a JSON array of uppercase sign name strings.\n'
+            f'Valid signs: HELLO, GOODBYE, PLEASE, THANK YOU, SORRY, YES, NO, HELP, '
+            f'WAIT, STOP, REPEAT, UNDERSTAND, WATER, PAIN, HURT, DOCTOR, NURSE, '
+            f'HOSPITAL, SICK, MEDICINE, AMBULANCE, EMERGENCY, HAPPY, SAD, ANGRY, '
+            f'SCARED, LOVE, I LOVE YOU, TIRED, HUNGRY, THIRSTY, WORRIED, CONFUSED, '
+            f'WHO, WHAT, WHERE, WHEN, WHY, HOW, I, YOU, WE, THEY, COME, GO, LISTEN, '
+            f'LOOK, KNOW, WANT, GIVE, EAT, DRINK, SLEEP, SIT, STAND, WALK, RUN, WORK, '
+            f'WASH, WRITE, READ, SIGN, TELL, LAUGH, CRY, HUG, OPEN, CLOSE, GOOD, BAD, '
+            f'BIG, SMALL, HOT, COLD, QUIET, FAST, SLOW, HOME, SCHOOL, FAMILY, MOM, '
+            f'DAD, BABY, FRIEND, CHILD, MONEY, FREE, RIGHTS, LAW, EQUAL, CAR, TAXI, '
+            f'BUS, TODAY, NOW, MORNING, NIGHT.\n'
+            f'Example: ["HELLO", "HOW ARE YOU"]'
+        )
+
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            r = await client.post(
+                f"{base}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False, "temperature": 0.1}
+            )
+            if r.status_code != 200:
+                return None
+
+            raw = r.json().get("response", "").strip()
+
+            start = raw.find("[")
+            end = raw.rfind("]") + 1
+            if start < 0 or end <= start:
+                return None
+
+            signs = json.loads(raw[start:end])
+            if isinstance(signs, list) and all(isinstance(s, str) for s in signs):
+                return [s.upper() for s in signs]
+
+    except Exception as e:
+        logger.debug(f"[OllamaClient] Ollama text-to-signs unavailable: {e}")
+
+    return None

@@ -4,186 +4,381 @@
   <meta charset="utf-8" />
   <title>AMANDLA — Hearing</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="../../styles/design-system.css">
+  <link rel="stylesheet" href="../../styles/animations.css">
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
-      background: #0D0D0D;
-      color: #F5F0E8;
-      font-family: Arial, Helvetica, sans-serif;
       height: 100vh;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: var(--void);
     }
 
-    /* ── TOP BAR ── */
+    /* ── TOPBAR ───────────────────────────────────────────── */
     #topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 9px 14px;
-      background: #111;
-      border-bottom: 1px solid #222;
+      padding: 10px 18px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--barrier);
       flex-shrink: 0;
+      position: relative;
+      z-index: var(--z-base);
     }
-    #topbar .brand { font-size: 16px; font-weight: 700; letter-spacing: 1px; color: #2EA880; }
-    #topbar .right { display: flex; align-items: center; gap: 11px; }
-    #conn-status { font-size: 11px; color: #888; }
-    #conn-status.connected { color: #2EA880; }
-    #status-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #2EA880; flex-shrink: 0;
-      transition: background 0.3s; cursor: default;
+    #topbar::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent 0%, var(--teal) 50%, transparent 100%);
+      opacity: 0.35;
     }
-    #status-dot.offline { background: #FC8181; }
+
+    .brand {
+      font-family: var(--font-display);
+      font-size: 14px; font-weight: 700;
+      letter-spacing: 3px; text-transform: uppercase;
+      color: var(--teal);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .brand-icon {
+      width: 26px; height: 26px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--teal), #00B890);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,212,163,0.5);
+    }
+    .brand-sub {
+      font-size: 9px; font-weight: 500; letter-spacing: 1px;
+      color: var(--muted); display: block;
+      font-family: var(--font-display);
+    }
+
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+    #conn-badge {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: var(--r-pill);
+      background: var(--surface2);
+      border: 1px solid var(--barrier);
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+      color: var(--muted);
+      transition: all var(--t-med) var(--ease);
+    }
+    #conn-badge.connected {
+      color: var(--teal);
+      border-color: var(--teal-border);
+      background: var(--teal-bg);
+    }
+    #conn-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--muted); flex-shrink: 0;
+      transition: background var(--t-med);
+    }
+    #conn-badge.connected #conn-dot {
+      background: var(--teal);
+      box-shadow: 0 0 6px rgba(0,212,163,0.8);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    #ai-status {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--teal); flex-shrink: 0;
+      transition: background var(--t-med), box-shadow var(--t-med);
+      cursor: default;
+    }
+    #ai-status.offline {
+      background: var(--crimson);
+      box-shadow: 0 0 6px rgba(255,64,96,0.6);
+    }
+    #ai-status:not(.offline) { box-shadow: 0 0 6px rgba(0,212,163,0.6); }
+
     #rights-btn {
-      padding: 6px 12px; border-radius: 6px;
-      border: 1px solid #8B6FD4; background: transparent;
-      color: #8B6FD4; cursor: pointer; font-size: 12px; font-weight: 700;
-      transition: background 0.2s;
+      padding: 6px 14px; border-radius: var(--r-pill);
+      border: 1px solid var(--purple-border);
+      background: var(--purple-bg);
+      color: var(--purple); cursor: pointer;
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase;
+      transition: all var(--t-fast) var(--ease);
     }
-    #rights-btn:hover { background: #8B6FD420; }
+    #rights-btn:hover {
+      background: rgba(176,110,243,0.18);
+      border-color: var(--purple);
+      box-shadow: var(--shadow-purple);
+    }
 
-    /* ── TURN INDICATOR ── */
+    /* ── TURN INDICATOR ───────────────────────────────────── */
     #turn-indicator {
-      flex-shrink: 0;
-      text-align: center;
-      padding: 4px 14px;
-      font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
-      color: #555; background: #0a0a0a;
-      border-bottom: 1px solid #1a1a1a;
-      transition: color 0.3s;
+      flex-shrink: 0; text-align: center;
+      padding: 6px 18px;
+      font-family: var(--font-display);
+      font-size: 10px; font-weight: 700; letter-spacing: 2px;
+      color: var(--dim); text-transform: uppercase;
+      background: var(--surface);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: all var(--t-med) var(--ease);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
     }
-    #turn-indicator.hearing { color: #2EA880; }
-    #turn-indicator.deaf    { color: #8B6FD4; }
+    #turn-indicator.hearing {
+      color: var(--teal); background: var(--teal-bg);
+      border-bottom-color: rgba(0,212,163,0.2);
+    }
+    #turn-indicator.deaf {
+      color: var(--purple); background: var(--purple-bg);
+      border-bottom-color: rgba(176,110,243,0.2);
+    }
+    #turn-icon { font-size: 14px; }
 
-    /* ── MESSAGE LOG ── */
+    /* ── MESSAGE LOG ──────────────────────────────────────── */
     #message-log {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px 14px;
-      background: #0a0a0a;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      flex: 1; overflow-y: auto; padding: 16px 18px;
+      background: var(--void); min-height: 0;
+      display: flex; flex-direction: column; gap: 10px;
     }
-    #message-log::-webkit-scrollbar { width: 4px; }
-    #message-log::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
     .msg-item {
-      padding: 9px 13px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.45;
-      max-width: 88%;
-      word-break: break-word;
-      animation: msg-in 0.15s ease;
+      padding: 12px 15px; border-radius: var(--r-lg);
+      font-size: 14px; line-height: 1.55;
+      max-width: 82%; word-break: break-word;
+      animation: msg-in 0.25s var(--spring) both;
+      position: relative;
     }
-    @keyframes msg-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
     .msg-out {
-      background: #0B2518;
-      border: 1px solid #2EA88045;
-      color: #F5F0E8;
+      background: linear-gradient(135deg, rgba(0,212,163,0.11), rgba(0,212,163,0.05));
+      border: 1px solid rgba(0,212,163,0.22);
+      color: var(--cream);
       align-self: flex-end;
+      border-bottom-right-radius: var(--r-xs);
     }
     .msg-in-deaf {
-      background: #1a1230;
-      border: 1px solid #8B6FD445;
-      color: #C4B5FD;
+      background: linear-gradient(135deg, rgba(176,110,243,0.11), rgba(176,110,243,0.05));
+      border: 1px solid rgba(176,110,243,0.22);
+      color: #DDD6FE;
       align-self: flex-start;
+      border-bottom-left-radius: var(--r-xs);
     }
-    .msg-meta { font-size: 11px; color: #555; margin-top: 3px; }
+    .msg-meta {
+      font-family: var(--font-display);
+      font-size: 9px; font-weight: 600; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--dim); margin-top: 5px;
+    }
 
-    /* ── TRANSCRIPT ── */
+    /* ── TRANSCRIPT STRIP ─────────────────────────────────── */
     #transcript-strip {
-      padding: 7px 14px;
-      background: #0B1510;
-      border-top: 1px solid #1a2e22;
-      font-size: 13px; color: #888;
-      min-height: 32px; flex-shrink: 0;
+      padding: 8px 18px;
+      background: var(--surface);
+      border-top: 1px solid var(--barrier);
+      font-size: 12px; min-height: 34px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px;
     }
-    #transcript-strip span { color: #F5F0E8; }
+    .transcript-label {
+      font-family: var(--font-display);
+      font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--dim); flex-shrink: 0;
+    }
+    #transcript-text { color: var(--cream-dim); flex: 1; font-size: 12px; }
 
-    /* ── CONTROLS ── */
+    /* Waveform in transcript */
+    #transcript-waveform {
+      display: none; align-items: center; gap: 2px; height: 16px;
+    }
+    #transcript-waveform.active { display: flex; }
+    #transcript-waveform .bar {
+      width: 2px; background: var(--teal); border-radius: 1px; height: 4px;
+    }
+
+    #lang-badge { display: none; }
+
+    /* ── CONTROLS ─────────────────────────────────────────── */
     #controls {
-      display: flex; align-items: center; gap: 9px;
-      padding: 10px 14px;
-      background: #111; border-top: 1px solid #222;
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 18px;
+      background: var(--surface);
+      border-top: 1px solid var(--barrier);
       flex-shrink: 0;
     }
+
     #mic-btn {
       width: 50px; height: 50px; border-radius: 50%;
-      border: none; background: #2EA880;
-      color: #082018; font-size: 20px;
+      border: none;
+      background: linear-gradient(135deg, var(--teal), #00B890);
+      color: #021A12; font-size: 19px;
       cursor: pointer; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      transition: background 0.2s, transform 0.1s;
+      transition: transform var(--t-fast), box-shadow var(--t-fast);
+      box-shadow: 0 4px 16px rgba(0,212,163,0.40);
+      position: relative;
     }
-    #mic-btn:active { transform: scale(0.94); }
-    #mic-btn.recording { background: #FC8181; animation: pulse 1.2s infinite; }
-    #mic-btn:disabled  { background: #444; cursor: not-allowed; }
-    @keyframes pulse {
-      0%, 100% { box-shadow: 0 0 0 0 #FC818160; }
-      50%       { box-shadow: 0 0 0 10px #FC818100; }
+    #mic-btn:hover:not(:disabled) {
+      transform: scale(1.07);
+      box-shadow: 0 6px 22px rgba(0,212,163,0.6);
     }
-    #rec-timer { font-size: 12px; color: #FC8181; min-width: 36px; text-align: center; font-variant-numeric: tabular-nums; }
-    #text-input {
-      flex: 1; padding: 11px 13px;
-      border-radius: 9px; border: 1px solid #2EA880;
-      background: #0B0B0B; color: #fff; font-size: 14px;
+    #mic-btn:active { transform: scale(0.93); }
+    #mic-btn:disabled {
+      background: var(--surface3); color: var(--dim);
+      box-shadow: none; cursor: not-allowed;
     }
-    #text-input:focus { outline: none; border-color: #4ecba0; }
-    #send-btn {
-      padding: 11px 16px; border-radius: 9px; border: none;
-      background: #2EA880; color: #082018;
-      cursor: pointer; font-weight: 700; font-size: 13px; flex-shrink: 0;
-      transition: background 0.2s;
+    #mic-btn.recording {
+      background: linear-gradient(135deg, var(--crimson), #CC2040);
+      box-shadow: 0 4px 16px rgba(255,64,96,0.5);
     }
-    #send-btn:hover { background: #26966f; }
+    #mic-btn.recording::before {
+      content: ''; position: absolute; inset: -7px;
+      border-radius: 50%; border: 2px solid rgba(255,64,96,0.5);
+      animation: mic-ring-1 1.1s ease-out infinite;
+    }
+    #mic-btn.recording::after {
+      content: ''; position: absolute; inset: -14px;
+      border-radius: 50%; border: 1px solid rgba(255,64,96,0.25);
+      animation: mic-ring-2 1.1s ease-out 0.35s infinite;
+    }
 
-    /* ── EMERGENCY OVERLAY ── */
+    #rec-timer {
+      font-family: var(--font-display);
+      font-size: 11px; font-weight: 600; color: var(--crimson);
+      min-width: 36px; text-align: center; font-variant-numeric: tabular-nums;
+    }
+
+    #text-input {
+      flex: 1; padding: 13px 16px;
+      border-radius: var(--r-md);
+      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--surface2);
+      color: var(--cream); font-size: 14px;
+      font-family: var(--font-body);
+      transition: border-color var(--t-fast), box-shadow var(--t-fast);
+    }
+    #text-input::placeholder { color: var(--dim); }
+    #text-input:focus {
+      outline: none;
+      border-color: rgba(0,212,163,0.45);
+      box-shadow: 0 0 0 3px rgba(0,212,163,0.08);
+    }
+
+    #send-btn {
+      padding: 13px 22px; border-radius: var(--r-md); border: none;
+      background: linear-gradient(135deg, var(--teal), #00B890);
+      color: #021A12; cursor: pointer; flex-shrink: 0;
+      font-family: var(--font-display);
+      font-weight: 700; font-size: 12px; letter-spacing: 1px;
+      text-transform: uppercase;
+      box-shadow: 0 3px 12px rgba(0,212,163,0.35);
+      transition: transform var(--t-fast), box-shadow var(--t-fast);
+    }
+    #send-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 20px rgba(0,212,163,0.55); }
+    #send-btn:active { transform: translateY(0) scale(0.97); }
+
+    /* ── EMERGENCY OVERLAY ────────────────────────────────── */
     #emergency-overlay {
-      display: none;
-      position: fixed; inset: 0; z-index: 9999;
-      background: rgba(229,62,62,0.95);
+      display: none; position: fixed; inset: 0; z-index: var(--z-top);
+      background: rgba(255,40,70,0.96);
+      backdrop-filter: blur(12px);
       flex-direction: column; align-items: center;
-      justify-content: center; gap: 20px;
-      text-align: center; padding: 40px;
-      animation: emg-pulse 1s ease-in-out infinite;
+      justify-content: center; gap: 24px;
+      text-align: center; padding: 48px;
+      animation: emergency-pulse 0.8s ease-in-out infinite;
     }
     #emergency-overlay.active { display: flex; }
-    @keyframes emg-pulse {
-      0%, 100% { background: rgba(229,62,62,0.95); }
-      50%       { background: rgba(200,30,30,0.98); }
+    .emg-icon  { font-size: 84px; filter: drop-shadow(0 0 30px rgba(255,255,255,0.6)); }
+    .emg-title {
+      font-family: var(--font-display); font-size: 60px; font-weight: 700;
+      color: #fff; letter-spacing: -2px;
     }
-    .emg-icon  { font-size: 72px; }
-    .emg-title { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: -2px; }
-    .emg-sub   { font-size: 20px; color: rgba(255,255,255,0.85); }
+    .emg-sub   { font-size: 20px; color: rgba(255,255,255,0.85); max-width: 320px; line-height: 1.5; }
     .emg-dismiss {
-      background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4);
-      color: #fff; font-size: 15px; font-weight: 700;
-      padding: 14px 36px; border-radius: 12px; cursor: pointer; margin-top: 10px;
+      background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.5);
+      color: #fff; font-size: 14px; font-weight: 700;
+      padding: 14px 44px; border-radius: var(--r-pill); cursor: pointer;
+      font-family: var(--font-display); letter-spacing: 1px; text-transform: uppercase;
+      transition: background var(--t-fast);
     }
-    .emg-dismiss:hover { background: rgba(255,255,255,0.35); }
+    .emg-dismiss:hover { background: rgba(255,255,255,0.3); }
 
-    /* ── STARTUP OVERLAY ── */
+    /* ── STARTUP OVERLAY ──────────────────────────────────── */
     #startup-overlay {
-      position: fixed; inset: 0; z-index: 9998;
-      background: #0D0D0D;
+      position: fixed; inset: 0; z-index: var(--z-top);
+      background: var(--void);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      gap: 24px; padding: 32px;
+      gap: 0; padding: 48px; overflow: hidden;
     }
-    #startup-overlay h1 { font-size: 36px; color: #2EA880; letter-spacing: 2px; }
-    #startup-overlay p  { color: #aaa; text-align: center; max-width: 380px; line-height: 1.5; }
+
+    /* Ambient radial glows */
+    #startup-overlay::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 40% at 20% 80%, rgba(0,212,163,0.10) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 80% 15%, rgba(176,110,243,0.08) 0%, transparent 60%),
+        radial-gradient(circle   40% at 50% 50%, rgba(240,180,41,0.05) 0%, transparent 60%);
+    }
+
+    /* Subtle grid background */
+    #startup-overlay::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 80%);
+    }
+
+    .startup-logo {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      margin-bottom: 40px;
+      animation: slide-up 0.7s var(--spring) 0.1s both;
+    }
+    .startup-brand {
+      font-family: var(--font-display);
+      font-size: 72px; font-weight: 700; letter-spacing: 10px;
+      background: linear-gradient(135deg, var(--teal) 0%, var(--gold) 50%, var(--purple) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text; background-clip: text;
+      color: transparent;
+      animation: brand-shimmer 3s linear infinite;
+    }
+    .startup-tagline {
+      font-family: var(--font-display);
+      font-size: 11px; font-weight: 600; letter-spacing: 4px; text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .startup-role {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 22px; border-radius: var(--r-pill);
+      background: var(--teal-bg); border: 1px solid var(--teal-border);
+      font-family: var(--font-display); font-size: 11px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase; color: var(--teal);
+      margin-bottom: 36px;
+      animation: slide-up 0.7s var(--spring) 0.2s both;
+    }
+
     #start-btn {
-      padding: 14px 48px; border-radius: 12px; border: none;
-      background: #2EA880; color: #082018; font-size: 20px; font-weight: 700;
-      cursor: pointer; transition: background 0.2s;
+      position: relative; z-index: 1;
+      padding: 18px 60px; border-radius: var(--r-pill); border: none;
+      background: linear-gradient(135deg, var(--teal), #00B890);
+      color: #021A12; font-size: 16px; font-weight: 700;
+      cursor: pointer; font-family: var(--font-display);
+      letter-spacing: 2px; text-transform: uppercase;
+      box-shadow: 0 8px 32px rgba(0,212,163,0.55);
+      transition: transform var(--t-fast), box-shadow var(--t-fast);
+      animation: slide-up 0.7s var(--spring) 0.3s both;
     }
-    #start-btn:hover { background: #26966f; }
+    #start-btn:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 14px 44px rgba(0,212,163,0.75);
+    }
+    #start-btn:active { transform: scale(0.97); }
+
+    /* ── REDUCED MOTION ───────────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      .startup-brand { animation: none; background: var(--teal); -webkit-background-clip: text; background-clip: text; }
+    }
   </style>
 </head>
 <body>
@@ -198,58 +393,89 @@
 
   <!-- Startup overlay -->
   <div id="startup-overlay">
-    <h1>AMANDLA</h1>
-    <p>Sign language communication bridge.<br>Click to begin your session.</p>
-    <button id="start-btn">START SESSION</button>
+    <div class="startup-logo">
+      <div class="startup-brand">AMANDLA</div>
+      <div class="startup-tagline">Communication Bridge · South Africa</div>
+    </div>
+    <div class="startup-role">
+      <span>🎙</span><span>Hearing View</span>
+    </div>
+    <button id="start-btn">Begin Session</button>
   </div>
 
   <!-- Top bar -->
   <div id="topbar">
-    <div class="brand">AMANDLA — Hearing</div>
-    <div class="right">
-      <span id="conn-status">connecting…</span>
-      <div id="status-dot" title="AI status: checking…"></div>
-      <button id="rights-btn">RIGHTS</button>
+    <div class="brand">
+      <div class="brand-icon">🤟</div>
+      <div>
+        AMANDLA
+        <span class="brand-sub">Hearing View</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div id="conn-badge">
+        <div id="conn-dot"></div>
+        <span id="conn-status">connecting</span>
+      </div>
+      <div id="ai-status" title="AI status: checking…"></div>
+      <button id="rights-btn">Rights</button>
     </div>
   </div>
 
   <!-- Turn indicator -->
-  <div id="turn-indicator">Waiting…</div>
+  <div id="turn-indicator">
+    <span id="turn-icon"></span>
+    <span id="turn-text">Waiting</span>
+  </div>
 
   <!-- Message log -->
-  <div id="message-log"></div>
+  <div id="message-log" role="log" aria-live="polite" aria-label="Conversation"></div>
 
-  <!-- Last transcript + detected language badge -->
+  <!-- Transcript strip -->
   <div id="transcript-strip">
-    Last message: <span id="transcript-text">—</span>
-    <span id="lang-badge" style="margin-left:10px;font-size:11px;color:#8B6FD4;font-weight:700;"></span>
+    <span class="transcript-label">Last</span>
+    <div id="transcript-waveform" aria-hidden="true">
+      <div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div>
+    </div>
+    <span id="transcript-text">—</span>
+    <span id="lang-badge" class="badge badge-purple"></span>
   </div>
 
   <!-- Input controls -->
-  <div id="controls">
-    <button id="mic-btn" title="Click to record" disabled>🎙</button>
-    <span id="rec-timer"></span>
-    <input id="text-input" type="text" placeholder="Or type a message and press Enter…" autocomplete="off" />
-    <button id="send-btn">Send</button>
+  <div id="controls" role="toolbar">
+    <button id="mic-btn" title="Click to record" disabled aria-label="Record audio">🎙</button>
+    <span id="rec-timer" aria-live="polite" aria-atomic="true"></span>
+    <input id="text-input" type="text" placeholder="Type a message and press Enter…" autocomplete="off"
+           aria-label="Message input" />
+    <button id="send-btn" aria-label="Send message">Send</button>
   </div>
 
   <script>
     // ── DOM REFS ──────────────────────────────────────────────
-    const overlay      = document.getElementById('startup-overlay')
-    const startBtn     = document.getElementById('start-btn')
-    const connStatus   = document.getElementById('conn-status')
-    const statusDot    = document.getElementById('status-dot')
-    const rightsBtn    = document.getElementById('rights-btn')
-    const micBtn       = document.getElementById('mic-btn')
-    const recTimer     = document.getElementById('rec-timer')
-    const textInput    = document.getElementById('text-input')
-    const sendBtn      = document.getElementById('send-btn')
-    const transcriptEl = document.getElementById('transcript-text')
-    const turnEl       = document.getElementById('turn-indicator')
+    const overlay       = document.getElementById('startup-overlay')
+    const startBtn      = document.getElementById('start-btn')
+    const connBadge     = document.getElementById('conn-badge')
+    const connStatus    = document.getElementById('conn-status')
+    const aiStatus      = document.getElementById('ai-status')
+    const rightsBtn     = document.getElementById('rights-btn')
+    const micBtn        = document.getElementById('mic-btn')
+    const recTimer      = document.getElementById('rec-timer')
+    const textInput     = document.getElementById('text-input')
+    const sendBtn       = document.getElementById('send-btn')
+    const transcriptEl  = document.getElementById('transcript-text')
+    const transcriptWave= document.getElementById('transcript-waveform')
+    const turnEl        = document.getElementById('turn-indicator')
+    const turnIcon      = document.getElementById('turn-icon')
+    const turnText      = document.getElementById('turn-text')
+    const msgLog        = document.getElementById('message-log')
 
     // ── STARTUP ───────────────────────────────────────────────
     startBtn.addEventListener('click', function () {
-      overlay.style.display = 'none'
+      overlay.style.opacity = '0'
+      overlay.style.transition = 'opacity 0.5s ease'
+      setTimeout(function () { overlay.style.display = 'none' }, 500)
       try {
         const u = new SpeechSynthesisUtterance(' ')
         u.volume = 0
@@ -260,7 +486,6 @@
     })
 
     // ── MESSAGE LOG ───────────────────────────────────────────
-    const msgLog = document.getElementById('message-log')
     function addMessage(text, direction, meta) {
       const item = document.createElement('div')
       item.className = 'msg-item ' + (direction === 'out' ? 'msg-out' : 'msg-in-deaf')
@@ -273,7 +498,6 @@
       }
       msgLog.appendChild(item)
       msgLog.scrollTop = msgLog.scrollHeight
-      // Keep log from growing too long
       while (msgLog.children.length > 60) msgLog.removeChild(msgLog.firstChild)
     }
 
@@ -287,75 +511,83 @@
     let wsConnected = false
     window.amandla.onConnectionChange(function (connected) {
       wsConnected = connected
-      connStatus.textContent = connected ? 'connected' : 'disconnected'
-      connStatus.className   = connected ? 'connected' : ''
+      connStatus.textContent  = connected ? 'connected' : 'offline'
+      connBadge.className     = 'connected' in ({}) ? '' : ''
+      if (connected) connBadge.classList.add('connected')
+      else connBadge.classList.remove('connected')
     })
 
     // ── INCOMING MESSAGES ─────────────────────────────────────
     window.amandla.onMessage(function (msg) {
       if (!msg) return
 
-      // Deaf user tapped quick-sign OR MediaPipe recognised a sign
       if (msg.type === 'sign' && msg.sender === 'deaf') {
-        const signText = msg.text || ''
-        if (signText) {
-          transcriptEl.textContent = '🤟 ' + signText
-              + (msg.source === 'mediapipe' ? '  (camera)' : '')
-          addMessage('🤟 ' + signText, 'in', msg.source === 'mediapipe' ? 'via camera' : null)
-          speakText(signText)
-        }
+        setTranscript('🤟 Signer is communicating…', false)
+        return
+      }
+      if (msg.type === 'signs') return
+
+      if (msg.type === 'deaf_speech' && msg.text) {
+        addMessage('🤟 ' + msg.text, 'in', 'via signs')
+        setTranscript('🤟 ' + msg.text, false)
+        speakText(msg.text)
         return
       }
 
-      // Signs echoed back from our own speech — no avatar on this side
-      if (msg.type === 'signs') return
-
-      // Turn indicator
       if (msg.type === 'turn') {
         setTurnIndicator(msg.speaker)
         return
       }
 
-      if (msg.type === 'emergency') {
-        showEmergency()
-      }
+      if (msg.type === 'emergency') showEmergency()
     })
 
     // ── TURN INDICATOR ────────────────────────────────────────
     function setTurnIndicator(speaker) {
+      turnEl.className = ''
       if (speaker === 'hearing') {
-        turnEl.textContent = '🎙 You are speaking'
-        turnEl.className = 'hearing'
+        turnIcon.textContent = '🎙'
+        turnText.textContent = 'You are speaking'
+        turnEl.classList.add('hearing')
       } else if (speaker === 'deaf') {
-        turnEl.textContent = '🤟 Signer is signing'
-        turnEl.className = 'deaf'
+        turnIcon.textContent = '🤟'
+        turnText.textContent = 'Signer is signing'
+        turnEl.classList.add('deaf')
       } else {
-        turnEl.textContent = 'Waiting…'
-        turnEl.className = ''
+        turnIcon.textContent = ''
+        turnText.textContent = 'Waiting'
       }
       clearTimeout(window._turnTimer)
       window._turnTimer = setTimeout(function () {
-        turnEl.textContent = 'Waiting…'
         turnEl.className = ''
+        turnIcon.textContent = ''
+        turnText.textContent = 'Waiting'
       }, 4000)
+    }
+
+    // ── TRANSCRIPT ────────────────────────────────────────────
+    function setTranscript(text, showWave) {
+      transcriptEl.textContent = text
+      if (showWave) {
+        transcriptWave.classList.add('active')
+        setTimeout(function () { transcriptWave.classList.remove('active') }, 2000)
+      }
     }
 
     // ── SEND TEXT ─────────────────────────────────────────────
     function sendText(text, detectedLang) {
       if (!text) return
       if (!wsConnected) {
-        transcriptEl.textContent = '⚠ Not connected — is the backend running? (npm start)'
+        setTranscript('⚠ Not connected — is the backend running?', false)
         return
       }
-      transcriptEl.textContent = '🎙 ' + text
+      setTranscript('🎙 ' + text, false)
       if (detectedLang) setDetectedLanguage(detectedLang)
       addMessage(text, 'out')
       window.amandla.send({
-        type:      'text',
-        text:      text,
-        language:  detectedLang || null,
-        sender:    'hearing',
-        timestamp: Date.now()
+        type: 'text', text: text,
+        language: detectedLang || null,
+        sender: 'hearing', timestamp: Date.now()
       })
       setTurnIndicator('hearing')
     }
@@ -414,7 +646,7 @@
         }, 1000)
       } catch (err) {
         console.error('[Hearing] Mic error:', err)
-        transcriptEl.textContent = 'Microphone access denied'
+        setTranscript('Microphone access denied', false)
       }
     }
 
@@ -429,25 +661,23 @@
     }
 
     async function uploadAudio(blob, mimeType) {
-      transcriptEl.textContent = 'Transcribing…'
+      setTranscript('Transcribing…', true)
       try {
         const ext = mimeType.includes('ogg') ? '.ogg' : mimeType.includes('mp4') ? '.mp4' : '.webm'
         const fd = new FormData()
         fd.append('audio', blob, 'recording' + ext)
         fd.append('mime_type', mimeType)
-
         const resp = await fetch('http://localhost:8000/speech', { method: 'POST', body: fd })
         if (!resp.ok) throw new Error('Upload failed: ' + resp.status)
         const data = await resp.json()
-
         if (data.text) {
           sendText(data.text, data.language || null)
         } else {
-          transcriptEl.textContent = 'Could not transcribe — try typing'
+          setTranscript('Could not transcribe — try typing', false)
         }
       } catch (err) {
         console.error('[Hearing] Upload error:', err)
-        transcriptEl.textContent = 'Transcription failed — try typing instead'
+        setTranscript('Transcription failed — try typing instead', false)
       }
     }
 
@@ -467,26 +697,20 @@
     }
     window.hideEmergency = hideEmergency
 
-    // ── MULTI-LANGUAGE TTS (Gap 15) ───────────────────────────
-    // All 11 official South African languages.
-    // Whisper auto-detects the spoken language; TTS switches to match.
-    // Not all languages have TTS voice packs on every machine — Whisper
-    // transcribes them all; TTS falls back to any English voice if needed.
+    // ── MULTI-LANGUAGE TTS ────────────────────────────────────
     const SA_LANGUAGES = {
-      'en':  { tts: 'en-ZA',  label: 'English',    whisper: 'en'  },
-      'zu':  { tts: 'zu-ZA',  label: 'isiZulu',    whisper: 'zu'  },
-      'xh':  { tts: 'xh-ZA',  label: 'isiXhosa',   whisper: 'xh'  },
-      'af':  { tts: 'af-ZA',  label: 'Afrikaans',   whisper: 'af'  },
-      'st':  { tts: 'st-ZA',  label: 'Sesotho',    whisper: 'st'  },
-      'tn':  { tts: 'tn-ZA',  label: 'Setswana',   whisper: 'tn'  },
-      'nso': { tts: 'nso-ZA', label: 'Sepedi',     whisper: null  },
-      'ts':  { tts: 'ts-ZA',  label: 'Xitsonga',   whisper: null  },
-      've':  { tts: 've-ZA',  label: 'Tshivenda',  whisper: null  },
-      'nr':  { tts: 'nr-ZA',  label: 'isiNdebele', whisper: null  },
-      'ss':  { tts: 'ss-ZA',  label: 'siSwati',    whisper: null  },
+      'en':  { tts: 'en-ZA',  label: 'English'    },
+      'zu':  { tts: 'zu-ZA',  label: 'isiZulu'    },
+      'xh':  { tts: 'xh-ZA',  label: 'isiXhosa'   },
+      'af':  { tts: 'af-ZA',  label: 'Afrikaans'  },
+      'st':  { tts: 'st-ZA',  label: 'Sesotho'    },
+      'tn':  { tts: 'tn-ZA',  label: 'Setswana'   },
+      'nso': { tts: 'nso-ZA', label: 'Sepedi'     },
+      'ts':  { tts: 'ts-ZA',  label: 'Xitsonga'   },
+      've':  { tts: 've-ZA',  label: 'Tshivenda'  },
+      'nr':  { tts: 'nr-ZA',  label: 'isiNdebele' },
+      'ss':  { tts: 'ss-ZA',  label: 'siSwati'    },
     }
-
-    // Persists across calls — updated when Whisper returns a language code
     let currentTTSLang = 'en-ZA'
 
     function setDetectedLanguage(whisperLangCode) {
@@ -495,7 +719,10 @@
       if (entry) {
         currentTTSLang = entry.tts
         const badge = document.getElementById('lang-badge')
-        if (badge) badge.textContent = entry.label
+        if (badge) {
+          badge.textContent = entry.label
+          badge.style.display = 'inline-flex'
+        }
       }
     }
 
@@ -508,7 +735,6 @@
     }
 
     function speakText(text, lang) {
-      // lang arg overrides currentTTSLang only for this call
       const useLang = lang || currentTTSLang
       if (window.speechSynthesis.paused) window.speechSynthesis.resume()
       if (window.speechSynthesis.speaking) window.speechSynthesis.cancel()
@@ -524,11 +750,11 @@
       try {
         const r = await fetch('http://localhost:8000/api/status')
         const d = await r.json()
-        statusDot.className = d.qwen === 'alive' ? '' : 'offline'
-        statusDot.title     = d.qwen === 'alive' ? 'AI online' : 'AI offline — restart Ollama'
+        aiStatus.className = d.qwen === 'alive' ? '' : 'offline'
+        aiStatus.title     = d.qwen === 'alive' ? 'AI online' : 'AI offline — restart Ollama'
       } catch (e) {
-        statusDot.className = 'offline'
-        statusDot.title     = 'Backend offline'
+        aiStatus.className = 'offline'
+        aiStatus.title     = 'Backend offline'
       }
     }
     setInterval(pollStatus, 30000)

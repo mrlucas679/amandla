@@ -1,6 +1,13 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron')
 const path = require('path')
 
+// Required for MediaPipe WASM + WebGL to work reliably in Electron
+// Must be called before app 'ready'
+app.commandLine.appendSwitch('enable-features', 'WebAssemblySimd,WebAssemblyThreads')
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+
 let hearingWin = null
 let deafWin = null
 let rightsWin = null
@@ -49,7 +56,9 @@ function createWindows() {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,  // Allow CDN scripts (Three.js) — dev only
+      webSecurity: false,             // Allow CDN scripts — dev only
+      experimentalFeatures: true,     // Required for SharedArrayBuffer (MediaPipe WASM threads)
+      enableBlinkFeatures: 'SharedArrayBuffer',  // MediaPipe WASM multi-hand needs this
     }
   })
   deafWin.loadFile('src/windows/deaf/index.html')
@@ -61,8 +70,14 @@ function createWindows() {
   // Camera and microphone permissions — both windows
   const allowMedia = (webContents) => {
     webContents.session.setPermissionRequestHandler((wc, permission, callback) => {
-      if (permission === 'media') callback(true)
-      else callback(false)
+      // Allow camera, microphone and generic media requests
+      const allowed = ['media', 'camera', 'microphone', 'video-capture', 'audio-capture']
+      callback(allowed.includes(permission))
+    })
+    // Also allow getUserMedia checks (Electron 20+)
+    webContents.session.setPermissionCheckHandler((wc, permission) => {
+      const allowed = ['media', 'camera', 'microphone', 'video-capture', 'audio-capture']
+      return allowed.includes(permission)
     })
   }
   allowMedia(hearingWin.webContents)

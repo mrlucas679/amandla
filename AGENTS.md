@@ -1,7 +1,7 @@
 # AGENTS.md — AI Agent Guide for AMANDLA Desktop
 
 > Guidance for AI coding agents working on the AMANDLA communication bridge project
-> Last Updated: March 24, 2026
+> Last Updated: March 27, 2026
 
 ---
 
@@ -317,6 +317,11 @@ Returns: `{"signs": [...], "text": "..."}` or error
 
 ---
 
-**Last verified**: March 24, 2026  
+**Last verified**: March 27
+
+
+
+
+, 2026  
 **Next review**: When adding new message types or significantly modifying avatar structure
 

@@ -1,56 +1,50 @@
-# Dependencies
-node_modules/
-__pycache__/
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
-
-# Environment
+# Environment / secrets — NEVER commit
 .env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Electron
-dist/
-out/
+.env.*
+!.env.example
 
 # Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+.venv/
 venv/
 env/
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
+
+# Type-checking caches
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+
+# Node / Electron
+node_modules/
+npm-debug.log*
+
+# Electron build output
+out/
+release/
 
 # Logs
 logs/
 *.log
-npm-debug.log*
 
-# Temporary files
-temp/
+# OS artefacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor metadata
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Temp / test artefacts
 tmp/
+temp/
 *.tmp
-
-# Audio files (for testing)
-*.wav
-*.webm
-*.mp3
-*.ogg
-
-# Cache
-.cache/
-*.cache
-
