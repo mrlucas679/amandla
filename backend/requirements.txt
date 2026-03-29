@@ -12,3 +12,10 @@ python-multipart==0.0.6
 requests>=2.32.0
 imageio-ffmpeg>=0.5.0
 
+# HARPS sign recognition (also used by scripts/train_harps.py)
+torch>=2.0
+numpy>=1.23
+scipy>=1.10
+scikit-learn>=1.2
+matplotlib>=3.7
+

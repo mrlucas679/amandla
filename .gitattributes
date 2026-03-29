@@ -1,0 +1,2 @@
+src/windows/deaf/*.fbx filter=lfs diff=lfs merge=lfs -text
+backend/harps_model/*.pth filter=lfs diff=lfs merge=lfs -text

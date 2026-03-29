@@ -8,7 +8,9 @@
     "electron": "electron .",
     "backend": "python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000",
     "dev": "electron . --inspect",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "convert-fbx": "blender --background --python scripts/fbx_to_glb.py",
+    "retarget-sasl": "blender --background --python scripts/retarget_sasl_to_mixamo.py"
   },
   "devDependencies": {
     "concurrently": "^8.0.0",
