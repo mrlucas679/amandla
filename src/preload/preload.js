@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
+// ── Module-level WebSocket state ─────────────────────────────────────────────
 let ws = null
 let currentSessionId = null
 let currentRole = null
@@ -7,19 +8,26 @@ let messageCallback = null
 let connectionCallback = null
 let reconnectTimer = null
 
+// Reconnect backoff: starts at 1.5 s, doubles each attempt, caps at 15 s
+let _reconnectDelay = 1500
+const _RECONNECT_MAX_MS = 15000
+
 // ── Pending request system for promise-based WS calls ──────────────────────
-// Each request gets a unique ID. When the backend responds with the same
-// request_id, the corresponding promise is resolved.
+// Each request gets a unique numeric ID. When the backend responds with the
+// same request_id the corresponding promise is resolved.
 let _requestId = 0
 const _pending = new Map()
-const REQUEST_TIMEOUT_MS = 60000 // 60 seconds — Whisper CPU transcription can take up to 45s
+// 60 s timeout — Whisper CPU transcription can take up to 45 s on slower machines
+const REQUEST_TIMEOUT_MS = 60000
+// Maximum outgoing message size (1 MB) — protects against accidental giant payloads
+const _MAX_SEND_BYTES = 1_000_000
 
 /**
  * Send a payload via WebSocket and return a Promise that resolves when the
  * backend responds with a matching request_id.
  *
- * @param {Object} payload - The message object to send.
- * @returns {Promise<Object>} - Resolves with the response data, rejects on timeout or error.
+ * @param {Object} payload - The message object to send (must not have request_id set yet).
+ * @returns {Promise<Object>} Resolves with the response data, rejects on timeout or error.
  */
 function _sendRequest(payload) {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -30,6 +38,7 @@ function _sendRequest(payload) {
   payload.request_id = id
 
   return new Promise((resolve, reject) => {
+    // Auto-reject if the backend does not respond within the timeout window
     const timer = setTimeout(() => {
       _pending.delete(id)
       reject(new Error('Request timed out'))
@@ -40,33 +49,61 @@ function _sendRequest(payload) {
   })
 }
 
+/**
+ * Open (or reopen) a WebSocket connection to the backend for the given session
+ * and role. Called automatically by the IPC handlers below, and can also be
+ * called directly from page scripts.
+ *
+ * Includes a duplicate-connection guard: if a socket is already CONNECTING or
+ * OPEN for the same session + role, the call is a no-op.
+ *
+ * @param {string} sessionId - The shared session identifier (from main process).
+ * @param {string} role      - Either "hearing" or "deaf".
+ */
 function connect(sessionId, role) {
   currentSessionId = sessionId
   currentRole = role
 
+  // Guard: don't open a second socket if one is already live for this session + role
+  const sessionKey = sessionId + '/' + role
+  if (
+    ws &&
+    (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) &&
+    ws._amandlaSession === sessionKey
+  ) {
+    console.log('[Preload] Already connected — skipping duplicate connect()')
+    return
+  }
+
+  // Clean up any existing (stale) socket before creating a new one
   if (ws) {
+    ws.onclose = null // prevent the onclose handler from triggering a reconnect loop
     ws.close()
-let reconnectTimer = null
-let _reconnectDelay = 1500 // starts at 1.5s, doubles each attempt, caps at 15s
-const _RECONNECT_MAX_MS = 15000
+  }
 
-// ...existing code...
+  const url = `ws://localhost:8000/ws/${sessionId}/${role}`
+  console.log(`[Preload] Connecting to ${url}`)
+  ws = new WebSocket(url)
+  // Tag the socket so we can detect duplicates above
+  ws._amandlaSession = sessionKey
 
+  // ── Event: connection established ────────────────────────────────────────
   ws.onopen = () => {
     console.log(`[Preload] WebSocket connected: session=${sessionId} role=${role}`)
-    if (connectionCallback) connectionCallback(true)
-    _reconnectDelay = 1500 // reset backoff on successful connect
+    _reconnectDelay = 1500 // reset exponential backoff on successful connect
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
     }
+    if (connectionCallback) connectionCallback(true)
   }
 
+  // ── Event: message received ──────────────────────────────────────────────
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
 
-      // Check if this is a response to a pending request
+      // If this is a response to a pending promise-based request, resolve it
       if (data.request_id && _pending.has(data.request_id)) {
         const req = _pending.get(data.request_id)
         clearTimeout(req.timer)
@@ -76,35 +113,38 @@ const _RECONNECT_MAX_MS = 15000
         } else {
           req.resolve(data)
         }
-        return // Don't pass to messageCallback — it's a request/response, not a broadcast
+        // Do NOT pass request/response messages to the broadcast handler
+        return
       }
 
-      // Normal broadcast message — pass to the registered handler
+      // Normal broadcast message — forward to the registered page handler
       if (messageCallback) messageCallback(data)
     } catch (e) {
       console.error('[Preload] Message parse error:', e)
     }
   }
 
+  // ── Event: connection closed ─────────────────────────────────────────────
   ws.onclose = () => {
-    console.log('[Preload] WebSocket closed — reconnecting in 1.5s...')
+    console.log(`[Preload] WebSocket closed — reconnecting in ${_reconnectDelay}ms…`)
     if (connectionCallback) connectionCallback(false)
-    // Reject all pending requests on disconnect
+    // Reject all in-flight requests so callers don't hang forever
     for (const [id, req] of _pending) {
       clearTimeout(req.timer)
       req.reject(new Error('WebSocket disconnected'))
     }
     _pending.clear()
-    // Auto-reconnect with exponential backoff
+    // Schedule an automatic reconnect with exponential backoff
     reconnectTimer = setTimeout(() => {
       if (currentSessionId && currentRole) {
         connect(currentSessionId, currentRole)
       }
     }, _reconnectDelay)
-    // Double the delay for next attempt, cap at max
+    // Double the delay for the next attempt, capped at the maximum
     _reconnectDelay = Math.min(_reconnectDelay * 2, _RECONNECT_MAX_MS)
   }
 
+  // ── Event: socket-level error ────────────────────────────────────────────
   ws.onerror = (err) => {
     console.error('[Preload] WebSocket error:', err)
   }
@@ -114,10 +154,22 @@ contextBridge.exposeInMainWorld('amandla', {
   // Connect to WebSocket with session ID and role
   connect: (sessionId, role) => connect(sessionId, role),
 
-  // Send a message to the other window (fire-and-forget)
+  /**
+   * Send a fire-and-forget JSON message to the backend via WebSocket.
+   *
+   * @param {Object} message - Payload to send. Must be JSON-serialisable.
+   * @returns {boolean} true if sent, false if not connected or message too large.
+   */
   send: (message) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message))
+      const payload = JSON.stringify(message)
+      // Reject payloads that are unreasonably large (protects bandwidth + backend)
+      if (payload.length > _MAX_SEND_BYTES) {
+        console.warn(`[Preload] Message too large (${payload.length} bytes) — rejected`)
+        return false
+      }
+      ws.send(payload)
+      return true
     } else {
       console.warn('[Preload] Cannot send — WebSocket not open')
     }
@@ -129,12 +181,15 @@ contextBridge.exposeInMainWorld('amandla', {
   // Register a callback for connection state changes (true=connected, false=disconnected)
   onConnectionChange: (callback) => { connectionCallback = callback },
 
-  // Disconnect cleanly
+  // Disconnect cleanly — stops reconnect loop
   disconnect: () => {
     if (reconnectTimer) clearTimeout(reconnectTimer)
     currentSessionId = null
     currentRole = null
-    if (ws) ws.close()
+    if (ws) {
+      ws.onclose = null // prevent onclose from scheduling a reconnect
+      ws.close()
+    }
   },
 
   // Ask main process to open RIGHTS window
@@ -204,13 +259,23 @@ contextBridge.exposeInMainWorld('amandla', {
   }),
 })
 
-// Receive session ID and role pushed from main process
-ipcRenderer.on('session-id', (event, id) => {
+// ── IPC: receive session ID and role from the main process ──────────────────
+// These arrive once per window load (sent from main.js did-finish-load).
+// We auto-connect as soon as BOTH values are known, regardless of which
+// arrives first — this fixes the race condition where role arrives before
+// session-id (or vice-versa).
+
+ipcRenderer.on('session-id', (_event, id) => {
   currentSessionId = id
+  // If role was already received, we have everything we need — connect now
+  if (currentSessionId && currentRole) {
+    connect(currentSessionId, currentRole)
+  }
 })
-ipcRenderer.on('role', (event, role) => {
+
+ipcRenderer.on('role', (_event, role) => {
   currentRole = role
-  // Auto-connect once we have both values
+  // If session-id was already received, we have everything we need — connect now
   if (currentSessionId && currentRole) {
     connect(currentSessionId, currentRole)
   }

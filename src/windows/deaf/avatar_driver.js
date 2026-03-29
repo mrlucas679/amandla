@@ -9,6 +9,22 @@
  *   bone rotations    →  Three.js render loop      →  screen
  *
  * Must load after signs_library.js and three.js, before avatar.js.
+ *
+ * ── CURRENT STATUS ─────────────────────────────────────────────────────────
+ * NOTE: This driver is loaded and ready but the current avatar uses a
+ * PROCEDURAL SKELETON built in avatar.js (geometric shapes — no external file
+ * needed). It works out-of-the-box with no extra assets.
+ *
+ * WHEN A GLTF/GLB MODEL IS ADDED:
+ *   1. Load the model with THREE.GLTFLoader (already in the CSP allow-list).
+ *   2. Call AvatarDriver.bindBonesFromGLTF(gltfModel, avatarBones) to map
+ *      Mixamo rig bones → the avatarBones object used by avatar.js.
+ *   3. Replace applyPoseDirect() calls in avatar.js with
+ *      AvatarDriver.applyPoseToGLTF(pose, avatarBones) for proper Mixamo
+ *      axis remapping.
+ *
+ * The human_signing.glb model is available at assets/models/ for this upgrade.
+ * ────────────────────────────────────────────────────────────────────────────
  */
 
 (function () {

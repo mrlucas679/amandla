@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <title>AMANDLA — Hearing</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="../../styles/design-system.css">
+  <link rel="stylesheet" href="../../styles/animations.css">
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -463,14 +465,24 @@
     async function uploadAudio(blob, mimeType) {
       // Upload speech audio via WebSocket preload bridge (no direct HTTP fetch)
       transcriptEl.textContent = 'Transcribing…'
+
+      // On slow machines Whisper takes 15–45 s to load on first use.
+      // After 3 s without a result, show a friendlier message so the user
+      // knows the app hasn't frozen.
+      let whisperLoadTimer = setTimeout(function () {
+        transcriptEl.textContent = 'Loading speech model (first time only — please wait)…'
+      }, 3000)
+
       try {
         const data = await window.amandla.uploadSpeech(blob, mimeType)
+        clearTimeout(whisperLoadTimer) // result arrived — cancel the slow-load message
         if (data.text) {
           sendText(data.text, data.language || null)
         } else {
           transcriptEl.textContent = 'Could not transcribe — try typing'
         }
       } catch (err) {
+        clearTimeout(whisperLoadTimer)
         console.error('[Hearing] Upload error:', err)
         transcriptEl.textContent = 'Transcription failed — try typing instead'
       }

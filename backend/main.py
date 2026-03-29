@@ -36,7 +36,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # ── Logging: console + rotating file ────────────────────────────────────────
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
@@ -202,6 +202,11 @@ async def upload_speech(
     """
     Receives audio upload, transcribes with Whisper, converts to sign names.
     Returns: { text, signs, language, confidence }
+
+    DEPRECATED: The Electron frontend uses the WebSocket message type
+    ``speech_upload`` via the preload bridge instead of this endpoint.
+    This route is kept for backward compatibility and direct API testing
+    (e.g. scripts/post_speech_test.py). Do not call it from renderer code.
     """
     content = await audio.read()
     if len(content) > _MAX_AUDIO_BYTES:
@@ -248,7 +253,12 @@ class LetterRequest(BaseModel):
 
 @app.post("/rights/analyze")
 async def rights_analyze(req: AnalyseRequest):
-    """Analyse an incident and return relevant rights / laws."""
+    """Analyse an incident and return relevant rights / laws.
+
+    DEPRECATED: The Electron frontend uses the WebSocket message type
+    ``rights_analyze`` via the preload bridge instead of this endpoint.
+    Kept for backward compatibility and direct API testing only.
+    """
     from backend.services.claude_service import analyse_incident
     result = await analyse_incident(req.description, req.incident_type)
     return result
@@ -256,7 +266,12 @@ async def rights_analyze(req: AnalyseRequest):
 
 @app.post("/rights/letter")
 async def rights_letter(req: LetterRequest):
-    """Generate a formal complaint letter."""
+    """Generate a formal complaint letter.
+
+    DEPRECATED: The Electron frontend uses the WebSocket message type
+    ``rights_letter`` via the preload bridge instead of this endpoint.
+    Kept for backward compatibility and direct API testing only.
+    """
     from backend.services.claude_service import generate_rights_letter
     result = await generate_rights_letter(
         incident_description=req.description,
@@ -276,81 +291,100 @@ async def rights_letter(req: LetterRequest):
 _sign_buffers: Dict[str, list] = {}   # sessionId → [sign_names]
 _sign_tasks:   Dict[str, Any]  = {}   # sessionId → asyncio.Task
 
+# Module-level lookup tables for _simple_signs_to_english.
+# Defined here (not inside the function) so they are created once at import
+# time instead of on every function call.
+
+# Single-sign → complete natural English sentence
+_SINGLE_SIGN_SENTENCES: Dict[str, str] = {
+    "HELP":       "I need help.",
+    "WATER":      "I need water.",
+    "DOCTOR":     "I need a doctor.",
+    "NURSE":      "I need a nurse.",
+    "HOSPITAL":   "I need to go to the hospital.",
+    "SICK":       "I am not feeling well.",
+    "PAIN":       "I am in pain.",
+    "HURT":       "I am hurt.",
+    "MEDICINE":   "I need medicine.",
+    "AMBULANCE":  "Please call an ambulance.",
+    "EMERGENCY":  "This is an emergency.",
+    "HAPPY":      "I am happy.",
+    "SAD":        "I am sad.",
+    "ANGRY":      "I am angry.",
+    "SCARED":     "I am scared.",
+    "TIRED":      "I am tired.",
+    "HUNGRY":     "I am hungry.",
+    "THIRSTY":    "I am thirsty.",
+    "WORRIED":    "I am worried.",
+    "CONFUSED":   "I am confused.",
+    "STOP":       "Please stop.",
+    "WAIT":       "Please wait.",
+    "REPEAT":     "Please repeat that.",
+    "UNDERSTAND": "I understand.",
+    "YES":        "Yes.",
+    "NO":         "No.",
+    "PLEASE":     "Please.",
+    "THANK YOU":  "Thank you.",
+    "SORRY":      "I am sorry.",
+    "HELLO":      "Hello.",
+    "GOODBYE":    "Goodbye.",
+    "HOME":       "I want to go home.",
+    "GO":         "I need to go.",
+    "COME":       "Please come here.",
+    "RIGHTS":     "I know my rights.",
+    "LAW":        "This is against the law.",
+    "EQUAL":      "I deserve equal treatment.",
+    "GOOD":       "I am doing well.",
+    "BAD":        "Things are not good.",
+}
+
+# Sign name → natural English word (for multi-sign reconstruction)
+_SIGN_WORD_MAP: Dict[str, str] = {
+    "I": "I", "YOU": "you", "WE": "we", "THEY": "they",
+    "WANT": "need", "HELP": "help", "WATER": "water",
+    "DOCTOR": "a doctor", "NURSE": "a nurse", "HOSPITAL": "the hospital",
+    "SICK": "sick", "PAIN": "in pain", "HURT": "hurt",
+    "MEDICINE": "medicine", "AMBULANCE": "an ambulance",
+    "EMERGENCY": "an emergency", "HAPPY": "happy", "SAD": "sad",
+    "ANGRY": "angry", "SCARED": "scared", "TIRED": "tired",
+    "HUNGRY": "hungry", "THIRSTY": "thirsty", "WORRIED": "worried",
+    "CONFUSED": "confused", "GOOD": "good", "BAD": "bad",
+    "YES": "yes", "NO": "no", "PLEASE": "please",
+    "THANK YOU": "thank you", "SORRY": "sorry",
+    "STOP": "stop", "WAIT": "wait", "COME": "come", "GO": "go",
+    "HOME": "home", "SCHOOL": "school", "WORK": "work",
+}
+
 
 def _simple_signs_to_english(signs: list) -> str:
     """Rule-based SASL sign sequence → natural English sentence (no network).
 
     For single known signs, returns a complete proper sentence.
     For sequences, builds the best English it can from a word map.
+
+    Args:
+        signs: List of SASL sign name strings (e.g. ["WATER", "WANT", "I"]).
+
+    Returns:
+        Natural English sentence string. Never returns None.
     """
-    # Single-sign → complete natural English sentence
-    _sentence_map = {
-        "HELP":      "I need help.",
-        "WATER":     "I need water.",
-        "DOCTOR":    "I need a doctor.",
-        "NURSE":     "I need a nurse.",
-        "HOSPITAL":  "I need to go to the hospital.",
-        "SICK":      "I am not feeling well.",
-        "PAIN":      "I am in pain.",
-        "HURT":      "I am hurt.",
-        "MEDICINE":  "I need medicine.",
-        "AMBULANCE": "Please call an ambulance.",
-        "EMERGENCY": "This is an emergency.",
-        "HAPPY":     "I am happy.",
-        "SAD":       "I am sad.",
-        "ANGRY":     "I am angry.",
-        "SCARED":    "I am scared.",
-        "TIRED":     "I am tired.",
-        "HUNGRY":    "I am hungry.",
-        "THIRSTY":   "I am thirsty.",
-        "WORRIED":   "I am worried.",
-        "CONFUSED":  "I am confused.",
-        "STOP":      "Please stop.",
-        "WAIT":      "Please wait.",
-        "REPEAT":    "Please repeat that.",
-        "UNDERSTAND":"I understand.",
-        "YES":       "Yes.",
-        "NO":        "No.",
-        "PLEASE":    "Please.",
-        "THANK YOU": "Thank you.",
-        "SORRY":     "I am sorry.",
-        "HELLO":     "Hello.",
-        "GOODBYE":   "Goodbye.",
-        "HOME":      "I want to go home.",
-        "GO":        "I need to go.",
-        "COME":      "Please come here.",
-        "RIGHTS":    "I know my rights.",
-        "LAW":       "This is against the law.",
-        "EQUAL":     "I deserve equal treatment.",
-        "GOOD":      "I am doing well.",
-        "BAD":       "Things are not good.",
-    }
+    if not signs:
+        return ""
 
-    # Single sign — use the full-sentence map
+    # Single sign — try the full-sentence lookup table first
     if len(signs) == 1:
-        key = signs[0].upper()
-        if key in _sentence_map:
-            return _sentence_map[key]
+        single_sentence: str = _SINGLE_SIGN_SENTENCES.get(signs[0].upper()) or ""
+        if single_sentence:
+            return single_sentence
 
-    # Multi-sign — word-level map + basic SVO reconstruction
-    _word_map = {
-        "I": "I", "YOU": "you", "WE": "we", "THEY": "they",
-        "WANT": "need", "HELP": "help", "WATER": "water",
-        "DOCTOR": "a doctor", "NURSE": "a nurse", "HOSPITAL": "the hospital",
-        "SICK": "sick", "PAIN": "in pain", "HURT": "hurt",
-        "MEDICINE": "medicine", "AMBULANCE": "an ambulance",
-        "EMERGENCY": "an emergency", "HAPPY": "happy", "SAD": "sad",
-        "ANGRY": "angry", "SCARED": "scared", "TIRED": "tired",
-        "HUNGRY": "hungry", "THIRSTY": "thirsty", "WORRIED": "worried",
-        "CONFUSED": "confused", "GOOD": "good", "BAD": "bad",
-        "YES": "yes", "NO": "no", "PLEASE": "please",
-        "THANK YOU": "thank you", "SORRY": "sorry",
-        "STOP": "stop", "WAIT": "wait", "COME": "come", "GO": "go",
-        "HOME": "home", "SCHOOL": "school", "WORK": "work",
-    }
-    words = [_word_map.get(s.upper(), s.lower()) for s in signs]
-    sentence = " ".join(words)
-    return sentence[0].upper() + sentence[1:] + ("." if not sentence.endswith(".") else "") if sentence else ""
+    # Multi-sign — word-level map + basic reconstruction
+    words: List[str] = [str(_SIGN_WORD_MAP.get(str(s).upper(), str(s).lower())) for s in signs]
+    sentence: str = " ".join(words)
+    if not sentence:
+        return ""
+    # Capitalise the first letter and ensure the sentence ends with a full stop
+    capitalised = sentence[0].upper() + sentence[1:]
+    return capitalised if capitalised.endswith(".") else capitalised + "."
 
 
 async def _ollama_signs_to_english(signs: list) -> Optional[str]:
@@ -762,6 +796,6 @@ async def _broadcast_all(session: dict, msg: dict):
 
 
 # ── SENTENCE → SIGNS ──────────────────────────────────────
-
-# Import canonical maps from shared module (single source of truth)
-from backend.services.sign_maps import sentence_to_sign_names
+# sentence_to_sign_names() lives in backend/services/sign_maps.py and is
+# imported directly by backend/services/ollama_client.py.
+# _text_to_sasl_signs() above is the main entry-point used by this module.

@@ -127,6 +127,35 @@ async def run_tests():
             f"type={resp.get('type')}",
         )
 
+        # 8. sasl_text message — deaf typed a reply (no hearing connected)
+        # Expect a turn broadcast back to the same window since it's the only user.
+        await ws.send(json.dumps({
+            "type": "sasl_text",
+            "text": "HELP DOCTOR",
+            "sender": "deaf",  # Note: we're sending as hearing WS but simulating deaf content
+            "timestamp": 0,
+        }))
+        # We expect a turn indicator back (broadcast_all includes sender)
+        raw = await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_SECONDS)
+        resp = json.loads(raw)
+        result(
+            "sasl_text handler (no error)",
+            resp.get("type") in ("turn", "sasl_text", "deaf_speech"),
+            f"type={resp.get('type')}",
+        )
+
+        # 9. Duplicate connect guard — send connect message with different session,
+        # verify the old session still responds correctly (backend is stateless per session).
+        # Open a SECOND connection to verify the backend handles it gracefully.
+        async with websockets.connect("ws://localhost:8000/ws/test-dup-guard/hearing") as ws2:
+            raw2 = await asyncio.wait_for(ws2.recv(), timeout=TIMEOUT_SECONDS)
+            resp2 = json.loads(raw2)
+            result(
+                "Second session connects independently",
+                resp2.get("type") == "status" and resp2.get("session_id") == "test-dup-guard",
+                f"session_id={resp2.get('session_id')}",
+            )
+
     # Summary
     total = PASS_COUNT + FAIL_COUNT
     print(f"\n{'='*42}")
