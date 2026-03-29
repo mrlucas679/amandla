@@ -14,7 +14,6 @@ Endpoints:
 """
 
 import logging
-from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -102,7 +101,8 @@ async def health_check() -> dict:
     transformer = get_transformer()
     return {
         "status": "healthy",
-        "model": settings.gemini_model,
+        "model": settings.ollama_model,
+        "ollama_url": settings.ollama_base_url,
         "sign_library_size": transformer.sign_library.total_signs,
         "cache_enabled": settings.sasl_cache_enabled,
     }

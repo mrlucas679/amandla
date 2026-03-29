@@ -102,55 +102,108 @@
       font-style: italic;
     }
 
-    /* ── CAMERA PANEL ── */
-    #camera-panel {
+    /* ── SASL TEXT INPUT PANEL ── */
+    #sasl-input-panel {
       flex-shrink: 0;
-      position: relative;
-      height: 130px;
-      background: #000;
-      border-top: 1px solid #222;
+      background: #0f0f1a;
+      border-top: 1px solid #2a2040;
+      padding: 8px 10px 6px;
+    }
+    #sasl-label {
+      font-size: 10px;
+      color: #8B6FD4;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+    }
+    #sasl-input-row {
       display: flex;
+      gap: 7px;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
     }
-    #camera-panel.hidden { display: none; }
+    #sasl-input {
+      flex: 1;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid #8B6FD480;
+      background: #1a1230;
+      color: #F5F0E8;
+      font-size: 14px;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    #sasl-input:focus {
+      outline: none;
+      border-color: #8B6FD4;
+    }
+    #sasl-input::placeholder { color: #555; }
+    #sasl-send-btn {
+      padding: 9px 16px;
+      border-radius: 8px;
+      border: none;
+      background: #8B6FD4;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #sasl-send-btn:hover { background: #7058bc; }
+    #sasl-send-btn:active { transform: scale(0.95); }
+    #sasl-send-status {
+      font-size: 11px;
+      color: #2EA880;
+      margin-top: 4px;
+      min-height: 15px;
+    }
 
-    #camera-video {
-      height: 100%;
-      width: auto;
-      display: block;
-      transform: scaleX(-1);   /* mirror for natural feel */
+    /* ── MODE TOGGLE ── */
+    #modeToggleBtn {
+      padding: 5px 10px; border-radius: 6px;
+      border: 1px solid #8B6FD4; background: transparent;
+      color: #8B6FD4; cursor: pointer; font-size: 11px; font-weight: 700;
+      transition: background 0.2s;
     }
-    #camera-canvas {
-      position: absolute;
-      top: 0; left: 0;
-      height: 100%; width: 100%;
-      pointer-events: none;
+    #modeToggleBtn:hover { background: #8B6FD420; }
+
+    /* ── CAMERA PREVIEW (MediaPipe) ── */
+    #camera-container {
+      position: absolute; top: 8px; right: 8px;
+      width: 160px; height: 120px; border-radius: 8px;
+      overflow: hidden; border: 2px solid #8B6FD440;
+      z-index: 10; background: #000;
+    }
+    #camera-container.hidden { display: none; }
+    #camera-video {
+      width: 100%; height: 100%; object-fit: cover;
       transform: scaleX(-1);
     }
-    #camera-label {
-      position: absolute;
-      top: 6px; left: 10px;
-      font-size: 11px; color: #8B6FD4;
-      font-weight: 700; letter-spacing: 0.5px;
-      pointer-events: none;
+    #camera-toggle {
+      position: absolute; bottom: 4px; right: 4px;
+      padding: 3px 7px; border-radius: 4px; border: none;
+      background: rgba(0,0,0,0.6); color: #fff;
+      font-size: 10px; cursor: pointer; z-index: 11;
     }
-    #sign-preview {
-      position: absolute;
-      top: 6px; right: 10px;
-      font-size: 13px; font-weight: 700;
-      color: #2EA880;
-      pointer-events: none;
+
+    /* ── ASSIST CONTAINER ── */
+    #assistContainer {
+      flex: 1; min-height: 0; overflow-y: auto;
+      --color-text-primary: #F5F0E8;
+      --color-text-secondary: #aaa;
+      --color-text-tertiary: #666;
+      --color-text-success: #082018;
+      --color-background-primary: #0B0B0B;
+      --color-background-secondary: #1a1230;
+      --color-background-tertiary: #2a2050;
+      --color-background-info: #0f2e20;
+      --color-background-success: #2EA880;
+      --color-border-secondary: #8B6FD480;
+      --color-border-tertiary: #333;
+      --color-border-info: #2EA880;
+      --color-border-success: #2EA880;
+      --font-sans: Arial, Helvetica, sans-serif;
     }
-    #cam-toggle {
-      position: absolute;
-      bottom: 6px; right: 8px;
-      font-size: 11px; color: #555; cursor: pointer;
-      background: #111; border: 1px solid #333;
-      border-radius: 4px; padding: 2px 7px;
-    }
-    #cam-toggle:hover { color: #8B6FD4; border-color: #8B6FD4; }
 
     /* ── CATEGORY TABS ── */
     #category-tabs {
@@ -224,44 +277,6 @@
     }
     .emg-dismiss:hover { background: rgba(255,255,255,0.35); }
 
-    /* ── CSS VARIABLES (used by AssistEngine UI) ── */
-    :root {
-      --color-background-primary:   #0D0D0D;
-      --color-background-secondary: #1a1a1a;
-      --color-background-tertiary:  #252525;
-      --color-background-info:      #1a1230;
-      --color-background-success:   #0f2e20;
-      --color-border-secondary:     #333;
-      --color-border-tertiary:      #2a2a2a;
-      --color-border-info:          #8B6FD4;
-      --color-border-success:       #2EA88080;
-      --color-text-primary:         #F5F0E8;
-      --color-text-secondary:       #aaa;
-      --color-text-tertiary:        #666;
-      --color-text-success:         #2EA880;
-      --font-sans:                  Arial, Helvetica, sans-serif;
-    }
-
-    /* ── ASSIST CONTAINER ── */
-    #assistContainer {
-      flex: 1;
-      min-height: 0;
-      background: #0D0D0D;
-      overflow-y: auto;
-    }
-
-    /* ── MODE TOGGLE BUTTON ── */
-    #modeToggleBtn {
-      font-size: 11px; font-weight: 700;
-      padding: 4px 10px; border-radius: 5px;
-      border: 1px solid #8B6FD480;
-      background: #1a1230; color: #C4B5FD;
-      cursor: pointer; letter-spacing: 0.3px;
-      transition: background 0.15s, border-color 0.15s;
-      white-space: nowrap; flex-shrink: 0;
-    }
-    #modeToggleBtn:hover { background: #8B6FD430; border-color: #8B6FD4; }
-
     /* ── STARTUP OVERLAY ── */
     #startup-overlay {
       position: fixed; inset: 0; z-index: 9998;
@@ -282,19 +297,24 @@
 </head>
 <body>
 
+  <!-- Connection error banner -->
+  <div id="conn-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9997;background:#FC818130;border-bottom:2px solid #FC8181;padding:10px 16px;text-align:center;font-size:13px;color:#FCA5A5;">Connection lost — reconnecting…</div>
+
   <!-- Emergency overlay (shown on both windows simultaneously) -->
   <div id="emergency-overlay" role="alertdialog" aria-label="Emergency alert">
     <div class="emg-icon">🚨</div>
     <div class="emg-title">EMERGENCY</div>
     <div class="emg-sub">Help has been alerted</div>
+    <div class="emg-countdown" id="emg-countdown"></div>
     <button class="emg-dismiss" onclick="hideEmergency()">Dismiss</button>
   </div>
 
-  <!-- Startup overlay — unlocks TTS -->
+  <!-- Startup overlay -->
   <div id="startup-overlay">
     <h1>AMANDLA</h1>
     <p>Deaf view — signs appear here when the hearing person speaks.<br>
-       Use buttons below to reply. Allow camera access for hand tracking.</p>
+       Use the text box below to type your reply in SASL.<br>
+       Quick-sign buttons are also available for common phrases.</p>
     <button id="start-btn">READY</button>
   </div>
 
@@ -302,9 +322,9 @@
   <div id="topbar">
     <div class="brand">AMANDLA — Deaf</div>
     <div class="right">
+      <button id="modeToggleBtn" title="Switch between Sign mode and Assist mode">Assist Mode</button>
       <span id="conn-status">connecting…</span>
       <div id="status-dot" title="AI status"></div>
-      <button id="modeToggleBtn" onclick="ModeController.toggle()">Assist Mode</button>
     </div>
   </div>
 
@@ -318,35 +338,39 @@
     <div id="detected-sign"></div>
     <div id="gloss-display"></div>
     <div id="sentence-display"></div>
+    <!-- Camera preview for MediaPipe sign recognition -->
+    <div id="camera-container" class="hidden">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <button id="camera-toggle" title="Toggle camera">📷</button>
+    </div>
   </div>
 
-  <!-- Assist mode: AAC-style phrase completion (hidden by default) -->
+  <!-- Assist mode container (hidden by default, shown via ModeController) -->
   <div id="assistContainer" style="display:none"></div>
 
-  <!-- Camera panel: deaf person's hand shown with MediaPipe skeleton -->
-  <div id="camera-panel">
-    <video id="camera-video" playsinline muted></video>
-    <canvas id="camera-canvas"></canvas>
-    <div id="camera-label">HAND TRACKING</div>
-    <div id="sign-preview"></div>
-    <button id="cam-toggle" title="Toggle camera">hide cam</button>
+  <!-- SASL text input: deaf person types in SASL grammar to reply -->
+  <div id="sasl-input-panel">
+    <div id="sasl-label">Your reply — type in SASL or English</div>
+    <div id="sasl-input-row">
+      <input id="sasl-input" type="text"
+             placeholder="e.g.  YESTERDAY STORE I GO FINISH  or  I need help"
+             autocomplete="off" />
+      <button id="sasl-send-btn">Send</button>
+    </div>
+    <div id="sasl-send-status"></div>
   </div>
 
   <!-- Category tabs + quick-sign reply buttons -->
   <div id="category-tabs" role="tablist" aria-label="Sign categories"></div>
   <div id="quick-signs" role="toolbar" aria-label="Quick signs"></div>
 
-  <!-- ── SCRIPTS: load order is critical ── -->
-  <!-- Three.js must come first (for avatar) -->
+  <!-- ── SCRIPTS ── -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <!-- Signs library and avatar -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js"></script>
   <script src="../../../signs_library.js"></script>
+  <script src="avatar_driver.js"></script>
   <script src="avatar.js"></script>
-  <!-- Mode controller (sign ↔ assist) — must load before inline script -->
   <script src="mode_controller.js"></script>
 
   <script>
@@ -358,11 +382,9 @@
     const sentenceEl    = document.getElementById('sentence-display')
     const glossEl       = document.getElementById('gloss-display')
     const turnEl        = document.getElementById('turn-indicator')
-    const camPanel      = document.getElementById('camera-panel')
-    const camVideo      = document.getElementById('camera-video')
-    const camCanvas     = document.getElementById('camera-canvas')
-    const signPreview   = document.getElementById('sign-preview')
-    const camToggle     = document.getElementById('cam-toggle')
+    const saslInput     = document.getElementById('sasl-input')
+    const saslSendBtn   = document.getElementById('sasl-send-btn')
+    const saslStatus    = document.getElementById('sasl-send-status')
 
     // ── STARTUP ───────────────────────────────────────────────
     startBtn.addEventListener('click', function () {
@@ -372,7 +394,7 @@
         u.volume = 0
         window.speechSynthesis.speak(u)
       } catch (e) { /* ignore */ }
-      initCamera()
+      saslInput.focus()
     })
 
     // ── AVATAR INIT ───────────────────────────────────────────
@@ -394,9 +416,19 @@
       window.amandla.connect('demo', 'deaf')
     })
 
+    let statusPollingStarted = false
     window.amandla.onConnectionChange(function (connected) {
       connStatus.textContent = connected ? 'connected' : 'disconnected'
       connStatus.className   = connected ? 'connected' : ''
+      // Show/hide connection error banner
+      const banner = document.getElementById('conn-banner')
+      if (banner) banner.style.display = connected ? 'none' : 'block'
+      // Start status polling only after first successful connection
+      if (connected && !statusPollingStarted) {
+        statusPollingStarted = true
+        pollStatus()
+        setInterval(pollStatus, 30000)
+      }
     })
 
     // ── INCOMING MESSAGES ─────────────────────────────────────
@@ -404,28 +436,24 @@
       if (!msg) return
 
       // Hearing person spoke → SASL signs arrive
-      // Deaf window shows SASL grammar only — no original English, no audio (deaf users can't hear)
       if (msg.type === 'signs') {
         const signCount = Array.isArray(msg.signs) ? msg.signs.length : 1
         const clearAfter = (signCount * 700) + 1200
 
-        // Show SASL gloss — this is the language the deaf person understands
+        // Show SASL gloss
         if (msg.text) {
           glossEl.textContent = msg.text
           setTimeout(function () { glossEl.textContent = '' }, clearAfter)
         }
 
-        // Track detected language for internal use (no UI side-effect)
         if (msg.language) setDetectedLanguage(msg.language)
 
         // Drive the avatar with the sign sequence
         if (Array.isArray(msg.signs) && msg.signs.length > 0) {
-          if (ModeController.isSign()) {
-            if (window.AmandlaAvatar) {
-              msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
-            } else {
-              glossEl.textContent = msg.text || msg.signs.join(' ')
-            }
+          if (window.AmandlaAvatar) {
+            msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
+          } else {
+            glossEl.textContent = msg.text || msg.signs.join(' ')
           }
         }
         return
@@ -439,14 +467,6 @@
 
       if (msg.type === 'emergency') {
         showEmergency()
-        return
-      }
-
-      // Backend echoes back recognised landmark sign to confirm detection
-      if (msg.type === 'sign' && msg.source === 'mediapipe' && msg.sender === 'deaf') {
-        signPreview.textContent = '✓ ' + msg.text
-        setTimeout(function () { signPreview.textContent = '' }, 1500)
-        showDetectedSign(msg.text, msg.confidence || 0.8)
         return
       }
     })
@@ -463,13 +483,33 @@
         turnEl.textContent = 'Waiting…'
         turnEl.className = ''
       }
-      // Auto-reset after 4s
       clearTimeout(window._turnTimer)
       window._turnTimer = setTimeout(function () {
         turnEl.textContent = 'Waiting…'
         turnEl.className = ''
       }, 4000)
     }
+
+    // ── SASL TEXT INPUT → HEARING ─────────────────────────────
+    function sendSaslText() {
+      const text = saslInput.value.trim()
+      if (!text) return
+      window.amandla.send({
+        type:      'sasl_text',
+        text:      text,
+        sender:    'deaf',
+        timestamp: Date.now()
+      })
+      saslStatus.textContent = 'Sent — translating to English for the hearing person…'
+      setTimeout(function () { saslStatus.textContent = '' }, 3000)
+      saslInput.value = ''
+      saslInput.focus()
+    }
+
+    saslSendBtn.addEventListener('click', sendSaslText)
+    saslInput.addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') sendSaslText()
+    })
 
     // ── QUICK-SIGN CATEGORY BUTTONS ───────────────────────────
     const CATEGORIES = {
@@ -486,7 +526,6 @@
 
     function renderCategory(category) {
       activeCat = category
-      // Highlight active tab
       catBar.querySelectorAll('.cat-tab').forEach(function (t) {
         t.classList.toggle('active', t.dataset.cat === category)
       })
@@ -513,7 +552,6 @@
       })
     }
 
-    // Build category tab buttons
     Object.keys(CATEGORIES).forEach(function (cat) {
       const tab = document.createElement('button')
       tab.className = 'cat-tab'
@@ -523,16 +561,28 @@
       tab.addEventListener('click', function () { renderCategory(cat) })
       catBar.appendChild(tab)
     })
-    renderCategory('MEDICAL')  // default
+    renderCategory('MEDICAL')
 
     // ── EMERGENCY ─────────────────────────────────────────────
+    let _emgInterval = null
     function showEmergency() {
       document.getElementById('emergency-overlay').classList.add('active')
       speakText('Emergency. Help has been alerted.')
-      setTimeout(hideEmergency, 10000)
+      let remaining = 10
+      const cdEl = document.getElementById('emg-countdown')
+      if (cdEl) cdEl.textContent = 'Auto-dismiss in ' + remaining + 's'
+      clearInterval(_emgInterval)
+      _emgInterval = setInterval(function () {
+        remaining--
+        if (cdEl) cdEl.textContent = remaining > 0 ? 'Auto-dismiss in ' + remaining + 's' : ''
+        if (remaining <= 0) { hideEmergency(); clearInterval(_emgInterval) }
+      }, 1000)
     }
     function hideEmergency() {
       document.getElementById('emergency-overlay').classList.remove('active')
+      clearInterval(_emgInterval)
+      const cdEl = document.getElementById('emg-countdown')
+      if (cdEl) cdEl.textContent = ''
     }
     window.hideEmergency = hideEmergency
 
@@ -547,137 +597,7 @@
       el._hideTimer = setTimeout(function () { el.style.opacity = '0' }, 2000)
     }
 
-    // ── MEDIAPIPE HAND TRACKING ───────────────────────────────
-    let mpHands      = null
-    let mpCamera     = null
-    let camRunning   = false
-    let lastSendTime = 0
-    const SEND_INTERVAL_MS = 600   // send landmarks at most every 600ms
-
-    function initCamera() {
-      navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 }, audio: false })
-        .then(function (stream) {
-          camVideo.srcObject = stream
-          camVideo.play()
-          camPanel.classList.remove('hidden')
-          startMediaPipe()
-        })
-        .catch(function (err) {
-          console.warn('[Camera] Access denied or unavailable:', err)
-          camPanel.classList.add('hidden')
-        })
-    }
-
-    function startMediaPipe() {
-      if (typeof Hands === 'undefined') {
-        console.warn('[MediaPipe] Hands not loaded — hand tracking unavailable')
-        return
-      }
-
-      mpHands = new Hands({
-        locateFile: function (file) {
-          return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/' + file
-        }
-      })
-
-      mpHands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.5
-      })
-
-      mpHands.onResults(onHandResults)
-
-      if (typeof Camera !== 'undefined') {
-        mpCamera = new Camera(camVideo, {
-          onFrame: async function () {
-            await mpHands.send({ image: camVideo })
-          },
-          width: 320,
-          height: 240
-        })
-        mpCamera.start()
-        camRunning = true
-        console.log('[MediaPipe] Hand tracking started')
-      } else {
-        // Fallback: manual requestAnimationFrame loop
-        camRunning = true
-        ;(function loop() {
-          if (!camRunning) return
-          if (camVideo.readyState >= 2) {
-            mpHands.send({ image: camVideo }).catch(function () {})
-          }
-          setTimeout(loop, 100)
-        })()
-      }
-    }
-
-    function onHandResults(results) {
-      // ── Draw skeleton on canvas ──────────────────────────────
-      const ctx = camCanvas.getContext('2d')
-      camCanvas.width  = camVideo.videoWidth  || 320
-      camCanvas.height = camVideo.videoHeight || 240
-
-      ctx.clearRect(0, 0, camCanvas.width, camCanvas.height)
-
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        for (let i = 0; i < results.multiHandLandmarks.length; i++) {
-          const landmarks  = results.multiHandLandmarks[i]
-          const handedness = results.multiHandedness && results.multiHandedness[i]
-            ? results.multiHandedness[i].label
-            : 'Right'
-
-          const color = handedness === 'Left' ? '#8B6FD4' : '#2EA880'
-
-          if (typeof drawConnectors !== 'undefined' && typeof HAND_CONNECTIONS !== 'undefined') {
-            drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: color + '99', lineWidth: 2 })
-            drawLandmarks(ctx, landmarks, { color: color, lineWidth: 1, radius: 3 })
-          } else {
-            // Fallback: draw dots manually
-            landmarks.forEach(function (lm) {
-              ctx.beginPath()
-              ctx.arc(lm.x * camCanvas.width, lm.y * camCanvas.height, 4, 0, Math.PI * 2)
-              ctx.fillStyle = color
-              ctx.fill()
-            })
-          }
-
-          // ── Send landmarks via WebSocket (debounced) ─────────
-          const now = Date.now()
-          if (now - lastSendTime >= SEND_INTERVAL_MS) {
-            lastSendTime = now
-            const points = landmarks.map(function (lm, idx) {
-              return { id: idx, x: lm.x, y: lm.y, z: lm.z }
-            })
-            window.amandla.send({
-              type:       'landmarks',
-              landmarks:  points,
-              handedness: handedness,
-              timestamp:  now
-            })
-          }
-        }
-        signPreview.textContent = '👁 detecting…'
-      } else {
-        signPreview.textContent = ''
-      }
-    }
-
-
-    // ── CAMERA TOGGLE ─────────────────────────────────────────
-    camToggle.addEventListener('click', function () {
-      if (camPanel.style.height === '0px' || camPanel.classList.contains('hidden')) {
-        camPanel.style.height = '130px'
-        camToggle.textContent = 'hide cam'
-      } else {
-        camPanel.style.height = '0px'
-        camToggle.textContent = 'show cam'
-      }
-    })
-
-    // ── MULTI-LANGUAGE TTS (Gap 15) ───────────────────────────
-    // Whisper auto-detects the spoken language; TTS switches to match.
+    // ── MULTI-LANGUAGE TTS ────────────────────────────────────
     const SA_LANGUAGES = {
       'en':  { tts: 'en-ZA',  label: 'English'    },
       'zu':  { tts: 'zu-ZA',  label: 'isiZulu'    },
@@ -718,19 +638,11 @@
       window.speechSynthesis.speak(u)
     }
 
-    // ── ASSIST MODE — send confirmed phrase via WebSocket ─────
-    window.addEventListener('amandla:assistPhrase', function (e) {
-      const phrase = e.detail && e.detail.phrase
-      if (!phrase) return
-      window.amandla.send({ type: 'text', text: phrase, sender: 'deaf', timestamp: Date.now() })
-      speakText(phrase)
-    })
-
-    // ── STATUS POLLING ────────────────────────────────────────
+    // ── STATUS POLLING (via WebSocket preload bridge) ───────
+    // Polling is started in onConnectionChange after first WS connection
     async function pollStatus() {
       try {
-        const r = await fetch('http://localhost:8000/api/status')
-        const d = await r.json()
+        const d = await window.amandla.requestStatus()
         statusDot.className = d.qwen === 'alive' ? '' : 'offline'
         statusDot.title     = d.qwen === 'alive' ? 'AI online' : 'AI offline'
       } catch (e) {
@@ -738,8 +650,126 @@
         statusDot.title     = 'Backend offline'
       }
     }
-    setInterval(pollStatus, 30000)
-    pollStatus()
+
+    // ── MODE TOGGLE ───────────────────────────────────────────
+    const modeToggleBtn = document.getElementById('modeToggleBtn')
+    if (modeToggleBtn && window.ModeController) {
+      modeToggleBtn.addEventListener('click', function () {
+        window.ModeController.toggle()
+      })
+      window.ModeController.onChange(function (mode) {
+        modeToggleBtn.textContent = mode === 'sign' ? 'Assist Mode' : 'Sign Mode'
+      })
+    }
+
+    // ── ASSIST MODE → SEND PHRASE VIA WS ──────────────────────
+    window.addEventListener('amandla:assistPhrase', function (e) {
+      const phrase = e.detail && e.detail.phrase
+      if (!phrase) return
+      window.amandla.send({
+        type:      'sasl_text',
+        text:      phrase,
+        sender:    'deaf',
+        timestamp: Date.now()
+      })
+    })
+
+    // ── MEDIAPIPE CAMERA SIGN RECOGNITION ─────────────────────
+    const cameraContainer = document.getElementById('camera-container')
+    const cameraVideo     = document.getElementById('camera-video')
+    const cameraToggle    = document.getElementById('camera-toggle')
+    let mpHands       = null
+    let mpCamera      = null
+    let cameraActive  = false
+    let lastLandmarkSend = 0
+    const LANDMARK_THROTTLE_MS = 500  // send landmarks at most every 500ms
+
+    function initMediaPipe() {
+      if (typeof Hands === 'undefined') {
+        console.warn('[MediaPipe] Hands library not loaded')
+        return
+      }
+      mpHands = new Hands({
+        locateFile: function (file) {
+          return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/' + file
+        }
+      })
+      mpHands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.5
+      })
+      mpHands.onResults(onHandResults)
+      console.log('[MediaPipe] Hands initialised')
+    }
+
+    function onHandResults(results) {
+      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return
+      const now = Date.now()
+      if (now - lastLandmarkSend < LANDMARK_THROTTLE_MS) return
+      lastLandmarkSend = now
+
+      // Send landmarks for the first detected hand
+      const landmarks = results.multiHandLandmarks[0].map(function (pt) {
+        return { x: pt.x, y: pt.y, z: pt.z }
+      })
+      const handedness = (results.multiHandedness && results.multiHandedness[0])
+        ? results.multiHandedness[0].label
+        : 'Right'
+
+      window.amandla.send({
+        type:       'landmarks',
+        landmarks:  landmarks,
+        handedness: handedness,
+        sender:     'deaf',
+        timestamp:  now
+      })
+    }
+
+    async function startCamera() {
+      if (cameraActive) return
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 320, height: 240 } })
+        cameraVideo.srcObject = stream
+        cameraContainer.classList.remove('hidden')
+        cameraActive = true
+
+        if (!mpHands) initMediaPipe()
+
+        if (mpHands && typeof Camera !== 'undefined') {
+          mpCamera = new Camera(cameraVideo, {
+            onFrame: async function () {
+              if (mpHands) await mpHands.send({ image: cameraVideo })
+            },
+            width: 320,
+            height: 240
+          })
+          mpCamera.start()
+          console.log('[MediaPipe] Camera started')
+        }
+      } catch (err) {
+        console.error('[MediaPipe] Camera error:', err)
+      }
+    }
+
+    function stopCamera() {
+      if (!cameraActive) return
+      if (mpCamera) { try { mpCamera.stop() } catch(e) {} }
+      const stream = cameraVideo.srcObject
+      if (stream) stream.getTracks().forEach(function (t) { t.stop() })
+      cameraVideo.srcObject = null
+      cameraContainer.classList.add('hidden')
+      cameraActive = false
+      console.log('[MediaPipe] Camera stopped')
+    }
+
+    if (cameraToggle) {
+      cameraToggle.addEventListener('click', function () {
+        if (cameraActive) stopCamera()
+        else startCamera()
+      })
+    }
   </script>
 </body>
 </html>

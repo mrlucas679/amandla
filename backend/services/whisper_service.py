@@ -11,9 +11,7 @@ import asyncio
 import subprocess
 import logging
 
-from dotenv import load_dotenv
-
-load_dotenv()
+# Note: dotenv is loaded once by backend.main at startup
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +21,7 @@ NVIDIA_ENABLED     = os.getenv("NVIDIA_ENABLED", "false").lower() == "true"
 NVIDIA_API_KEY     = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL    = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 
-WHISPER_TIMEOUT_S  = 120.0  # CPU transcription of short clips can take 30–60 s on 'small' model
+WHISPER_TIMEOUT_S  = 45.0   # 45s is generous for CPU transcription of 30s clips
 WHISPER_LANGUAGE   = os.getenv("WHISPER_LANGUAGE", "en")   # Force language; empty string = auto-detect
 
 # Lazy-loaded — None until first use
@@ -180,7 +178,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
                     "text": "",
                     "language": "en",
                     "confidence": 0.0,
-                    "error": f"Whisper: {whisper_err} | Parakeet: {parakeet_err}"
+                    "error": "Speech processing failed."
                 }
         else:
             logger.error(f"[Whisper] Transcription failed (no fallback): {whisper_err}")
@@ -188,7 +186,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
                 "text": "",
                 "language": "en",
                 "confidence": 0.0,
-                "error": str(whisper_err)
+                "error": "Speech processing failed."
             }
 
 

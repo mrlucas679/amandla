@@ -1,12 +1,18 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron')
 const path = require('path')
 
-// Required for MediaPipe WASM + WebGL to work reliably in Electron
-// Must be called before app 'ready'
-app.commandLine.appendSwitch('enable-features', 'WebAssemblySimd,WebAssemblyThreads')
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors')
-app.commandLine.appendSwitch('ignore-gpu-blocklist')
-app.commandLine.appendSwitch('enable-gpu-rasterization')
+// ── ARCHITECTURE NOTE ─────────────────────────────────────────────
+// AMANDLA uses two BrowserWindow instances positioned side-by-side
+// to create a split-screen effect (hearing left, deaf right).
+// This is intentional — NOT a single webview with split layout.
+// Communication between windows goes through the backend WebSocket,
+// never through Electron IPC between renderer processes.
+// The preload bridge (preload.js) is the ONLY way renderers talk
+// to the backend — no direct fetch/XHR from renderer code.
+// ──────────────────────────────────────────────────────────────────
+
+// Content-Security-Policy — restricts what scripts and connections are allowed
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' ws://localhost:8000 http://localhost:8000; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';"
 
 let hearingWin = null
 let deafWin = null
@@ -33,7 +39,6 @@ function createWindows() {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,  // Allow CDN scripts (Three.js) — dev only
     }
   })
   hearingWin.loadFile('src/windows/hearing/index.html')
@@ -56,7 +61,6 @@ function createWindows() {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,             // Allow CDN scripts — dev only
       experimentalFeatures: true,     // Required for SharedArrayBuffer (MediaPipe WASM threads)
       enableBlinkFeatures: 'SharedArrayBuffer',  // MediaPipe WASM multi-hand needs this
     }
@@ -82,6 +86,25 @@ function createWindows() {
   }
   allowMedia(hearingWin.webContents)
   allowMedia(deafWin.webContents)
+
+  // Apply Content-Security-Policy headers to all windows
+  _applyCSP(hearingWin)
+  _applyCSP(deafWin)
+}
+
+/**
+ * Apply Content-Security-Policy headers to a BrowserWindow.
+ * Restricts script sources to self and approved CDNs only.
+ */
+function _applyCSP(win) {
+  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [CSP]
+      }
+    })
+  })
 }
 
 // IPC: Open RIGHTS window from hearing window button
@@ -100,10 +123,15 @@ ipcMain.handle('open-rights', () => {
       preload: path.join(__dirname, 'preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,  // Allow CDN scripts (jsPDF) — dev only
     }
   })
   rightsWin.loadFile('src/windows/rights/index.html')
+  // Send session ID and role to rights window so it can connect via WebSocket
+  rightsWin.webContents.on('did-finish-load', () => {
+    rightsWin.webContents.send('session-id', SESSION_ID)
+    rightsWin.webContents.send('role', 'rights')
+  })
+  _applyCSP(rightsWin)
   rightsWin.on('closed', () => { rightsWin = null })
 })
 

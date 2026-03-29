@@ -2,12 +2,12 @@
 SASL Transformer — the core translation engine.
 
 Takes English text (from Whisper STT) and converts it to SASL gloss
-notation using the Gemini API. Falls back to rule-based conversion
-if the API is unavailable.
+notation using the local Ollama model. Falls back to rule-based conversion
+if Ollama is unavailable.
 
 Flow:
     1. Receive English sentence
-    2. Send to Gemini API with SASL grammar rules (system prompt)
+    2. Send to Ollama with SASL grammar rules (system prompt)
     3. Parse the structured JSON response
     4. Check each token against the sign library
     5. Return TranslationResponse with tokens, gloss text, and metadata
@@ -44,8 +44,8 @@ class SASLTransformer:
     """
     Converts English sentences to SASL gloss notation.
 
-    Uses the Gemini API as the primary translation engine, with a
-    rule-based fallback for when the API is unavailable.
+    Uses the local Ollama model as the primary translation engine, with a
+    rule-based fallback for when Ollama is unavailable.
 
     Usage:
         transformer = SASLTransformer()
@@ -75,8 +75,9 @@ class SASLTransformer:
         self._cache_max_size = settings.sasl_cache_max_size
 
         logger.info(
-            "SASL Transformer initialised — model: %s, library: %d signs, cache: %s",
-            settings.gemini_model,
+            "SASL Transformer initialised — model: %s @ %s, library: %d signs, cache: %s",
+            settings.ollama_model,
+            settings.ollama_base_url,
             self._sign_library.total_signs,
             "enabled" if self._cache_enabled else "disabled",
         )
@@ -165,42 +166,69 @@ class SASLTransformer:
         request: TranslationRequest,
     ) -> TranslationResponse:
         """
-        Use the Gemini API to translate English → SASL gloss.
+        Use the local Ollama model to translate English → SASL gloss.
 
-        This is the primary and most accurate translation method.
+        Sends the SASL grammar system prompt + user text to Ollama's
+        /api/generate endpoint. This is the primary and most accurate
+        translation method when Ollama is running.
+
+        Args:
+            english_text: The English sentence to translate.
+            request: The full translation request with options.
+
+        Returns:
+            TranslationResponse with gloss text and tokens.
+
+        Raises:
+            RuntimeError: If Ollama is unreachable or returns an error.
         """
-        if not settings.gemini_api_key:
-            raise RuntimeError("GEMINI_API_KEY not set — using rule-based fallback")
+        import httpx
+        import asyncio
 
-        # Build the user message
+        # Build the user message with optional context
         user_message = f"Convert this English sentence to SASL gloss:\n\n{english_text}"
-
         if request.context:
             user_message = (
                 f"Previous context: {request.context}\n\n"
                 f"Convert this English sentence to SASL gloss:\n\n{english_text}"
             )
 
+        # Combine system prompt + user message into one prompt for Ollama
         full_prompt = f"{SASL_SYSTEM_PROMPT}\n\n{user_message}"
 
-        # Call Gemini API (synchronous SDK wrapped in executor for async compat)
-        import asyncio
-        from google import genai
+        # Call Ollama's local /api/generate endpoint
+        ollama_url = f"{settings.ollama_base_url}/api/generate"
+        request_body = {
+            "model": settings.ollama_model,
+            "prompt": full_prompt,
+            "stream": False,
+            "temperature": 0.1,
+        }
 
-        client = genai.Client(api_key=settings.gemini_api_key)
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.models.generate_content(
-                model=settings.gemini_model,
-                contents=full_prompt,
-            ),
-        )
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as http_client:
+                response = await http_client.post(ollama_url, json=request_body)
 
-        # Extract the text response
-        raw_response = response.text.strip()
+            if response.status_code != 200:
+                raise RuntimeError(
+                    f"Ollama returned status {response.status_code} — is 'ollama serve' running?"
+                )
 
-        # Parse the JSON response
+            # Extract text from Ollama's JSON response
+            raw_response = response.json().get("response", "").strip()
+
+            if not raw_response:
+                raise RuntimeError("Ollama returned an empty response")
+
+        except httpx.ConnectError:
+            raise RuntimeError(
+                "Cannot connect to Ollama — make sure 'ollama serve' is running on "
+                f"{settings.ollama_base_url}"
+            )
+        except httpx.TimeoutException:
+            raise RuntimeError("Ollama request timed out — the model may be loading")
+
+        # Parse the JSON response from the LLM
         parsed = self._parse_llm_response(raw_response)
 
         # Build tokens list
@@ -233,7 +261,7 @@ class SASLTransformer:
 
     def _parse_llm_response(self, raw: str) -> dict:
         """
-        Parse the JSON response from Claude.
+        Parse the JSON response from the LLM (Ollama).
 
         Handles edge cases like markdown code fences around the JSON.
         """

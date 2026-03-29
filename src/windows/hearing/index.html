@@ -184,15 +184,35 @@
       cursor: pointer; transition: background 0.2s;
     }
     #start-btn:hover { background: #26966f; }
+
+    /* ── CONNECTION ERROR BANNER ── */
+    #conn-banner {
+      display: none;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9997;
+      background: #FC818130; border-bottom: 2px solid #FC8181;
+      padding: 10px 16px; text-align: center;
+      font-size: 13px; color: #FCA5A5;
+      animation: banner-in 0.3s ease;
+    }
+    #conn-banner.visible { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    #conn-banner button { background: #FC818140; border: 1px solid #FC8181; color: #fff; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    @keyframes banner-in { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
+    /* ── EMERGENCY COUNTDOWN ── */
+    .emg-countdown { font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 6px; }
   </style>
 </head>
 <body>
+
+  <!-- Connection error banner -->
+  <div id="conn-banner">Connection lost — reconnecting…<button onclick="this.parentElement.classList.remove('visible')">Dismiss</button></div>
 
   <!-- Emergency overlay -->
   <div id="emergency-overlay" role="alertdialog" aria-label="Emergency alert">
     <div class="emg-icon">🚨</div>
     <div class="emg-title">EMERGENCY</div>
     <div class="emg-sub">Signer has triggered an emergency alert</div>
+    <div class="emg-countdown" id="emg-countdown"></div>
     <button class="emg-dismiss" onclick="hideEmergency()">Dismiss</button>
   </div>
 
@@ -285,19 +305,28 @@
     })
 
     let wsConnected = false
+    let statusPollingStarted = false
     window.amandla.onConnectionChange(function (connected) {
       wsConnected = connected
       connStatus.textContent = connected ? 'connected' : 'disconnected'
       connStatus.className   = connected ? 'connected' : ''
+      // Show/hide connection error banner
+      const banner = document.getElementById('conn-banner')
+      if (banner) banner.classList.toggle('visible', !connected)
+      // Start status polling only after first successful connection
+      if (connected && !statusPollingStarted) {
+        statusPollingStarted = true
+        pollStatus()
+        setInterval(pollStatus, 30000)
+      }
     })
 
     // ── INCOMING MESSAGES ─────────────────────────────────────
     window.amandla.onMessage(function (msg) {
       if (!msg) return
 
-      // Deaf user tapped quick-sign — show a neutral indicator while English
-      // reconstruction is in progress (arrives as 'deaf_speech' ~1.5s later).
-      if (msg.type === 'sign' && msg.sender === 'deaf' && msg.source !== 'mediapipe') {
+      // Deaf user tapped quick-sign or typed SASL — show indicator while translation is in progress
+      if ((msg.type === 'sign' || msg.type === 'sasl_text') && msg.sender === 'deaf') {
         transcriptEl.textContent = '🤟 Signer is communicating…'
         return
       }
@@ -432,17 +461,10 @@
     }
 
     async function uploadAudio(blob, mimeType) {
+      // Upload speech audio via WebSocket preload bridge (no direct HTTP fetch)
       transcriptEl.textContent = 'Transcribing…'
       try {
-        const ext = mimeType.includes('ogg') ? '.ogg' : mimeType.includes('mp4') ? '.mp4' : '.webm'
-        const fd = new FormData()
-        fd.append('audio', blob, 'recording' + ext)
-        fd.append('mime_type', mimeType)
-
-        const resp = await fetch('http://localhost:8000/speech', { method: 'POST', body: fd })
-        if (!resp.ok) throw new Error('Upload failed: ' + resp.status)
-        const data = await resp.json()
-
+        const data = await window.amandla.uploadSpeech(blob, mimeType)
         if (data.text) {
           sendText(data.text, data.language || null)
         } else {
@@ -460,13 +482,26 @@
     rightsBtn.addEventListener('click', function () { window.amandla.openRights() })
 
     // ── EMERGENCY ─────────────────────────────────────────────
+    let _emgInterval = null
     function showEmergency() {
       document.getElementById('emergency-overlay').classList.add('active')
       speakText('Emergency. Signer has triggered an emergency alert.')
-      setTimeout(hideEmergency, 10000)
+      // Countdown timer — auto-dismiss after 10 seconds
+      let remaining = 10
+      const cdEl = document.getElementById('emg-countdown')
+      if (cdEl) cdEl.textContent = 'Auto-dismiss in ' + remaining + 's'
+      clearInterval(_emgInterval)
+      _emgInterval = setInterval(function () {
+        remaining--
+        if (cdEl) cdEl.textContent = remaining > 0 ? 'Auto-dismiss in ' + remaining + 's' : ''
+        if (remaining <= 0) { hideEmergency(); clearInterval(_emgInterval) }
+      }, 1000)
     }
     function hideEmergency() {
       document.getElementById('emergency-overlay').classList.remove('active')
+      clearInterval(_emgInterval)
+      const cdEl = document.getElementById('emg-countdown')
+      if (cdEl) cdEl.textContent = ''
     }
     window.hideEmergency = hideEmergency
 
@@ -522,11 +557,11 @@
       window.speechSynthesis.speak(u)
     }
 
-    // ── STATUS POLLING ────────────────────────────────────────
+    // ── STATUS POLLING (via WebSocket preload bridge) ───────
+    // Polling is started in onConnectionChange after first WS connection
     async function pollStatus() {
       try {
-        const r = await fetch('http://localhost:8000/api/status')
-        const d = await r.json()
+        const d = await window.amandla.requestStatus()
         statusDot.className = d.qwen === 'alive' ? '' : 'offline'
         statusDot.title     = d.qwen === 'alive' ? 'AI online' : 'AI offline — restart Ollama'
       } catch (e) {
@@ -534,8 +569,6 @@
         statusDot.title     = 'Backend offline'
       }
     }
-    setInterval(pollStatus, 30000)
-    pollStatus()
   </script>
 </body>
 </html>

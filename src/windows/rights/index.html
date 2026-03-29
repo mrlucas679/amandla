@@ -331,6 +331,15 @@
     let analysisData = null
     let letterText   = ''
 
+    // ── WEBSOCKET CONNECTION ─────────────────────────────────
+    // Rights window needs a WS connection for the preload API
+    // methods (analyzeRights, generateLetter) to work.
+    window.amandla.getSessionId().then(function (id) {
+      window.amandla.connect(id || 'demo', 'rights')
+    }).catch(function () {
+      window.amandla.connect('demo', 'rights')
+    })
+
     // ── STEP NAVIGATION ───────────────────────────────────────
     function goToStep(n) {
       document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active') })
@@ -528,34 +537,23 @@
       doc.save('AMANDLA_' + org + '_letter.pdf')
     }
 
-    // ── API CALLS ─────────────────────────────────────────────
+    // ── API CALLS (via WebSocket preload bridge — no direct HTTP) ──
     async function analyseIncident(description) {
-      const resp = await fetch('http://localhost:8000/rights/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: description,
-          incident_type: getIncidentType()
-        })
-      })
-      if (!resp.ok) throw new Error('Analysis failed')
-      return resp.json()
+      // Uses the preload WebSocket bridge instead of direct fetch
+      const result = await window.amandla.analyzeRights(description, getIncidentType())
+      return result
     }
 
     async function generateLetter() {
-      const resp = await fetch('http://localhost:8000/rights/letter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description:   document.getElementById('incident-desc').value.trim(),
-          user_name:     document.getElementById('your-name').value.trim() || 'The Complainant',
-          employer_name: document.getElementById('org-name').value.trim(),
-          incident_date: document.getElementById('incident-date').value || todayString(),
-          analysis:      analysisData
-        })
+      // Uses the preload WebSocket bridge instead of direct fetch
+      const result = await window.amandla.generateLetter({
+        description:   document.getElementById('incident-desc').value.trim(),
+        user_name:     document.getElementById('your-name').value.trim() || 'The Complainant',
+        employer_name: document.getElementById('org-name').value.trim(),
+        incident_date: document.getElementById('incident-date').value || todayString(),
+        analysis:      analysisData
       })
-      if (!resp.ok) throw new Error('Letter generation failed')
-      return resp.json()
+      return result
     }
 
     // ── HEURISTICS (offline fallback) ─────────────────────────

@@ -3,6 +3,9 @@ Configuration for the SASL Transformer service.
 
 All sensitive values are loaded from environment variables.
 Never hardcode API keys or secrets — uses .env file via pydantic-settings.
+
+The SASL transformer uses the local Ollama model for English → SASL
+translation. No cloud API keys are required.
 """
 
 import os
@@ -14,22 +17,22 @@ class SASLTransformerSettings(BaseSettings):
     """
     Settings loaded from environment variables or .env file.
 
-    Optional env vars (app falls back to rule-based translation if keys absent):
-        GEMINI_API_KEY: Google Gemini API key for SASL translation.
-        GEMINI_MODEL: Which Gemini model to use (default: models/gemini-2.5-flash).
+    Env vars used:
+        OLLAMA_BASE_URL: URL where Ollama is running (default: http://localhost:11434).
+        OLLAMA_MODEL: Which Ollama model to use (default: amandla).
         SIGN_LIBRARY_PATH: Path to your sign library JSON file.
         SASL_CACHE_ENABLED: Whether to cache repeated translations (default: True).
         SASL_CACHE_MAX_SIZE: Max number of cached translations (default: 500).
     """
 
-    # Optional — empty string means LLM translation is skipped, rule-based is used
-    gemini_api_key: str = Field(
-        default="",
-        description="Google Gemini API key — loaded from GEMINI_API_KEY env var",
+    # Ollama settings — local AI, no API key needed
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="URL where Ollama is running — loaded from OLLAMA_BASE_URL env var",
     )
-    gemini_model: str = Field(
-        default="models/gemini-2.5-flash",
-        description="Gemini model to use for SASL translation",
+    ollama_model: str = Field(
+        default="amandla",
+        description="Ollama model name for SASL translation — loaded from OLLAMA_MODEL env var",
     )
     sign_library_path: str = Field(
         default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sign_library.json"),
@@ -48,7 +51,7 @@ class SASLTransformerSettings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
-        "extra": "ignore",   # Ignore other .env vars (OLLAMA_MODEL, WHISPER_MODEL, etc.)
+        "extra": "ignore",   # Ignore other .env vars (WHISPER_MODEL, etc.)
     }
 
 
