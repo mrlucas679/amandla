@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 let ws = null
 let currentSessionId = null
 let currentRole = null
+let currentSecret = null
 let messageCallback = null
 let connectionCallback = null
 let reconnectTimer = null
@@ -58,11 +59,13 @@ function _sendRequest(payload) {
  * OPEN for the same session + role, the call is a no-op.
  *
  * @param {string} sessionId - The shared session identifier (from main process).
- * @param {string} role      - Either "hearing" or "deaf".
+ * @param {string} role      - Either "hearing", "deaf", or "rights".
+ * @param {string} secret    - Session secret token for backend authentication.
  */
-function connect(sessionId, role) {
+function connect(sessionId, role, secret) {
   currentSessionId = sessionId
   currentRole = role
+  if (secret) currentSecret = secret
 
   // Guard: don't open a second socket if one is already live for this session + role
   const sessionKey = sessionId + '/' + role
@@ -81,7 +84,7 @@ function connect(sessionId, role) {
     ws.close()
   }
 
-  const url = `ws://localhost:8000/ws/${sessionId}/${role}`
+  const url = `ws://localhost:8000/ws/${sessionId}/${role}?token=${encodeURIComponent(currentSecret || '')}`
   console.log(`[Preload] Connecting to ${url}`)
   ws = new WebSocket(url)
   // Tag the socket so we can detect duplicates above
@@ -129,7 +132,7 @@ function connect(sessionId, role) {
     console.log(`[Preload] WebSocket closed — reconnecting in ${_reconnectDelay}ms…`)
     if (connectionCallback) connectionCallback(false)
     // Reject all in-flight requests so callers don't hang forever
-    for (const [id, req] of _pending) {
+    for (const [, req] of _pending) {
       clearTimeout(req.timer)
       req.reject(new Error('WebSocket disconnected'))
     }
@@ -137,7 +140,7 @@ function connect(sessionId, role) {
     // Schedule an automatic reconnect with exponential backoff
     reconnectTimer = setTimeout(() => {
       if (currentSessionId && currentRole) {
-        connect(currentSessionId, currentRole)
+        connect(currentSessionId, currentRole, currentSecret)
       }
     }, _reconnectDelay)
     // Double the delay for the next attempt, capped at the maximum
@@ -151,8 +154,8 @@ function connect(sessionId, role) {
 }
 
 contextBridge.exposeInMainWorld('amandla', {
-  // Connect to WebSocket with session ID and role
-  connect: (sessionId, role) => connect(sessionId, role),
+  // Connect to WebSocket with session ID, role, and auth secret
+  connect: (sessionId, role, secret) => connect(sessionId, role, secret),
 
   /**
    * Send a fire-and-forget JSON message to the backend via WebSocket.
@@ -172,6 +175,7 @@ contextBridge.exposeInMainWorld('amandla', {
       return true
     } else {
       console.warn('[Preload] Cannot send — WebSocket not open')
+      return false
     }
   },
 
@@ -186,10 +190,18 @@ contextBridge.exposeInMainWorld('amandla', {
     if (reconnectTimer) clearTimeout(reconnectTimer)
     currentSessionId = null
     currentRole = null
+    currentSecret = null
     if (ws) {
       ws.onclose = null // prevent onclose from scheduling a reconnect
       ws.close()
     }
+  },
+
+  // FEAT-6: Register a callback for global emergency shortcut (Ctrl+E)
+  onEmergencyShortcut: (callback) => {
+    ipcRenderer.on('emergency-trigger', () => {
+      if (typeof callback === 'function') callback()
+    })
   },
 
   // Ask main process to open RIGHTS window
@@ -257,26 +269,59 @@ contextBridge.exposeInMainWorld('amandla', {
     type: 'rights_letter',
     ...(details || {})
   }),
+
+  /**
+   * Request conversation history for the current session via WebSocket.
+   * FEAT-3: Retrieves stored messages from the SQLite database.
+   *
+   * @param {string} [sessionId] - Optional session ID override (defaults to current).
+   * @param {number} [limit] - Max messages to return (default 100).
+   * @returns {Promise<Object>} - Resolves with { session_id, messages: [...] }.
+   */
+  requestHistory: (sessionId, limit) => _sendRequest({
+    type: 'history_request',
+    session_id: sessionId || undefined,
+    limit: limit || 100
+  }),
+
+  /**
+   * List all sessions with message counts via WebSocket.
+   * FEAT-3: Returns session summaries from the SQLite database.
+   *
+   * @returns {Promise<Object>} - Resolves with { sessions: [...] }.
+   */
+  listSessions: () => _sendRequest({
+    type: 'history_request',
+    list_sessions: true
+  }),
 })
 
-// ── IPC: receive session ID and role from the main process ──────────────────
+// ── IPC: receive session ID, secret, and role from the main process ──────────
 // These arrive once per window load (sent from main.js did-finish-load).
-// We auto-connect as soon as BOTH values are known, regardless of which
+// We auto-connect as soon as ALL THREE values are known, regardless of which
 // arrives first — this fixes the race condition where role arrives before
 // session-id (or vice-versa).
 
 ipcRenderer.on('session-id', (_event, id) => {
   currentSessionId = id
-  // If role was already received, we have everything we need — connect now
-  if (currentSessionId && currentRole) {
-    connect(currentSessionId, currentRole)
+  // If secret and role were already received, we have everything — connect now
+  if (currentSessionId && currentSecret && currentRole) {
+    connect(currentSessionId, currentRole, currentSecret)
+  }
+})
+
+ipcRenderer.on('session-secret', (_event, secret) => {
+  currentSecret = secret
+  // If session-id and role were already received, we have everything — connect now
+  if (currentSessionId && currentSecret && currentRole) {
+    connect(currentSessionId, currentRole, currentSecret)
   }
 })
 
 ipcRenderer.on('role', (_event, role) => {
   currentRole = role
-  // If session-id was already received, we have everything we need — connect now
-  if (currentSessionId && currentRole) {
-    connect(currentSessionId, currentRole)
+  // If session-id and secret were already received, we have everything — connect now
+  if (currentSessionId && currentSecret && currentRole) {
+    connect(currentSessionId, currentRole, currentSecret)
   }
 })

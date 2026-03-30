@@ -1,0 +1,207 @@
+/* ── rights.css — Styles for the AMANDLA Know Your Rights window ── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0D0D0D;
+  color: #F5F0E8;
+  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  padding: 0;
+}
+
+/* ── HEADER ── */
+#header {
+  background: #111;
+  border-bottom: 2px solid #8B6FD4;
+  padding: 16px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#header h1 { font-size: 22px; color: #8B6FD4; letter-spacing: 1px; }
+#header .subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+/* UX-4: Connection status indicator */
+#rights-status { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+#rights-status-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #FC8181; transition: background 0.3s;
+}
+#rights-status-dot.connected { background: #2EA880; }
+#rights-conn-text { font-size: 11px; color: #888; }
+
+/* ── STEPPER ── */
+#stepper {
+  display: flex;
+  align-items: center;
+  padding: 20px 28px;
+  gap: 0;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+}
+.step.active   { color: #8B6FD4; }
+.step.done     { color: #2EA880; }
+.step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid currentColor;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+.step.done .step-num { background: #2EA880; border-color: #2EA880; color: #082018; }
+.step.active .step-num { background: #8B6FD430; }
+.step-divider {
+  flex: 1; height: 2px; background: #333; margin: 0 10px;
+}
+.step-divider.done { background: #2EA880; }
+
+/* ── PANELS ── */
+.panel {
+  display: none;
+  padding: 24px 28px;
+  max-width: 760px;
+}
+.panel.active { display: block; }
+
+.panel h2 { font-size: 18px; margin-bottom: 6px; }
+.panel .hint { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.5; }
+
+label {
+  display: block;
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 5px;
+  margin-top: 14px;
+}
+label:first-child { margin-top: 0; }
+
+input[type=text], input[type=date], textarea, select {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0B0B0B;
+  color: #F5F0E8;
+  font-size: 14px;
+  font-family: inherit;
+}
+input[type=text]:focus, input[type=date]:focus, textarea:focus {
+  outline: none;
+  border-color: #8B6FD4;
+}
+textarea {
+  resize: vertical;
+  min-height: 140px;
+  line-height: 1.5;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 12px 28px;
+  border-radius: 8px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-primary { background: #8B6FD4; color: #fff; }
+.btn-primary:hover { background: #7058bc; }
+.btn-primary:disabled { background: #444; color: #888; cursor: not-allowed; }
+.btn-secondary {
+  background: transparent;
+  border: 1px solid #8B6FD4;
+  color: #8B6FD4;
+}
+.btn-secondary:hover { background: #8B6FD420; }
+.btn-green { background: #2EA880; color: #082018; }
+.btn-green:hover { background: #26966f; }
+
+.btn-row {
+  margin-top: 22px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── ANALYSIS CARD ── */
+#analysis-card {
+  background: #0B1520;
+  border: 1px solid #1a3050;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+#analysis-card .field { margin-bottom: 14px; }
+#analysis-card .field-label { font-size: 12px; color: #8B6FD4; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+#analysis-card .field-value { font-size: 15px; }
+.severity-minor    { color: #68D391; }
+.severity-moderate { color: #F6E05E; }
+.severity-serious  { color: #FC8181; }
+
+.law-tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: #8B6FD430;
+  border: 1px solid #8B6FD460;
+  color: #C4B5FD;
+  font-size: 12px;
+  margin: 3px 4px 3px 0;
+}
+
+/* ── LOADING ── */
+#loading-msg {
+  text-align: center;
+  padding: 40px;
+  color: #888;
+  font-size: 15px;
+}
+.spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 3px solid #333;
+  border-top-color: #8B6FD4;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── LETTER OUTPUT ── */
+#letter-box {
+  background: #fff;
+  color: #111;
+  border-radius: 8px;
+  padding: 32px 36px;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+#laws-cited {
+  margin-bottom: 18px;
+}
+
+/* ── ERROR BANNER ── */
+#error-banner {
+  display: none;
+  background: #FC818120;
+  border: 1px solid #FC8181;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #FC8181;
+}
+

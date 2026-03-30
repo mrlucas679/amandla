@@ -1,22 +1,23 @@
 """
 Rate-limiting middleware for AMANDLA backend.
 
-Simple in-memory rate limiter that tracks request counts per endpoint
-path per minute. Returns HTTP 429 when limits are exceeded.
+Per-IP, per-endpoint in-memory rate limiter. Tracks request counts within
+a sliding minute window and returns HTTP 429 when limits are exceeded.
 
-Limits:
-  /speech         — 10 requests per minute
-  /rights/analyze — 5 requests per minute
-  /rights/letter  — 5 requests per minute
+Limits (per IP, per minute):
+  /speech         — 10 requests
+  /rights/analyze — 5 requests
+  /rights/letter  — 5 requests
 """
 import time
 import logging
 from collections import defaultdict
 from typing import Dict, Tuple
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +29,47 @@ RATE_LIMITS: Dict[str, int] = {
     "/rights/letter": 5,
 }
 
+# Fallback IP used when the client address cannot be determined
+# (e.g. behind a misconfigured proxy).
+_UNKNOWN_IP = "unknown"
+
+
+def _get_client_ip(request: Request) -> str:
+    """Extract the client IP from the request.
+
+    Checks the ``X-Forwarded-For`` header first (common behind reverse
+    proxies), then falls back to ``request.client.host``.
+
+    Args:
+        request: The incoming Starlette request object.
+
+    Returns:
+        A string representing the client's IP address.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # X-Forwarded-For may contain a comma-separated list; first entry
+        # is the original client IP.
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return _UNKNOWN_IP
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    In-memory rate limiter middleware.
+    Per-IP, per-endpoint in-memory rate limiter middleware.
 
-    Tracks the number of requests per endpoint path within a
-    sliding minute window. Returns HTTP 429 when the limit is
-    exceeded for any tracked endpoint.
+    Tracks the number of requests per (client_ip, endpoint_path) within
+    a sliding minute window. Returns HTTP 429 when the limit is exceeded
+    for any tracked endpoint.
     """
 
-    def __init__(self, app):
+    def __init__(self, app: ASGIApp) -> None:
         """Initialise the rate limiter with an empty request counter."""
-        super().__init__(app)
-        # Key: (path, minute_bucket) → Value: request count
-        self._counters: Dict[Tuple[str, int], int] = defaultdict(int)
+        super().__init__(app)  # type: ignore[misc]
+        # Key: (client_ip, path, minute_bucket) → Value: request count
+        self._counters: Dict[Tuple[str, str, int], int] = defaultdict(int)
         self._last_cleanup = time.time()
 
     def _get_minute_bucket(self) -> int:
@@ -59,14 +86,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         current_bucket = self._get_minute_bucket()
         expired_keys = [
             key for key in self._counters
-            if key[1] < current_bucket
+            if key[2] < current_bucket
         ]
         for key in expired_keys:
             del self._counters[key]
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
-        Check if the request exceeds the rate limit for its endpoint.
+        Check if the request exceeds the per-IP rate limit for its endpoint.
 
         Args:
             request: The incoming HTTP request.
@@ -79,14 +106,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         limit = RATE_LIMITS.get(path)
 
         if limit is not None:
+            client_ip = _get_client_ip(request)
             bucket = self._get_minute_bucket()
-            counter_key = (path, bucket)
+            counter_key = (client_ip, path, bucket)
             self._counters[counter_key] += 1
 
             if self._counters[counter_key] > limit:
                 logger.warning(
-                    "[RateLimit] %s exceeded %d req/min limit on %s",
-                    request.client.host if request.client else "unknown",
+                    "[RateLimit] IP %s exceeded %d req/min limit on %s",
+                    client_ip,
                     limit,
                     path,
                 )

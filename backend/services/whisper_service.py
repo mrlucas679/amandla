@@ -10,6 +10,7 @@ import tempfile
 import asyncio
 import subprocess
 import logging
+from typing import Any, Dict, Optional, Tuple
 
 # Note: dotenv is loaded once by backend.main at startup
 
@@ -22,14 +23,14 @@ NVIDIA_API_KEY     = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL    = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 
 WHISPER_TIMEOUT_S  = 45.0   # 45s is generous for CPU transcription of 30s clips
-WHISPER_LANGUAGE   = os.getenv("WHISPER_LANGUAGE", "en")   # Force language; empty string = auto-detect
+WHISPER_LANGUAGE   = os.getenv("WHISPER_LANGUAGE", "")   # Empty string = auto-detect (recommended)
 
 # Lazy-loaded — None until first use
 _model = None
 
 
-def get_model():
-    """Return the Whisper model, loading it on first call."""
+def get_model() -> Optional[Any]:
+    """Return the Whisper model, loading it on first call. Returns None if unavailable."""
     global _model
     if _model is not None:
         return _model
@@ -54,6 +55,7 @@ def convert_audio_to_wav(audio_bytes: bytes, mime_type: str = "audio/webm") -> b
         "audio/ogg":   ".ogg",
         "audio/mp4":   ".mp4",
         "audio/mpeg":  ".mp3",
+        "audio/mp3":   ".mp3",   # some browsers report 'audio/mp3' instead of 'audio/mpeg'
         "audio/wav":   ".wav",
         "audio/x-wav": ".wav",
     }
@@ -88,9 +90,11 @@ def convert_audio_to_wav(audio_bytes: bytes, mime_type: str = "audio/webm") -> b
 
 
 def _get_ffmpeg() -> str:
+    """Return path to the ffmpeg binary, preferring the bundled imageio_ffmpeg one."""
     try:
-        import imageio_ffmpeg
-        return imageio_ffmpeg.get_ffmpeg_exe()
+        # noinspection PyUnresolvedReferences
+        import imageio_ffmpeg  # type: ignore[import-untyped]
+        return imageio_ffmpeg.get_ffmpeg_exe()  # type: ignore[no-any-return]
     except Exception:
         return "ffmpeg"
 
@@ -106,7 +110,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
 
     try:
         # Load model in executor so it never blocks the event loop
-        model = await loop.run_in_executor(None, get_model)
+        model = await loop.run_in_executor(None, get_model)  # type: ignore[arg-type]
 
         if model is None and not NVIDIA_ENABLED:
             return {
@@ -117,7 +121,7 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
             }
 
         # Convert audio format in executor (may call ffmpeg)
-        wav_bytes = await loop.run_in_executor(
+        wav_bytes = await loop.run_in_executor(  # type: ignore[arg-type]
             None, lambda: convert_audio_to_wav(audio_bytes, mime_type)
         )
 
@@ -133,17 +137,21 @@ async def transcribe_audio(audio_bytes: bytes, mime_type: str = "audio/webm") ->
             # IMPORTANT: consume the segment generator inside the executor —
             # faster-whisper returns a lazy generator; iterating it outside the
             # executor would block the event loop.
-            def _run_transcription():
-                kwargs = {"beam_size": 5}
-                if WHISPER_LANGUAGE:
-                    kwargs["language"] = WHISPER_LANGUAGE
-                segs_gen, inf = model.transcribe(tmp_path, **kwargs)
+            def _run_transcription() -> Tuple[list, Any]:
+                # Build transcribe kwargs via dict unpacking to keep type as Dict[str, Any].
+                # Avoids the Pyright Dict[str, int] vs Dict[str, str] mismatch that
+                # occurs when conditionally assigning different value types to one dict.
+                lang_kwarg: Dict[str, Any] = (
+                    {"language": WHISPER_LANGUAGE} if WHISPER_LANGUAGE else {}
+                )
+                transcribe_kwargs: Dict[str, Any] = {"beam_size": 5, **lang_kwarg}
+                segs_gen, inf = model.transcribe(tmp_path, **transcribe_kwargs)
                 segs = list(segs_gen)   # force full computation here in the thread
                 return segs, inf
 
             try:
                 segments, info = await asyncio.wait_for(
-                    loop.run_in_executor(None, _run_transcription),
+                    loop.run_in_executor(None, _run_transcription),  # type: ignore[arg-type]
                     timeout=WHISPER_TIMEOUT_S
                 )
             except asyncio.TimeoutError:

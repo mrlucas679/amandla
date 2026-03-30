@@ -10,30 +10,25 @@ import os
 import re
 import json
 import logging
-import httpx
-from typing import Optional
+import functools
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ── Named constants for Ollama connection ──────────────────
-# Loaded from environment variables via dotenv
-_OLLAMA_BASE_URL = None
-_OLLAMA_MODEL = None
 
+@functools.lru_cache(maxsize=1)
+def _get_ollama_config() -> Tuple[str, str]:
+    """Return (base_url, model_name) from environment variables.
 
-def _get_ollama_config():
-    """Load Ollama connection settings from environment variables.
+    Result is cached after first call so os.getenv() is only called once.
+    dotenv is loaded by backend.main at startup before this is ever called.
 
     Returns:
-        Tuple of (base_url, model_name) strings.
+        Tuple of (base_url, model_name) — both are guaranteed non-empty strings.
     """
-    global _OLLAMA_BASE_URL, _OLLAMA_MODEL
-    if _OLLAMA_BASE_URL is None:
-        from dotenv import load_dotenv
-        load_dotenv()
-        _OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        _OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "amandla")
-    return _OLLAMA_BASE_URL, _OLLAMA_MODEL
+    base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model: str = os.getenv("OLLAMA_MODEL", "amandla")
+    return base_url, model
 
 
 # ── System prompt for SA disability rights analysis ────────
@@ -54,36 +49,51 @@ Key laws:
 Always cite exact section numbers."""
 
 
-async def _call_ollama(prompt: str, max_tokens: int = 1500) -> Optional[str]:
+async def _call_ollama(
+    prompt: str,
+    max_tokens: int = 1500,
+    system: Optional[str] = None,
+) -> Optional[str]:
     """Send a prompt to the local Ollama model and return the response text.
 
     Args:
-        prompt: The full prompt string to send.
+        prompt: The user prompt string to send.
         max_tokens: Maximum number of tokens in the response.
+        system: Optional system prompt that overrides the Modelfile default.
+            Pass _RIGHTS_SYSTEM here so the Modelfile's landmark-recognition
+            system prompt does not interfere with rights analysis calls.
 
     Returns:
         The response text string, or None if Ollama is unreachable.
     """
     try:
         base_url, model_name = _get_ollama_config()
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{base_url}/api/generate",
-                json={
-                    "model": model_name,
-                    "prompt": prompt,
-                    "stream": False,
-                    "temperature": 0.2,
-                    "num_predict": max_tokens,
-                },
-            )
-            if response.status_code != 200:
-                logger.warning(f"[Rights] Ollama returned status {response.status_code}")
-                return None
-            text = response.json().get("response", "").strip()
-            if text:
-                return text
+        # Build request body. Always include the rights system prompt so the
+        # Modelfile's landmark-recognition default never leaks into rights calls.
+        request_body: dict = {
+            "model": model_name,
+            "prompt": prompt,
+            "stream": False,
+            "temperature": 0.2,
+            "num_predict": max_tokens,
+        }
+        if system:
+            request_body["system"] = system
+
+        from backend.services.ollama_pool import get_client
+        client = get_client()
+        response = await client.post(
+            f"{base_url}/api/generate",
+            json=request_body,
+            timeout=30.0,
+        )
+        if response.status_code != 200:
+            logger.warning(f"[Rights] Ollama returned status {response.status_code}")
             return None
+        text = response.json().get("response", "").strip()
+        if text:
+            return text
+        return None
     except Exception as e:
         logger.warning(f"[Rights] Ollama request failed: {e}")
         return None
@@ -103,9 +113,7 @@ async def analyse_incident(description: str, incident_type: str = "workplace") -
         Dict with what_happened, location, severity, laws_likely_violated.
     """
     # Try Ollama first
-    prompt = f"""{_RIGHTS_SYSTEM}
-
-Analyse this South African disability discrimination incident and return ONLY a JSON object.
+    prompt = f"""Analyse this South African disability discrimination incident and return ONLY a JSON object.
 
 Incident type: {incident_type}
 Description: {description}
@@ -117,7 +125,7 @@ Severity guide: serious = job loss / physical harm / denied emergency care; mode
 Always include Constitution s.9(3)."""
 
     try:
-        raw_response = await _call_ollama(prompt, max_tokens=500)
+        raw_response = await _call_ollama(prompt, max_tokens=500, system=_RIGHTS_SYSTEM)
         if raw_response:
             # Strip markdown code fences if Ollama wraps its output
             cleaned = re.sub(r"^```[a-z]*\n?", "", raw_response)
@@ -164,9 +172,7 @@ async def generate_rights_letter(
     if analysis and analysis.get("laws_likely_violated"):
         laws_context = f"\nLaws already identified: {', '.join(analysis['laws_likely_violated'])}"
 
-    prompt = f"""{_RIGHTS_SYSTEM}
-
-Write a complete, formal South African disability rights complaint letter.
+    prompt = f"""Write a complete, formal South African disability rights complaint letter.
 
 Complainant: {user_name}
 Respondent: {employer_name}
@@ -190,7 +196,7 @@ Requirements:
 Write ONLY the letter — no commentary."""
 
     try:
-        raw_letter = await _call_ollama(prompt, max_tokens=1500)
+        raw_letter = await _call_ollama(prompt, max_tokens=1500, system=_RIGHTS_SYSTEM)
         if raw_letter and len(raw_letter) > 100:
             # Extract which laws were cited in the letter
             laws_cited = _extract_laws_from_text(raw_letter)

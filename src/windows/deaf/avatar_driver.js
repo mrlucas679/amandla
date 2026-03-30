@@ -32,8 +32,7 @@
 
   // ── BONE MAP ──────────────────────────────────────────────────────────
   // Maps AMANDLA semantic joint names → Mixamo bone names inside the GLB.
-  // The app uses window.AMANDLA_SIGNS_V2.BONE_MAP when signs_library_v2.js
-  // is loaded; this is a self-contained fallback copy.
+  // Self-contained copy — no external dependency on other files.
   const BONE_MAP = {
     head:  'mixamorigHead',
     neck:  'mixamorigNeck',

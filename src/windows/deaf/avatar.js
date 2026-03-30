@@ -24,6 +24,16 @@
   let lastFrameTime = performance.now()
   let initialized = false
 
+  // FEAT-2: GLB avatar mode — when true, pose application uses AvatarDriver remapping
+  let useGLBRig = false
+  // References to the procedural skeleton meshes so we can hide them when GLB loads
+  let proceduralGroup = null
+
+  // UX-2: Sign progress tracking
+  let signProgressCallback = null
+  let totalSignCount = 0
+  let currentSignIndex = 0
+
   let targetHeadZ = 0
   let targetHeadX = 0
 
@@ -83,6 +93,8 @@
     scene.add(rim)
 
     buildAvatarSkeleton()
+    // FEAT-2: Try loading GLB avatar model — falls back to procedural skeleton on failure
+    tryLoadGLBModel()
     buildIdleSign()
     animate()
 
@@ -130,9 +142,13 @@
       purple: new THREE.MeshPhongMaterial({ color: 0x8B6FD4, shininess: 30 }),
     }
 
+    // FEAT-2: Wrap procedural skeleton in a group so we can hide it if GLB loads
+    proceduralGroup = new THREE.Group()
+    scene.add(proceduralGroup)
+
     const torsoGroup = new THREE.Group()
     torsoGroup.position.set(0, -0.1, 0)
-    scene.add(torsoGroup)
+    proceduralGroup.add(torsoGroup)
 
     const torsoMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.26, 1.05, 12), mat.shirt)
     torsoGroup.add(torsoMesh)
@@ -161,6 +177,87 @@
 
     avatarBones.R = buildArm('R', -0.34, mat, torsoGroup)
     avatarBones.L = buildArm('L',  0.34, mat, torsoGroup)
+  }
+
+  // ── FEAT-2: GLB MODEL LOADER ──────────────────────────────
+  // Attempts to load a GLB avatar model and bind its bones via AvatarDriver.
+  // On success: hides procedural skeleton, uses GLB rig for pose application.
+  // On failure: keeps the procedural skeleton (graceful fallback).
+  function tryLoadGLBModel() {
+    // Guard: GLTFLoader and AvatarDriver must both be available
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      console.log('[Avatar] GLTFLoader not available — using procedural skeleton')
+      return
+    }
+    if (typeof window.AvatarDriver === 'undefined') {
+      console.log('[Avatar] AvatarDriver not available — using procedural skeleton')
+      return
+    }
+
+    var loader = new THREE.GLTFLoader()
+    var glbPath = '../../../assets/models/avatar.glb'
+
+    loader.load(
+      glbPath,
+      function (gltf) {
+        console.log('[Avatar] GLB model loaded successfully')
+        var model = gltf.scene
+
+        // Scale and position the GLB model to match the procedural skeleton's framing
+        model.scale.set(1.0, 1.0, 1.0)
+        model.position.set(0, -0.9, 0)
+
+        // Enable shadows on all meshes in the loaded model
+        model.traverse(function (node) {
+          if (node.isMesh) {
+            node.castShadow = true
+            node.receiveShadow = true
+          }
+        })
+
+        // Bind GLB bones → avatarBones dict via AvatarDriver
+        var savedBones = {
+          R: avatarBones.R,
+          L: avatarBones.L,
+          head: avatarBones.head,
+          torso: avatarBones.torso,
+        }
+
+        window.AvatarDriver.bindBonesFromGLTF(model, avatarBones)
+
+        // Verify at least the shoulder bones were found
+        if (!avatarBones.R || !avatarBones.R.shoulder) {
+          console.warn('[Avatar] GLB rig binding incomplete — keeping procedural skeleton')
+          // Restore the procedural bone references
+          avatarBones.R = savedBones.R
+          avatarBones.L = savedBones.L
+          avatarBones.head = savedBones.head
+          avatarBones.torso = savedBones.torso
+          return
+        }
+
+        // Success: add GLB to scene and hide procedural skeleton
+        scene.add(model)
+        if (proceduralGroup) {
+          proceduralGroup.visible = false
+        }
+        useGLBRig = true
+        console.log('[Avatar] Switched to GLB rig — procedural skeleton hidden')
+
+        // Re-apply idle pose to the new GLB bones
+        buildIdleSign()
+      },
+      function (progress) {
+        // Loading progress — log percentage for debugging large models
+        if (progress.total > 0) {
+          var pct = Math.round((progress.loaded / progress.total) * 100)
+          if (pct % 25 === 0) console.log('[Avatar] GLB loading: ' + pct + '%')
+        }
+      },
+      function (error) {
+        console.warn('[Avatar] GLB model load failed — keeping procedural skeleton:', error)
+      }
+    )
   }
 
   function buildArm(side, torsoX, mat, parent) {
@@ -240,16 +337,35 @@
 
   // ── POSE APPLICATION ──────────────────────────────────────
   // Direct-set from TransitionEngine output — no lerp, engine handles blending
+  // FEAT-2: When GLB rig is active, uses AvatarDriver for Mixamo axis remapping
   function applyPoseDirect(pose) {
     if (!pose || !avatarBones.R) return
-    for (const side of ['R', 'L']) {
-      const arm  = avatarBones[side]
-      const data = pose[side]
-      if (!arm || !data) continue
-      if (data.sh) arm.shoulder.rotation.set(data.sh.x, data.sh.y, data.sh.z)
-      if (data.el) arm.elbow.rotation.set(data.el.x, data.el.y, data.el.z)
-      if (data.wr) arm.wrist.rotation.set(data.wr.x, data.wr.y, data.wr.z)
-      if (data.hand) applyHandshapeDirect(arm.fingers, data.hand)
+
+    if (useGLBRig && window.AvatarDriver) {
+      // GLB mode: use AvatarDriver for proper Mixamo bone axis mapping
+      window.AvatarDriver.remapPoseForMixamo(pose, avatarBones)
+      // Apply handshapes using GLB finger axis (.z instead of .x)
+      for (var s = 0; s < 2; s++) {
+        var side = s === 0 ? 'R' : 'L'
+        var data = pose[side]
+        var arm  = avatarBones[side]
+        if (data && data.hand && arm && arm.fingers) {
+          window.AvatarDriver.applyHandshapeGLTF(arm.fingers, data.hand)
+        }
+      }
+      // Distribute wrist twist to prevent candy-wrapper deformation
+      window.AvatarDriver.updateTwistBones(scene, avatarBones)
+    } else {
+      // Procedural mode: direct Euler rotation set
+      for (const side of ['R', 'L']) {
+        const arm  = avatarBones[side]
+        const data = pose[side]
+        if (!arm || !data) continue
+        if (data.sh) arm.shoulder.rotation.set(data.sh.x, data.sh.y, data.sh.z)
+        if (data.el) arm.elbow.rotation.set(data.el.x, data.el.y, data.el.z)
+        if (data.wr) arm.wrist.rotation.set(data.wr.x, data.wr.y, data.wr.z)
+        if (data.hand) applyHandshapeDirect(arm.fingers, data.hand)
+      }
     }
   }
 
@@ -373,6 +489,12 @@
     animState = 'transitioning'
     updateLabel(currentSign ? currentSign.name : '')
     computeHeadTarget(currentSign)
+
+    // UX-2: Notify progress listener each time a sign begins
+    currentSignIndex++
+    if (signProgressCallback) {
+      try { signProgressCallback(currentSignIndex, totalSignCount) } catch (_) { /* ignore */ }
+    }
   }
 
   // ── ANIMATION LOOP ────────────────────────────────────────
@@ -468,12 +590,18 @@
     queueSign:     queueSign,
     queueSentence: queueSentence,
     playSignNow:   playSignNow,
-    destroyAvatar: destroyAvatar
+    destroyAvatar: destroyAvatar,
+    // UX-2: Register a callback fired each time a sign begins animating.
+    // Callback signature: function(currentIndex, totalCount)
+    onSignProgress: function (cb) { signProgressCallback = cb }
   }
 
   window.avatarInit = function () { initAvatar('avatar-canvas') }
   window.avatarPlaySigns = function (signs, text) {
     if (!initialized) initAvatar('avatar-canvas')
+    // UX-2: Reset progress counters for the new batch
+    currentSignIndex = 0
+    totalSignCount = Array.isArray(signs) ? signs.length : 0
     if (Array.isArray(signs)) signs.forEach(function (s) { queueSign(s) })
     updateLabel(text || (signs && signs[0]) || '')
   }

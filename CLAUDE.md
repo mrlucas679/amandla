@@ -1,117 +1,218 @@
-# CLAUDE.md
+# CLAUDE.md — AMANDLA Project: Authoritative State Document
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> **Last updated**: March 30, 2026
+> This is the SINGLE SOURCE OF TRUTH for AI coding agents working on AMANDLA.
+> When this file conflicts with ANY other file, THIS FILE WINS.
 
-## Project Overview
+---
 
-AMANDLA is a real-time sign language communication bridge for disabled South Africans. It is a hybrid **Electron + FastAPI** desktop application with two synchronized windows: a hearing user's input window and a deaf user's display window.
+## 1. What AMANDLA Is
 
-## Commands
+A hybrid **Electron + FastAPI** desktop application — a real-time sign language
+communication bridge for disabled South Africans.
 
-### Starting the App
+Two side-by-side windows share one WebSocket session:
+- **Left (Hearing)**: text / speech input
+- **Right (Deaf)**: 3D avatar signs the translation back
+
+---
+
+## 2. How to Start the App
+
 ```bash
-npm start                  # Starts backend + waits for health check + launches Electron
+# Prerequisite — must be running first:
+ollama serve
+
+# Start everything:
+npm start
 ```
 
-### Running Services Individually
-```bash
-npm run backend            # FastAPI backend only (uvicorn, hot-reload, port 8000)
-npm run electron           # Electron frontend only
-npm run dev                # Electron with Node inspector attached
-```
+`npm start` runs the FastAPI backend on port 8000, waits for the health check,
+then launches Electron. Both windows auto-connect via WebSocket.
 
-### Building
-```bash
-npm run build              # electron-builder → dist/ (NSIS installer for Windows)
-```
+---
 
-### Backend Only (alternative)
-```bash
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### Testing Scripts
-```bash
-python scripts/ws_test.py           # WebSocket connection smoke test
-python scripts/post_speech_test.py  # Speech endpoint smoke test
-```
-
-### External Services Required
-```bash
-ollama serve               # Must be running on port 11434 before starting the app
-```
-
-### Health Check
-```bash
-curl http://localhost:8000/health
-```
-
-## Architecture
-
-### Three-Layer Structure
+## 3. Project Architecture (READ THIS BEFORE TOUCHING ANY FILE)
 
 ```
-Electron Main Process (src/main.js)
-  └─ Creates split-screen BrowserWindow (hearing left, deaf right)
-  └─ Generates SESSION_ID, dispatches via IPC to both windows
+Electron Main (src/main.js)
+  └─ Creates two BrowserWindows: hearing (left) + deaf (right)
+  └─ Generates SESSION_ID once; sends it to both windows via IPC
+  └─ Session ID format: 'amandla-' + Date.now() + '-' + randomHex
 
 Preload Bridge (src/preload/preload.js)
-  └─ Exposes window.amandla.{connect, send, onMessage, onConnectionChange}
-  └─ Manages WebSocket lifecycle — NOT direct HTTP from frontend
+  └─ The ONLY way renderers talk to the backend
+  └─ Exposes window.amandla.{ connect, send, onMessage, onConnectionChange,
+       uploadSpeech, requestStatus, analyzeRights, generateLetter, openRights,
+       requestHistory, listSessions }
+  └─ All backend calls go through WebSocket — zero direct fetch() from renderers
 
 Backend (backend/main.py — FastAPI)
-  └─ WS /ws/{sessionId}/{role}  ← Main communication channel
-  └─ POST /speech               ← Audio upload (Whisper transcription)
-  └─ GET /health
-  └─ Services: whisper_service.py (STT), ollama_service.py (sign lookup)
+  └─ WS  /ws/{sessionId}/{role}     ← all real-time communication
+  └─ POST /speech                   ← kept for direct API testing only
+  └─ GET  /health                   ← liveness probe
+  └─ GET  /api/status               ← AI service health
+  └─ POST /rights/analyze           ← kept for direct API testing only
+  └─ POST /rights/letter            ← kept for direct API testing only
+  └─ Services: whisper_service, ollama_service, claude_service, sign_maps
+
+Signs Library (signs_library.js — root)
+  └─ 100+ SASL signs from Einstein Hands SASL Dictionary
+  └─ Loaded by deaf window as window.AMANDLA_SIGNS
+  └─ sentenceToSigns(text) → array of sign objects
+  └─ fingerspell(word) → letter-by-letter fallback
+  └─ Word mappings live in backend/services/sign_maps.py (backend side)
+
+Avatar (src/windows/deaf/avatar.js)
+  └─ Three.js skeleton — reads from window.AMANDLA_SIGNS
+  └─ State machine: idle → transitioning → holding → gap → idle
+  └─ Public API: window.avatarPlaySigns(signs, text)
 ```
 
-### Communication Flow
-
-1. Hearing window captures text or audio
-2. Frontend sends via `window.amandla.send({type: 'text', text: '...'})` — goes through WebSocket only
-3. Backend receives, calls `sentence_to_sign_names(text)` → returns array of sign names
-4. Backend broadcasts sign array to deaf window in same session
+### Communication Flow (Hearing → Deaf)
+1. Hearing user types or speaks
+2. `window.amandla.send({type:'text', text:'...'})` → WebSocket → backend
+3. Backend: `_text_to_sasl_signs(text)` → SASL transformer → sign names array
+4. Backend broadcasts `{type:'signs', signs:[...]}` to deaf window
 5. Deaf window calls `window.avatarPlaySigns(signs, text)` to animate
 
-### Session Management
+### Communication Flow (Deaf → Hearing)
+1. Deaf user taps quick-sign button or MediaPipe detects a sign
+2. `window.amandla.send({type:'sign', text:'HELLO'})` → WebSocket → backend
+3. Backend buffers signs; after 1.5s silence → `_signs_to_english(signs)`
+4. Backend sends `{type:'deaf_speech', text:'Hello.'}` to hearing window
+5. Hearing window speaks the text aloud via TTS
 
-- Session ID format: `'amandla-' + Date.now() + '-' + randomHex`
-- Backend stores per-session state: `sessions[sessionId] = {users: {role: ws}, queue: []}`
-- Both windows auto-connect to `ws://localhost:8000/ws/{sessionId}/{hearing|deaf}` on load
+---
 
-### Signs Library
+## 4. ⛔ DO NOT RECREATE — Intentionally Deleted Files
 
-Sign data lives in `signs_library.js` (root) and is imported by both windows. Each sign entry:
-```javascript
-{
-  name: 'HELLO',
-  shape: '...',   // human description
-  R: { sh, el, wr, hand: {i, m, r, p, t} },  // right arm joint rotations
-  L: { ... },     // left arm
-  osc: { j, ax, amp, freq }  // oscillation for animated signs
-}
+These files were **deliberately removed**. Do NOT recreate them. Ever.
+
+| File | Why deleted |
+|------|-------------|
+| `src/windows/hearing/signs_library.js` | Dead code — signs library is loaded only by the deaf window, not the hearing window |
+| `src/windows/hearing/avatar.js` | Dead code — avatar lives only in the deaf window |
+
+If you see these mentioned in any other doc file, ignore it — those docs are stale.
+
+---
+
+## 5. ⛔ DO NOT ADD BACK — Intentionally Removed Code
+
+| What | Where it was | Why removed |
+|------|-------------|-------------|
+| `load_dotenv()` calls | `ollama_service.py`, `nvidia_service.py`, inside `claude_service._get_ollama_config()` | `backend/main.py` calls `load_dotenv()` once at startup before any service is imported — calling it again in services is redundant |
+| `"error": str(e)` in HTTP responses | `/speech` endpoint in `main.py` | Exposes raw Python exception details to clients — security risk |
+| `allow_origins=["http://localhost:8000"]` | `main.py` CORS config | **This breaks Electron** — Electron renderers do not originate from localhost; CORS must stay `["*"]` for desktop apps |
+
+---
+
+## 6. Key Constraints (Non-Negotiable)
+
+### Electron
+- `contextIsolation: true`, `nodeIntegration: false` — always
+- No `require()` in renderer code — use the preload bridge only
+- CORS on FastAPI **must** be `allow_origins=["*"]` — Electron is not a browser origin
+- CSP allows `https://fonts.googleapis.com` (style-src) and `https://fonts.gstatic.com` (font-src)
+
+### WebSocket
+- Session roles are exactly: `"hearing"`, `"deaf"`, `"rights"`
+- Message types (lowercase): `text`, `speech_upload`, `signs`, `sign`, `translating`,
+  `deaf_speech`, `sasl_text`, `assist_phrase`, `landmarks`, `emergency`, `status_request`,
+  `rights_analyze`, `rights_letter`, `history_request`, `history_response`, `sasl_ack`, `turn`
+- All request/response pairs include a `request_id` field for promise resolution in preload.js
+- Broadcast messages (`signs`, `deaf_speech`, `turn`) do NOT include `request_id`
+
+### Backend
+- `.env` is loaded ONCE in `backend/main.py` via `load_dotenv()` — never again in services
+- Session state is in-memory (`sessions` dict) — restart clears it, this is intentional
+- `_sign_buffers` and `_sign_tasks` are cleaned up in the WebSocket `finally` block
+- A session reaper background task removes empty sessions after 30 minutes
+- Maximum audio upload: 10 MB
+- Maximum text message: 5000 chars
+
+### Signs / SASL
+- `sign_maps.py` is the SINGLE SOURCE OF TRUTH for English → SASL word mappings
+- Modal verbs (`will`, `must`, `can`, etc.) map to SASL signs — they are NOT in FILLER
+- `FINISH`/`WILL` aspect markers are critical SASL grammar — never drop them
+- `FILLER` only contains words with zero SASL equivalent (articles, prepositions, etc.)
+
+---
+
+## 7. Environment Variables (`.env`)
+
 ```
-The avatar in `src/windows/deaf/avatar.js` is a placeholder — Three.js animation is the main unimplemented piece.
-
-### Key Constraints (from AGENTS.md)
-
-- **Mono-window split-screen**: Both views live in one Electron `BrowserWindow`, never separate windows
-- **WebSocket-only frontend**: No direct `fetch`/XHR from renderer to backend — all communication through the preload `window.amandla` API
-- **Backend is stateful per session**: Session dictionary is in-memory; restart clears all sessions
-
-## Environment
-
-Configuration via `.env` at project root:
-```
-WHISPER_MODEL=small
-WHISPER_DEVICE=cpu
-OLLAMA_MODEL=amandla          # Custom model defined in Modelfile (based on qwen2.5:3b)
+WHISPER_MODEL=small          # tiny|base|small|medium|large
+WHISPER_DEVICE=cpu           # cpu|cuda
+WHISPER_LANGUAGE=            # empty = auto-detect (recommended)
+OLLAMA_MODEL=amandla         # must be created: ollama create amandla -f Modelfile
 OLLAMA_BASE_URL=http://localhost:11434
 BACKEND_HOST=0.0.0.0
 BACKEND_PORT=8000
-ANTHROPIC_API_KEY=            # Optional
-OPENAI_API_KEY=               # Optional
+NVIDIA_ENABLED=false         # set true only if you have an NVIDIA API key
+NVIDIA_API_KEY=              # get from build.nvidia.com
+ANTHROPIC_API_KEY=           # optional cloud AI
+OPENAI_API_KEY=              # optional cloud AI
 ```
 
-The Ollama model (`amandla`) is defined in `Modelfile` and must be created once with `ollama create amandla -f Modelfile`.
+---
+
+## 8. Running the Tests
+
+```bash
+python scripts/ws_test.py             # WebSocket smoke test
+python scripts/post_speech_test.py    # Speech endpoint test
+curl http://localhost:8000/health     # Quick health check
+```
+
+---
+
+## 9. File Map — What Each File Does
+
+| File | Purpose | Edit frequency |
+|------|---------|----------------|
+| `src/main.js` | Electron window creation, session ID, CSP | Rarely |
+| `src/preload/preload.js` | WebSocket bridge, IPC, promise-based requests | Rarely |
+| `src/windows/hearing/index.html` | Hearing UI — HTML shell | Occasionally |
+| `src/windows/hearing/hearing.css` | Hearing window styles | Occasionally |
+| `src/windows/hearing/hearing.js` | Hearing window logic — text input, mic, TTS | Often |
+| `src/windows/deaf/index.html` | Deaf UI — HTML shell | Occasionally |
+| `src/windows/deaf/deaf.css` | Deaf window styles | Occasionally |
+| `src/windows/deaf/deaf.js` | Deaf window logic — avatar, sign buttons, camera | Often |
+| `src/windows/deaf/avatar.js` | Three.js avatar engine v2 | Occasionally |
+| `src/windows/rights/index.html` | Rights UI — HTML shell | Occasionally |
+| `src/windows/rights/rights.css` | Rights window styles | Occasionally |
+| `src/windows/rights/rights.js` | Rights window logic — wizard, PDF, API calls | Often |
+| `signs_library.js` | 100+ SASL sign objects + sentenceToSigns() | Rarely |
+| `backend/main.py` | FastAPI app, WebSocket handler, all routes | Often |
+| `backend/middleware.py` | Rate limiting middleware | Rarely |
+| `backend/services/sign_maps.py` | English → SASL word/phrase mappings | Often |
+| `backend/services/whisper_service.py` | Speech-to-text (faster-whisper + ffmpeg) | Rarely |
+| `backend/services/ollama_service.py` | Sign recognition via Ollama | Rarely |
+| `backend/services/claude_service.py` | Rights analysis + letter generation | Rarely |
+| `backend/services/nvidia_service.py` | NVIDIA NIM fallback (optional) | Rarely |
+| `backend/services/ollama_client.py` | Classify text → sign names via Ollama | Rarely |
+| `sasl_transformer/transformer.py` | Full SASL grammar transformer | Occasionally |
+| `Modelfile` | Ollama amandla model definition | Once |
+
+---
+
+## 10. Stale Docs — Ignore These
+
+The following files still exist but contain **outdated information**. Their first
+line says "ARCHIVED". Do not follow their instructions:
+
+- `APPLICATION_STARTED.md` — March 24 snapshot
+- `FINAL_STATUS_REPORT.md` — March 24 snapshot
+- `OPERATIONAL_STATUS.md` — March 24 snapshot
+- `SETUP_COMPLETE.md` — references deleted files
+- `SETUP_VERIFICATION.md` — references deleted files
+- `WHAT_WAS_COMPLETED.md` — duplicate of above
+- `PROJECT_SETUP_SUMMARY.md` — duplicate of above
+- `START_HERE.md` — pointed to stale docs
+- `NEXT_STEPS.md` — outdated roadmap
+- `AGENT_TASKS.md` — incorrectly said "all fixed"
+- `AGENT_PROMPTS.md` — contained wrong CORS fix that breaks Electron
+- `AMANDLA_BLUEPRINT (2).md` — original hackathon script, superseded
+

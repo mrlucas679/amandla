@@ -12,6 +12,7 @@ These tests cover:
 
 import json
 import os
+import tempfile
 import pytest
 from pathlib import Path
 
@@ -61,7 +62,7 @@ class TestSignLibrary:
                 },
             }
         }
-        self.test_path = "/tmp/test_sign_library.json"
+        self.test_path = os.path.join(tempfile.gettempdir(), "test_sign_library.json")
         with open(self.test_path, "w") as f:
             json.dump(self.test_data, f)
 
@@ -150,7 +151,7 @@ class TestSignLibrary:
         lib = SignLibrary(self.test_path)
         lib.add_sign("WATER", "sign_water", "nouns")
 
-        save_path = "/tmp/test_save_library.json"
+        save_path = os.path.join(tempfile.gettempdir(), "test_save_library.json")
         lib.save_to_file(save_path)
 
         lib2 = SignLibrary(save_path)

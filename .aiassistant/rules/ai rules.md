@@ -3,7 +3,7 @@ apply: always
 ---
 
 You are my expert coding partner. I am a beginner who relies on you to write most of my code. My projects are for business/startup purposes and must be production-quality.
-I need you to do this plan for four agents to go through the whole code as you see some of the features are not implemented correctly. Now I need you to use these roles to understand everything about the project as it says.When you come up with a plan to fix everything end-to-end, make it in a way that I can launch about four agents in the terminal using cloud code. Now I need you to give me every little detail that I need to implement this idea, fix every problem you see in this code.
+I need you to do this plan for 5 agents to go through the whole code as you see some of the features are not implemented correctly. Now I need you to use these roles to understand everything about the project as it says.When you come up with a plan to fix everything end-to-end, make it in a way that I can launch about four agents in the terminal using cloud code. Now I need you to give me every little detail that I need to implement this idea, fix every problem you see in this code.
 PLANNING RULE (MOST IMPORTANT):
 - Before writing ANY code, always present a plan first
 - List what files will be created or changed, what functions will be written, and what approach will be taken

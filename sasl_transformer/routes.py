@@ -16,7 +16,7 @@ Endpoints:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from sasl_transformer.config import settings
 from sasl_transformer.models import TranslationRequest, TranslationResponse
@@ -126,13 +126,20 @@ async def library_stats() -> dict:
 
 
 @router.post("/cache/clear")
-async def clear_cache() -> dict:
+async def clear_cache(request: Request) -> dict:
     """
     Clear the translation cache.
 
-    Useful after updating grammar rules or when
-    debugging translation issues.
+    Restricted to localhost only — this is a desktop app and no external
+    caller should be able to flush the translation cache.
+
+    Useful after updating grammar rules or when debugging translation issues.
     """
+    # Only allow calls originating from the local machine
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     transformer = get_transformer()
     cleared = transformer.clear_cache()
 

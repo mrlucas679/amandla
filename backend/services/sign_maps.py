@@ -21,6 +21,16 @@ PHRASE_MAP = {
     "good morning": ["GOOD", "MORNING"],
     "good night":   ["GOOD", "NIGHT"],
     "good bye":     ["GOODBYE"],
+    # Modal / obligation phrases — map to single SASL sign
+    "have to":      ["MUST"],
+    "need to":      ["MUST"],
+    "ought to":     ["MUST"],
+    "able to":      ["CAN"],
+    "going to":     ["WILL"],
+    # Ability negation
+    "can not":      ["CAN NOT"],
+    "can't":        ["CAN NOT"],
+    "cannot":       ["CAN NOT"],
 }
 
 # ── Word-level mappings ──────────────────────────────────────────────
@@ -39,13 +49,15 @@ WORD_MAP = {
     "yes": "YES", "ok": "YES", "okay": "YES", "yep": "YES", "yup": "YES",
     "correct": "YES", "affirmative": "YES", "sure": "YES",
     "no": "NO", "nope": "NO", "nah": "NO",
-    "not": "NO", "never": "NO", "nobody": "NO", "nothing": "NO", "none": "NO",
-    "don't": "NO", "dont": "NO", "doesn't": "NO", "doesnt": "NO",
-    "didn't": "NO", "didnt": "NO", "can't": "NO", "cant": "NO",
-    "won't": "NO", "wont": "NO", "isn't": "NO", "isnt": "NO",
-    "aren't": "NO", "arent": "NO", "wasn't": "NO", "wasnt": "NO",
-    "weren't": "NO", "werent": "NO", "shouldn't": "NO", "shouldnt": "NO",
-    "wouldn't": "NO", "wouldnt": "NO", "couldn't": "NO", "couldnt": "NO",
+    # "not" is the SASL negation marker — distinct from the answer "no"
+    "not": "NOT", "never": "NOT",
+    "nobody": "NO", "nothing": "NO", "none": "NO",
+    "don't": "NOT", "dont": "NOT", "doesn't": "NOT", "doesnt": "NOT",
+    "didn't": "NOT", "didnt": "NOT",
+    "won't": "NOT", "wont": "NOT", "isn't": "NOT", "isnt": "NOT",
+    "aren't": "NOT", "arent": "NOT", "wasn't": "NOT", "wasnt": "NOT",
+    "weren't": "NOT", "werent": "NOT", "shouldn't": "NOT", "shouldnt": "NOT",
+    "wouldn't": "NOT", "wouldnt": "NOT", "couldn't": "NOT", "couldnt": "NOT",
 
     # ── Instructions ────────────────────────────────────────
     "help": "HELP", "assist": "HELP", "assistance": "HELP", "helping": "HELP",
@@ -215,19 +227,48 @@ WORD_MAP = {
 
     # ── Time ────────────────────────────────────────────────
     "today": "TODAY", "now": "NOW", "currently": "NOW", "soon": "NOW",
-    "morning": "MORNING", "afternoon": "MORNING",
+    "morning": "MORNING",
+    # Note: "afternoon" has no dedicated sign in the current library and is
+    # intentionally omitted so it falls through to fingerspelling.
     "evening": "NIGHT", "night": "NIGHT", "tonight": "NIGHT",
+    "yesterday": "YESTERDAY",
+    "tomorrow": "TOMORROW",
+
+    # ── SASL Aspect / Tense Markers ─────────────────────────
+    # FINISH marks a completed (past) action in SASL grammar.
+    # WILL marks a future action.
+    # These are critical grammar words — do NOT put them in FILLER.
+    "finish": "FINISH", "finished": "FINISH", "done": "FINISH",
+    "complete": "FINISH", "completed": "FINISH",
+    "already": "FINISH",     # "I already ate" → FINISH EAT in SASL
+    "will": "WILL", "shall": "WILL", "going to": "WILL",
+    "would": "WILL",         # conditional future — closest SASL equivalent
+
+    # ── SASL Modal / Ability Markers ────────────────────────
+    # CAN marks ability; MUST marks obligation.
+    # These had been silently dropped — they must produce a sign or be fingerspelled.
+    "can": "CAN", "could": "CAN", "able": "CAN", "able to": "CAN",
+    "cannot": "CAN NOT", "can't": "CAN NOT", "cant": "CAN NOT",
+    "must": "MUST", "should": "MUST", "have to": "MUST",
+    "need to": "MUST", "ought to": "MUST",
+    "may": "CAN", "might": "CAN",     # possibility — maps to CAN in SASL
+
+    # ── Intensifiers / Adverbs with SASL signs ───────────────
+    "very": "VERY", "really": "VERY", "extremely": "VERY",
+    "also": "ALSO", "too": "ALSO", "as well": "ALSO",
 }
 
 # ── Filler words to skip (no sign equivalent) ────────────────────────
+# IMPORTANT: Only put words here that have NO useful SASL equivalent.
+# Modal verbs (will/must/can), aspect markers (finish/already), and
+# intensifiers (very/also) are in WORD_MAP above — do NOT list them here.
 
 FILLER = {
     # Articles / determiners
     "the", "a", "an", "some", "any", "every", "each", "both", "either",
-    # Auxiliary verbs
+    # Auxiliary verbs — only the ones with no direct SASL sign
     "is", "am", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did",
-    "can", "could", "will", "would", "should", "shall", "must", "may", "might",
     # Prepositions / conjunctions
     "of", "to", "in", "for", "on", "with", "at", "by", "as", "from",
     "about", "between", "through", "before", "after", "during", "into", "onto",
@@ -236,11 +277,12 @@ FILLER = {
     "though", "however", "therefore", "yet", "nor",
     # Pronouns / determiners with no clear sign
     "it", "its", "itself", "this", "that", "these", "those",
-    # Common adverbs / fillers
-    "um", "uh", "ah", "oh", "hmm", "like", "just", "really", "very",
-    "also", "too", "even", "still", "already", "always", "often", "usually",
+    # Filler sounds and discourse particles
+    "um", "uh", "ah", "oh", "hmm", "like", "just",
+    # Adverbs that have no direct SASL sign equivalent
     "quite", "almost", "enough", "only", "other", "same", "another", "such",
-    # Subjective / modal words with no direct sign
+    "even", "still", "often", "usually",
+    # Subjective / stative verbs with no clear SASL sign
     "feel", "feels", "felt", "seem", "seems", "seemed",
     "become", "became", "becomes", "getting", "got",
     "next", "last", "first", "second", "third",

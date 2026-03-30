@@ -48,10 +48,11 @@ class SASLTransformerSettings(BaseSettings):
     )
 
     model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
+        # Do NOT set env_file here — backend/main.py calls load_dotenv() once at
+        # startup and all modules share os.environ. Loading .env again here would
+        # violate the CLAUDE.md constraint of a single load_dotenv() call.
         "case_sensitive": False,
-        "extra": "ignore",   # Ignore other .env vars (WHISPER_MODEL, etc.)
+        "extra": "ignore",   # Ignore other env vars (WHISPER_MODEL, etc.)
     }
 
 

@@ -16,9 +16,8 @@ import os
 import tempfile
 import logging
 import httpx
-from dotenv import load_dotenv
 
-load_dotenv()
+# Note: dotenv is loaded once by backend.main at startup — do NOT call load_dotenv() here
 
 logger = logging.getLogger(__name__)
 

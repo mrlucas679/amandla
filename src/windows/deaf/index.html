@@ -6,301 +6,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="../../styles/design-system.css">
   <link rel="stylesheet" href="../../styles/animations.css">
-
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: #0D0D0D;
-      color: #F5F0E8;
-      font-family: Arial, Helvetica, sans-serif;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* ── TOP BAR ── */
-    #topbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 7px 14px;
-      background: #111;
-      border-bottom: 1px solid #222;
-      flex-shrink: 0;
-      gap: 10px;
-    }
-    #topbar .brand { font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #8B6FD4; white-space: nowrap; }
-    #topbar .right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-    #conn-status { font-size: 11px; color: #888; }
-    #conn-status.connected { color: #2EA880; }
-    #status-dot {
-      width: 9px; height: 9px; border-radius: 50%;
-      background: #2EA880; flex-shrink: 0;
-      transition: background 0.3s;
-    }
-    #status-dot.offline { background: #FC8181; }
-
-    /* ── TURN INDICATOR ── */
-    #turn-indicator {
-      flex-shrink: 0;
-      text-align: center;
-      padding: 5px 14px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      color: #555;
-      background: #0a0a0a;
-      border-bottom: 1px solid #1a1a1a;
-      transition: color 0.3s;
-    }
-    #turn-indicator.hearing { color: #2EA880; }
-    #turn-indicator.deaf    { color: #8B6FD4; }
-
-    /* ── AVATAR fills most of the height ── */
-    #avatar-panel {
-      flex: 1;
-      position: relative;
-      min-height: 0;
-    }
-    #avatar-canvas { width: 100%; height: 100%; display: block; }
-
-    #avatar-sign-label {
-      position: absolute;
-      bottom: 50px; left: 50%; transform: translateX(-50%);
-      font-size: 24px; font-weight: 700;
-      color: #fff; text-shadow: 0 2px 12px #000;
-      letter-spacing: 2px; pointer-events: none; white-space: nowrap;
-    }
-    #detected-sign {
-      font-size: 42px; font-weight: 700; color: #2EA880;
-      text-align: center; opacity: 0;
-      transition: opacity 0.3s; margin: 6px 0;
-      letter-spacing: 1px; pointer-events: none;
-      position: absolute; top: 10px; left: 0; right: 0;
-    }
-    /* SASL gloss — prominent display, all caps */
-    #gloss-display {
-      position: absolute;
-      bottom: 28px; left: 0; right: 0;
-      padding: 4px 16px;
-      font-size: 22px; font-weight: 800;
-      color: #C4B5FD; letter-spacing: 3px;
-      text-align: center; pointer-events: none;
-      text-shadow: 0 2px 8px #000a;
-      white-space: nowrap; overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Original English — smaller, below the SASL gloss */
-    #sentence-display {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      padding: 4px 16px;
-      background: linear-gradient(transparent, #000c);
-      font-size: 12px; color: #888;
-      text-align: center; pointer-events: none; min-height: 28px;
-      font-style: italic;
-    }
-
-    /* ── SASL TEXT INPUT PANEL ── */
-    #sasl-input-panel {
-      flex-shrink: 0;
-      background: #0f0f1a;
-      border-top: 1px solid #2a2040;
-      padding: 8px 10px 6px;
-    }
-    #sasl-label {
-      font-size: 10px;
-      color: #8B6FD4;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-      margin-bottom: 5px;
-      text-transform: uppercase;
-    }
-    #sasl-input-row {
-      display: flex;
-      gap: 7px;
-      align-items: center;
-    }
-    #sasl-input {
-      flex: 1;
-      padding: 9px 12px;
-      border-radius: 8px;
-      border: 1px solid #8B6FD480;
-      background: #1a1230;
-      color: #F5F0E8;
-      font-size: 14px;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-    #sasl-input:focus {
-      outline: none;
-      border-color: #8B6FD4;
-    }
-    #sasl-input::placeholder { color: #555; }
-    #sasl-send-btn {
-      padding: 9px 16px;
-      border-radius: 8px;
-      border: none;
-      background: #8B6FD4;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      flex-shrink: 0;
-      transition: background 0.15s;
-    }
-    #sasl-send-btn:hover { background: #7058bc; }
-    #sasl-send-btn:active { transform: scale(0.95); }
-    #sasl-send-status {
-      font-size: 11px;
-      color: #2EA880;
-      margin-top: 4px;
-      min-height: 15px;
-    }
-
-    /* ── MODE TOGGLE ── */
-    #modeToggleBtn {
-      padding: 5px 10px; border-radius: 6px;
-      border: 1px solid #8B6FD4; background: transparent;
-      color: #8B6FD4; cursor: pointer; font-size: 11px; font-weight: 700;
-      transition: background 0.2s;
-    }
-    #modeToggleBtn:hover { background: #8B6FD420; }
-
-    /* ── CAMERA PREVIEW (MediaPipe) ── */
-    #camera-container {
-      position: absolute; top: 8px; right: 8px;
-      width: 160px; height: 120px; border-radius: 8px;
-      overflow: hidden; border: 2px solid #8B6FD440;
-      z-index: 10; background: #000;
-    }
-    #camera-container.hidden { display: none; }
-    #camera-video {
-      width: 100%; height: 100%; object-fit: cover;
-      transform: scaleX(-1);
-    }
-    #camera-toggle {
-      position: absolute; bottom: 4px; right: 4px;
-      padding: 3px 7px; border-radius: 4px; border: none;
-      background: rgba(0,0,0,0.6); color: #fff;
-      font-size: 10px; cursor: pointer; z-index: 11;
-    }
-
-    /* ── ASSIST CONTAINER ── */
-    #assistContainer {
-      flex: 1; min-height: 0; overflow-y: auto;
-      --color-text-primary: #F5F0E8;
-      --color-text-secondary: #aaa;
-      --color-text-tertiary: #666;
-      --color-text-success: #082018;
-      --color-background-primary: #0B0B0B;
-      --color-background-secondary: #1a1230;
-      --color-background-tertiary: #2a2050;
-      --color-background-info: #0f2e20;
-      --color-background-success: #2EA880;
-      --color-border-secondary: #8B6FD480;
-      --color-border-tertiary: #333;
-      --color-border-info: #2EA880;
-      --color-border-success: #2EA880;
-      --font-sans: Arial, Helvetica, sans-serif;
-    }
-
-    /* ── CATEGORY TABS ── */
-    #category-tabs {
-      flex-shrink: 0;
-      display: flex; gap: 2px; padding: 4px 8px 0;
-      background: #0a0a0a;
-      border-top: 1px solid #1c1c1c;
-      overflow-x: auto;
-    }
-    .cat-tab {
-      background: transparent; border: none;
-      color: #6B5C48; font-size: 11px; font-weight: 700;
-      padding: 5px 9px; cursor: pointer;
-      border-bottom: 2px solid transparent;
-      white-space: nowrap; letter-spacing: 0.3px;
-      transition: color 0.15s, border-color 0.15s;
-      flex-shrink: 0;
-    }
-    .cat-tab:hover { color: #F5F0E8; }
-    .cat-tab.active { color: #8B6FD4; border-bottom-color: #8B6FD4; }
-
-    /* ── QUICK-SIGN BUTTONS ── */
-    #quick-signs {
-      flex-shrink: 0;
-      display: flex; flex-wrap: wrap;
-      gap: 6px; padding: 6px 10px 8px;
-      background: #0a0a0a;
-      justify-content: center;
-      min-height: 44px;
-    }
-    .qs-btn {
-      padding: 7px 12px; border-radius: 7px;
-      border: 1px solid #8B6FD480;
-      background: #1a1230; color: #C4B5FD;
-      font-size: 12px; font-weight: 700;
-      cursor: pointer; letter-spacing: 0.5px;
-      transition: background 0.15s, transform 0.1s, border-color 0.15s;
-      user-select: none;
-    }
-    .qs-btn:hover  { background: #8B6FD430; border-color: #8B6FD4; }
-    .qs-btn:active { transform: scale(0.94); }
-    .qs-btn.sent   { border-color: #2EA880; color: #2EA880; background: #0f2e20; }
-    .qs-btn.emergency {
-      border-color: #FC818180; background: #2e0a0a; color: #FCA5A5;
-    }
-    .qs-btn.emergency:hover { background: #FC818130; border-color: #FC8181; }
-
-    /* ── EMERGENCY OVERLAY ── */
-    #emergency-overlay {
-      display: none;
-      position: fixed; inset: 0; z-index: 9999;
-      background: rgba(229,62,62,0.95);
-      flex-direction: column; align-items: center;
-      justify-content: center; gap: 20px;
-      text-align: center; padding: 40px;
-      animation: emg-pulse 1s ease-in-out infinite;
-    }
-    #emergency-overlay.active { display: flex; }
-    @keyframes emg-pulse {
-      0%, 100% { background: rgba(229,62,62,0.95); }
-      50%       { background: rgba(200,30,30,0.98); }
-    }
-    .emg-icon  { font-size: 72px; }
-    .emg-title { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: -2px; }
-    .emg-sub   { font-size: 20px; color: rgba(255,255,255,0.85); }
-    .emg-dismiss {
-      background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4);
-      color: #fff; font-size: 15px; font-weight: 700;
-      padding: 14px 36px; border-radius: 12px; cursor: pointer;
-      margin-top: 10px;
-    }
-    .emg-dismiss:hover { background: rgba(255,255,255,0.35); }
-
-    /* ── STARTUP OVERLAY ── */
-    #startup-overlay {
-      position: fixed; inset: 0; z-index: 9998;
-      background: #0D0D0D;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 22px; padding: 32px;
-    }
-    #startup-overlay h1 { font-size: 30px; color: #8B6FD4; letter-spacing: 2px; }
-    #startup-overlay p  { color: #aaa; text-align: center; max-width: 360px; line-height: 1.5; }
-    #start-btn {
-      padding: 13px 46px; border-radius: 12px; border: none;
-      background: #8B6FD4; color: #fff; font-size: 19px; font-weight: 700;
-      cursor: pointer; transition: background 0.2s;
-    }
-    #start-btn:hover { background: #7058bc; }
-  </style>
+  <link rel="stylesheet" href="deaf.css">
 </head>
 <body>
 
   <!-- Connection error banner -->
-  <div id="conn-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9997;background:#FC818130;border-bottom:2px solid #FC8181;padding:10px 16px;text-align:center;font-size:13px;color:#FCA5A5;">Connection lost — reconnecting…</div>
+  <div id="conn-banner">Connection lost — reconnecting…<button onclick="this.parentElement.classList.remove('visible')">Dismiss</button></div>
 
   <!-- Emergency overlay (shown on both windows simultaneously) -->
   <div id="emergency-overlay" role="alertdialog" aria-label="Emergency alert">
@@ -314,9 +25,10 @@
   <!-- Startup overlay -->
   <div id="startup-overlay">
     <h1>AMANDLA</h1>
-    <p>Deaf view — signs appear here when the hearing person speaks.<br>
-       Use the text box below to type your reply in SASL.<br>
-       Quick-sign buttons are also available for common phrases.</p>
+    <p>When the hearing person speaks or types, their words appear here as <strong>SASL signs</strong> + gloss.<br><br>
+       To reply, type your message in <strong>SASL order</strong> below<br>
+       (e.g. YESTERDAY STORE I GO FINISH)<br>
+       or tap a quick-sign button — it will be converted to English for them.</p>
     <button id="start-btn">READY</button>
   </div>
 
@@ -330,6 +42,12 @@
     </div>
   </div>
 
+  <!-- Offline banner — shown when Ollama AI is not running (UX-1) -->
+  <div id="offline-banner">
+    <span>⚠ AI offline — translations are less accurate. Run 'ollama serve' for full quality.</span>
+    <button id="offline-dismiss" title="Dismiss">✕</button>
+  </div>
+
   <!-- Turn indicator -->
   <div id="turn-indicator">Waiting…</div>
 
@@ -340,6 +58,10 @@
     <div id="detected-sign"></div>
     <div id="gloss-display"></div>
     <div id="sentence-display"></div>
+    <!-- UX-2: Sign progress indicator -->
+    <div id="sign-progress"></div>
+    <!-- UX-3: Replay last sign sequence -->
+    <button id="replay-btn" title="Replay last signs">↻ Replay</button>
     <!-- Camera preview for MediaPipe sign recognition -->
     <div id="camera-container" class="hidden">
       <video id="camera-video" autoplay playsinline muted></video>
@@ -352,10 +74,10 @@
 
   <!-- SASL text input: deaf person types in SASL grammar to reply -->
   <div id="sasl-input-panel">
-    <div id="sasl-label">Your reply — type in SASL or English</div>
+    <div id="sasl-label">Your reply in SASL — type sign names in SASL order (verb last, time first)</div>
     <div id="sasl-input-row">
       <input id="sasl-input" type="text"
-             placeholder="e.g.  YESTERDAY STORE I GO FINISH  or  I need help"
+             placeholder="e.g.  YESTERDAY STORE I GO FINISH  •  DOCTOR NEED I  •  HELP"
              autocomplete="off" />
       <button id="sasl-send-btn">Send</button>
     </div>
@@ -367,411 +89,20 @@
   <div id="quick-signs" role="toolbar" aria-label="Quick signs"></div>
 
   <!-- ── SCRIPTS ── -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js"></script>
-  <script src="../../../signs_library.js"></script>
-  <script src="avatar_driver.js"></script>
-  <script src="avatar.js"></script>
-  <script src="mode_controller.js"></script>
-
-  <script>
-    // ── DOM REFS ──────────────────────────────────────────────
-    const overlay       = document.getElementById('startup-overlay')
-    const startBtn      = document.getElementById('start-btn')
-    const connStatus    = document.getElementById('conn-status')
-    const statusDot     = document.getElementById('status-dot')
-    const sentenceEl    = document.getElementById('sentence-display')
-    const glossEl       = document.getElementById('gloss-display')
-    const turnEl        = document.getElementById('turn-indicator')
-    const saslInput     = document.getElementById('sasl-input')
-    const saslSendBtn   = document.getElementById('sasl-send-btn')
-    const saslStatus    = document.getElementById('sasl-send-status')
-
-    // ── STARTUP ───────────────────────────────────────────────
-    startBtn.addEventListener('click', function () {
-      overlay.style.display = 'none'
-      try {
-        const u = new SpeechSynthesisUtterance(' ')
-        u.volume = 0
-        window.speechSynthesis.speak(u)
-      } catch (e) { /* ignore */ }
-      saslInput.focus()
-    })
-
-    // ── AVATAR INIT ───────────────────────────────────────────
-    function tryInitAvatar() {
-      if (typeof THREE !== 'undefined' && window.AmandlaAvatar) {
-        window.AmandlaAvatar.initAvatar('avatar-canvas')
-      }
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', tryInitAvatar)
-    } else {
-      tryInitAvatar()
-    }
-
-    // ── CONNECTION ────────────────────────────────────────────
-    window.amandla.getSessionId().then(function (id) {
-      window.amandla.connect(id || 'demo', 'deaf')
-    }).catch(function () {
-      window.amandla.connect('demo', 'deaf')
-    })
-
-    let statusPollingStarted = false
-    window.amandla.onConnectionChange(function (connected) {
-      connStatus.textContent = connected ? 'connected' : 'disconnected'
-      connStatus.className   = connected ? 'connected' : ''
-      // Show/hide connection error banner
-      const banner = document.getElementById('conn-banner')
-      if (banner) banner.style.display = connected ? 'none' : 'block'
-      // Start status polling only after first successful connection
-      if (connected && !statusPollingStarted) {
-        statusPollingStarted = true
-        pollStatus()
-        setInterval(pollStatus, 30000)
-      }
-    })
-
-    // ── INCOMING MESSAGES ─────────────────────────────────────
-    window.amandla.onMessage(function (msg) {
-      if (!msg) return
-
-      // Hearing person spoke → SASL signs arrive
-      if (msg.type === 'signs') {
-        const signCount = Array.isArray(msg.signs) ? msg.signs.length : 1
-        const clearAfter = (signCount * 700) + 1200
-
-        // Show SASL gloss
-        if (msg.text) {
-          glossEl.textContent = msg.text
-          setTimeout(function () { glossEl.textContent = '' }, clearAfter)
-        }
-
-        if (msg.language) setDetectedLanguage(msg.language)
-
-        // Drive the avatar with the sign sequence
-        if (Array.isArray(msg.signs) && msg.signs.length > 0) {
-          if (window.AmandlaAvatar) {
-            msg.signs.forEach(function (s) { window.AmandlaAvatar.queueSign(s) })
-          } else {
-            glossEl.textContent = msg.text || msg.signs.join(' ')
-          }
-        }
-        return
-      }
-
-      // Turn indicator broadcast
-      if (msg.type === 'turn') {
-        setTurnIndicator(msg.speaker)
-        return
-      }
-
-      if (msg.type === 'emergency') {
-        showEmergency()
-        return
-      }
-    })
-
-    // ── TURN INDICATOR ────────────────────────────────────────
-    function setTurnIndicator(speaker) {
-      if (speaker === 'hearing') {
-        turnEl.textContent = '🎙 Hearing person is speaking'
-        turnEl.className = 'hearing'
-      } else if (speaker === 'deaf') {
-        turnEl.textContent = '🤟 Signer is signing'
-        turnEl.className = 'deaf'
-      } else {
-        turnEl.textContent = 'Waiting…'
-        turnEl.className = ''
-      }
-      clearTimeout(window._turnTimer)
-      window._turnTimer = setTimeout(function () {
-        turnEl.textContent = 'Waiting…'
-        turnEl.className = ''
-      }, 4000)
-    }
-
-    // ── SASL TEXT INPUT → HEARING ─────────────────────────────
-    function sendSaslText() {
-      const text = saslInput.value.trim()
-      if (!text) return
-      window.amandla.send({
-        type:      'sasl_text',
-        text:      text,
-        sender:    'deaf',
-        timestamp: Date.now()
-      })
-      saslStatus.textContent = 'Sent — translating to English for the hearing person…'
-      setTimeout(function () { saslStatus.textContent = '' }, 3000)
-      saslInput.value = ''
-      saslInput.focus()
-    }
-
-    saslSendBtn.addEventListener('click', sendSaslText)
-    saslInput.addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') sendSaslText()
-    })
-
-    // ── QUICK-SIGN CATEGORY BUTTONS ───────────────────────────
-    const CATEGORIES = {
-      'MEDICAL':   ['DOCTOR', 'NURSE', 'HOSPITAL', 'SICK', 'PAIN', 'AMBULANCE', 'MEDICINE', 'HURT', 'EMERGENCY'],
-      'GREETINGS': ['HELLO', 'GOODBYE', 'PLEASE', 'THANK YOU', 'SORRY', 'YES', 'NO'],
-      'EMOTIONS':  ['HAPPY', 'SAD', 'ANGRY', 'SCARED', 'LOVE', 'TIRED', 'HUNGRY', 'THIRSTY'],
-      'ACTIONS':   ['HELP', 'WAIT', 'STOP', 'REPEAT', 'COME', 'GO', 'LISTEN', 'UNDERSTAND'],
-      'RIGHTS':    ['RIGHTS', 'LAW', 'EQUAL', 'FREE'],
-    }
-
-    const toolbar    = document.getElementById('quick-signs')
-    const catBar     = document.getElementById('category-tabs')
-    let activeCat    = null
-
-    function renderCategory(category) {
-      activeCat = category
-      catBar.querySelectorAll('.cat-tab').forEach(function (t) {
-        t.classList.toggle('active', t.dataset.cat === category)
-      })
-      const signs = CATEGORIES[category] || []
-      toolbar.innerHTML = ''
-      signs.forEach(function (sign) {
-        const btn = document.createElement('button')
-        btn.className = 'qs-btn' + (sign === 'EMERGENCY' ? ' emergency' : '')
-        btn.textContent = sign
-        btn.setAttribute('aria-label', 'Send sign: ' + sign)
-        btn.addEventListener('click', function () {
-          if (sign === 'EMERGENCY') {
-            window.amandla.send({ type: 'emergency', sender: 'deaf', timestamp: Date.now() })
-            showEmergency()
-            return
-          }
-          window.amandla.send({ type: 'sign', text: sign, sender: 'deaf', timestamp: Date.now() })
-          if (window.AmandlaAvatar) window.AmandlaAvatar.playSignNow(sign)
-          showDetectedSign(sign, 1.0)
-          btn.classList.add('sent')
-          setTimeout(function () { btn.classList.remove('sent') }, 800)
-        })
-        toolbar.appendChild(btn)
-      })
-    }
-
-    Object.keys(CATEGORIES).forEach(function (cat) {
-      const tab = document.createElement('button')
-      tab.className = 'cat-tab'
-      tab.dataset.cat = cat
-      tab.textContent = cat
-      tab.setAttribute('role', 'tab')
-      tab.addEventListener('click', function () { renderCategory(cat) })
-      catBar.appendChild(tab)
-    })
-    renderCategory('MEDICAL')
-
-    // ── EMERGENCY ─────────────────────────────────────────────
-    let _emgInterval = null
-    function showEmergency() {
-      document.getElementById('emergency-overlay').classList.add('active')
-      speakText('Emergency. Help has been alerted.')
-      let remaining = 10
-      const cdEl = document.getElementById('emg-countdown')
-      if (cdEl) cdEl.textContent = 'Auto-dismiss in ' + remaining + 's'
-      clearInterval(_emgInterval)
-      _emgInterval = setInterval(function () {
-        remaining--
-        if (cdEl) cdEl.textContent = remaining > 0 ? 'Auto-dismiss in ' + remaining + 's' : ''
-        if (remaining <= 0) { hideEmergency(); clearInterval(_emgInterval) }
-      }, 1000)
-    }
-    function hideEmergency() {
-      document.getElementById('emergency-overlay').classList.remove('active')
-      clearInterval(_emgInterval)
-      const cdEl = document.getElementById('emg-countdown')
-      if (cdEl) cdEl.textContent = ''
-    }
-    window.hideEmergency = hideEmergency
-
-    // ── SIGN DETECTION FEEDBACK ───────────────────────────────
-    function showDetectedSign(signName, confidence) {
-      const el = document.getElementById('detected-sign')
-      if (!el) return
-      el.textContent = signName
-      el.style.opacity = '1'
-      el.style.color = confidence > 0.75 ? '#2EA880' : '#ECC94B'
-      clearTimeout(el._hideTimer)
-      el._hideTimer = setTimeout(function () { el.style.opacity = '0' }, 2000)
-    }
-
-    // ── MULTI-LANGUAGE TTS ────────────────────────────────────
-    const SA_LANGUAGES = {
-      'en':  { tts: 'en-ZA',  label: 'English'    },
-      'zu':  { tts: 'zu-ZA',  label: 'isiZulu'    },
-      'xh':  { tts: 'xh-ZA',  label: 'isiXhosa'   },
-      'af':  { tts: 'af-ZA',  label: 'Afrikaans'  },
-      'st':  { tts: 'st-ZA',  label: 'Sesotho'    },
-      'tn':  { tts: 'tn-ZA',  label: 'Setswana'   },
-      'nso': { tts: 'nso-ZA', label: 'Sepedi'     },
-      'ts':  { tts: 'ts-ZA',  label: 'Xitsonga'   },
-      've':  { tts: 've-ZA',  label: 'Tshivenda'  },
-      'nr':  { tts: 'nr-ZA',  label: 'isiNdebele' },
-      'ss':  { tts: 'ss-ZA',  label: 'siSwati'    },
-    }
-
-    let currentTTSLang = 'en-ZA'
-
-    function setDetectedLanguage(code) {
-      const entry = code && SA_LANGUAGES[code]
-      if (entry) currentTTSLang = entry.tts
-    }
-
-    function getBestVoice(lang) {
-      const voices = window.speechSynthesis.getVoices()
-      return voices.find(function (v) { return v.lang === lang })
-          || voices.find(function (v) { return v.lang.startsWith(lang.split('-')[0]) })
-          || voices.find(function (v) { return v.lang.startsWith('en') })
-          || (voices[0] || null)
-    }
-
-    function speakText(text, lang) {
-      const useLang = lang || currentTTSLang
-      if (window.speechSynthesis.paused) window.speechSynthesis.resume()
-      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel()
-      const u = new SpeechSynthesisUtterance(text)
-      const voice = getBestVoice(useLang)
-      if (voice) u.voice = voice
-      u.rate = 0.95
-      window.speechSynthesis.speak(u)
-    }
-
-    // ── STATUS POLLING (via WebSocket preload bridge) ───────
-    // Polling is started in onConnectionChange after first WS connection
-    async function pollStatus() {
-      try {
-        const d = await window.amandla.requestStatus()
-        statusDot.className = d.qwen === 'alive' ? '' : 'offline'
-        statusDot.title     = d.qwen === 'alive' ? 'AI online' : 'AI offline'
-      } catch (e) {
-        statusDot.className = 'offline'
-        statusDot.title     = 'Backend offline'
-      }
-    }
-
-    // ── MODE TOGGLE ───────────────────────────────────────────
-    const modeToggleBtn = document.getElementById('modeToggleBtn')
-    if (modeToggleBtn && window.ModeController) {
-      modeToggleBtn.addEventListener('click', function () {
-        window.ModeController.toggle()
-      })
-      window.ModeController.onChange(function (mode) {
-        modeToggleBtn.textContent = mode === 'sign' ? 'Assist Mode' : 'Sign Mode'
-      })
-    }
-
-    // ── ASSIST MODE → SEND PHRASE VIA WS ──────────────────────
-    window.addEventListener('amandla:assistPhrase', function (e) {
-      const phrase = e.detail && e.detail.phrase
-      if (!phrase) return
-      window.amandla.send({
-        type:      'sasl_text',
-        text:      phrase,
-        sender:    'deaf',
-        timestamp: Date.now()
-      })
-    })
-
-    // ── MEDIAPIPE CAMERA SIGN RECOGNITION ─────────────────────
-    const cameraContainer = document.getElementById('camera-container')
-    const cameraVideo     = document.getElementById('camera-video')
-    const cameraToggle    = document.getElementById('camera-toggle')
-    let mpHands       = null
-    let mpCamera      = null
-    let cameraActive  = false
-    let lastLandmarkSend = 0
-    const LANDMARK_THROTTLE_MS = 500  // send landmarks at most every 500ms
-
-    function initMediaPipe() {
-      if (typeof Hands === 'undefined') {
-        console.warn('[MediaPipe] Hands library not loaded')
-        return
-      }
-      mpHands = new Hands({
-        locateFile: function (file) {
-          return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/' + file
-        }
-      })
-      mpHands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.6,
-        minTrackingConfidence: 0.5
-      })
-      mpHands.onResults(onHandResults)
-      console.log('[MediaPipe] Hands initialised')
-    }
-
-    function onHandResults(results) {
-      if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return
-      const now = Date.now()
-      if (now - lastLandmarkSend < LANDMARK_THROTTLE_MS) return
-      lastLandmarkSend = now
-
-      // Send landmarks for the first detected hand
-      const landmarks = results.multiHandLandmarks[0].map(function (pt) {
-        return { x: pt.x, y: pt.y, z: pt.z }
-      })
-      const handedness = (results.multiHandedness && results.multiHandedness[0])
-        ? results.multiHandedness[0].label
-        : 'Right'
-
-      window.amandla.send({
-        type:       'landmarks',
-        landmarks:  landmarks,
-        handedness: handedness,
-        sender:     'deaf',
-        timestamp:  now
-      })
-    }
-
-    async function startCamera() {
-      if (cameraActive) return
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 320, height: 240 } })
-        cameraVideo.srcObject = stream
-        cameraContainer.classList.remove('hidden')
-        cameraActive = true
-
-        if (!mpHands) initMediaPipe()
-
-        if (mpHands && typeof Camera !== 'undefined') {
-          mpCamera = new Camera(cameraVideo, {
-            onFrame: async function () {
-              if (mpHands) await mpHands.send({ image: cameraVideo })
-            },
-            width: 320,
-            height: 240
-          })
-          mpCamera.start()
-          console.log('[MediaPipe] Camera started')
-        }
-      } catch (err) {
-        console.error('[MediaPipe] Camera error:', err)
-      }
-    }
-
-    function stopCamera() {
-      if (!cameraActive) return
-      if (mpCamera) { try { mpCamera.stop() } catch(e) {} }
-      const stream = cameraVideo.srcObject
-      if (stream) stream.getTracks().forEach(function (t) { t.stop() })
-      cameraVideo.srcObject = null
-      cameraContainer.classList.add('hidden')
-      cameraActive = false
-      console.log('[MediaPipe] Camera stopped')
-    }
-
-    if (cameraToggle) {
-      cameraToggle.addEventListener('click', function () {
-        if (cameraActive) stopCamera()
-        else startCamera()
-      })
-    }
-  </script>
+  <!-- PERF-2: Three.js loaded from local bundle — no CDN dependency on critical path -->
+  <script src="../../../assets/js/three.min.js"></script>
+  <!-- FEAT-2: GLTFLoader for loading GLB avatar model (must load after three.min.js) -->
+  <script src="../../../assets/js/GLTFLoader.js"></script>
+  <!-- PERF-2: MediaPipe loaded async — optional for camera mode, must not block initial render -->
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js"></script>
+  <!-- PERF-3: signs_library loaded with defer — parsed after HTML, before DOMContentLoaded -->
+  <script defer src="../../../signs_library.js"></script>
+  <!-- FEAT-2: Avatar driver maps AMANDLA poses → Mixamo GLB bone rotations -->
+  <script defer src="avatar_driver.js"></script>
+  <script defer src="avatar.js"></script>
+  <script defer src="mode_controller.js"></script>
+  <script defer src="deaf.js"></script>
 </body>
 </html>
+

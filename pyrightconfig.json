@@ -1,0 +1,20 @@
+{
+  "include": ["backend", "sasl_transformer", "scripts"],
+  "exclude": ["node_modules", "dist", ".venv", "__pycache__"],
+
+  "stubPath": "./stubs",
+
+  "typeCheckingMode": "basic",
+
+  "reportMissingTypeStubs":        "none",
+  "reportMissingModuleSource":     "none",
+  "reportUnknownMemberType":       "none",
+  "reportUnknownVariableType":     "none",
+  "reportUnknownArgumentType":     "none",
+  "reportAttributeAccessIssue":    "none",
+  "reportMissingImports":          "none",
+  "reportPrivateUsage":            "none",
+
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Windows"
+}

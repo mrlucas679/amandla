@@ -1,5 +1,18 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } = require('electron')
 const path = require('path')
+const crypto = require('crypto')
+
+// ── BUILD-4: Auto-update ──────────────────────────────────────────
+// Uses electron-updater with GitHub Releases. In development mode
+// (not packaged), autoUpdater is a no-op to avoid errors.
+let autoUpdater = null
+try {
+  autoUpdater = require('electron-updater').autoUpdater
+  autoUpdater.autoDownload = false  // prompt the user first
+} catch (e) {
+  // electron-updater not available in dev mode — that's fine
+  console.log('[Main] Auto-updater not available (dev mode)')
+}
 
 // ── ARCHITECTURE NOTE ─────────────────────────────────────────────
 // AMANDLA uses two BrowserWindow instances positioned side-by-side
@@ -11,16 +24,51 @@ const path = require('path')
 // to the backend — no direct fetch/XHR from renderer code.
 // ──────────────────────────────────────────────────────────────────
 
-// Content-Security-Policy — restricts what scripts and connections are allowed
-const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' ws://localhost:8000 http://localhost:8000; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';"
+// Content-Security-Policy — restricts what scripts and connections are allowed.
+// style-src includes fonts.googleapis.com so Google Fonts <link> tags work.
+// font-src includes fonts.gstatic.com so the actual font files can be downloaded.
+// ISSUE 1 FIX: added https://cdn.jsdelivr.net to connect-src so MediaPipe
+// can download its WASM binary and model files from the jsdelivr CDN at runtime.
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' ws://localhost:8000 http://localhost:8000 https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com;"
 
 let hearingWin = null
 let deafWin = null
 let rightsWin = null
 
-// Generate a session ID once when the app starts
-// Both windows get the same ID so they join the same WebSocket room
-const SESSION_ID = 'amandla-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+// Generate a cryptographically secure session ID once when the app starts.
+// 32 random bytes = 256 bits of entropy — safe even if the backend is ever
+// exposed on a network. Both windows get the same ID so they join the same
+// WebSocket room. Format: 'amandla-' + 43-char URL-safe base64 token.
+const SESSION_ID = 'amandla-' + crypto.randomBytes(32).toString('base64url')
+
+// Session secret fetched from the backend at startup.
+// Required by every WebSocket connection as a ?token= query parameter.
+let SESSION_SECRET = null
+
+/**
+ * Fetch the session secret from the backend's /auth/session-secret endpoint.
+ * Called once after app.whenReady() and the backend health check has passed.
+ *
+ * @returns {Promise<string>} The session secret token string.
+ */
+async function fetchSessionSecret() {
+  // Use Node.js built-in http — no extra dependencies needed
+  const http = require('http')
+  return new Promise((resolve, reject) => {
+    http.get('http://localhost:8000/auth/session-secret', (res) => {
+      let body = ''
+      res.on('data', (chunk) => { body += chunk })
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(body)
+          resolve(data.session_secret)
+        } catch (err) {
+          reject(new Error('Failed to parse session secret response'))
+        }
+      })
+    }).on('error', (err) => reject(err))
+  })
+}
 
 function createWindows() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
@@ -42,9 +90,10 @@ function createWindows() {
     }
   })
   hearingWin.loadFile('src/windows/hearing/index.html')
-  // Pass the session ID to the window once it finishes loading
+  // Pass the session ID and secret to the window once it finishes loading
   hearingWin.webContents.on('did-finish-load', () => {
     hearingWin.webContents.send('session-id', SESSION_ID)
+    hearingWin.webContents.send('session-secret', SESSION_SECRET)
     hearingWin.webContents.send('role', 'hearing')
   })
 
@@ -68,6 +117,7 @@ function createWindows() {
   deafWin.loadFile('src/windows/deaf/index.html')
   deafWin.webContents.on('did-finish-load', () => {
     deafWin.webContents.send('session-id', SESSION_ID)
+    deafWin.webContents.send('session-secret', SESSION_SECRET)
     deafWin.webContents.send('role', 'deaf')
   })
 
@@ -126,9 +176,10 @@ ipcMain.handle('open-rights', () => {
     }
   })
   rightsWin.loadFile('src/windows/rights/index.html')
-  // Send session ID and role to rights window so it can connect via WebSocket
+  // Send session ID, secret, and role to rights window so it can connect via WebSocket
   rightsWin.webContents.on('did-finish-load', () => {
     rightsWin.webContents.send('session-id', SESSION_ID)
+    rightsWin.webContents.send('session-secret', SESSION_SECRET)
     rightsWin.webContents.send('role', 'rights')
   })
   _applyCSP(rightsWin)
@@ -138,7 +189,116 @@ ipcMain.handle('open-rights', () => {
 // IPC: Allow renderer to ask for the session ID at any time
 ipcMain.handle('get-session-id', () => SESSION_ID)
 
-app.whenReady().then(createWindows)
+/**
+ * Set up electron-updater event handlers for auto-update flow.
+ * Shows a dialog when an update is available, downloads it on confirmation,
+ * and installs + restarts when the download is complete.
+ */
+function _setupAutoUpdater() {
+  if (!autoUpdater) return
+
+  autoUpdater.on('update-available', (info) => {
+    const version = info.version || 'new version'
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Available',
+      message: `AMANDLA v${version} is available. Download now?`,
+      buttons: ['Download', 'Later'],
+      defaultId: 0,
+    }).then((result) => {
+      if (result.response === 0) autoUpdater.downloadUpdate()
+    })
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Ready',
+      message: 'Update downloaded. AMANDLA will restart to install it.',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+    }).then((result) => {
+      if (result.response === 0) autoUpdater.quitAndInstall()
+    })
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater] Error checking for updates:', err.message)
+  })
+}
+
+/**
+ * Check if Ollama is running by hitting its /api/tags endpoint.
+ * Shows a dialog if Ollama is not reachable so the user knows
+ * AI features will be limited.
+ *
+ * @returns {Promise<void>}
+ */
+async function _checkOllamaRunning() {
+  const http = require('http')
+  return new Promise((resolve) => {
+    const req = http.get('http://localhost:11434/api/tags', { timeout: 3000 }, (res) => {
+      // Any response means Ollama is running
+      res.resume() // drain the response
+      console.log('[Main] Ollama is running')
+      resolve()
+    })
+    req.on('error', () => {
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Ollama Not Running',
+        message: 'Ollama is not running. AI features (sign recognition, translation) will be limited.\n\nRun "ollama serve" in a terminal for full functionality.',
+        buttons: ['Continue Anyway'],
+        defaultId: 0,
+      }).then(() => resolve())
+    })
+    req.on('timeout', () => {
+      req.destroy()
+    })
+  })
+}
+
+app.whenReady().then(async () => {
+  // BUILD-5: Check if Ollama is running before creating windows
+  await _checkOllamaRunning()
+
+  // Fetch the session secret from the backend (which is already running via
+  // concurrently + wait-on). This token is required for all WebSocket connections.
+  try {
+    SESSION_SECRET = await fetchSessionSecret()
+    console.log('[Main] Session secret acquired from backend')
+  } catch (err) {
+    console.error('[Main] Failed to fetch session secret — WebSocket auth will fail:', err.message)
+  }
+  createWindows()
+
+  // ── FEAT-6: Global emergency shortcut ──────────────────────────────────
+  // Ctrl+E (or Cmd+E on macOS) triggers emergency from any window.
+  // Sends an IPC message to both hearing and deaf renderers so they show
+  // the emergency overlay. The deaf window also sends a WS emergency message
+  // to the backend so the hearing user is alerted.
+  globalShortcut.register('CommandOrControl+E', () => {
+    console.log('[Main] Emergency shortcut triggered (Ctrl+E)')
+    if (hearingWin && !hearingWin.isDestroyed()) {
+      hearingWin.webContents.send('emergency-trigger')
+    }
+    if (deafWin && !deafWin.isDestroyed()) {
+      deafWin.webContents.send('emergency-trigger')
+    }
+  })
+
+  // ── BUILD-4: Check for updates after windows are created ──────────────
+  // Only runs in packaged builds — development mode skips this entirely.
+  if (autoUpdater && app.isPackaged) {
+    _setupAutoUpdater()
+    // Check after a short delay so the UI has time to render
+    setTimeout(() => { autoUpdater.checkForUpdates() }, 5000)
+  }
+})
+app.on('will-quit', () => {
+  // Unregister all shortcuts when the app is about to quit
+  globalShortcut.unregisterAll()
+})
 app.on('window-all-closed', () => app.quit())
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindows()

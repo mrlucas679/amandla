@@ -9,6 +9,7 @@ Usage:
 import asyncio
 import json
 import sys
+import urllib.request
 
 try:
     import websockets
@@ -16,7 +17,13 @@ except ImportError:
     print("ERROR: pip install websockets")
     sys.exit(1)
 
-WS_URI = "ws://localhost:8000/ws/test-handlers/hearing"
+
+def _fetch_session_secret():
+    """Fetch the session secret from the backend /auth/session-secret endpoint."""
+    with urllib.request.urlopen('http://localhost:8000/auth/session-secret') as resp:
+        return json.loads(resp.read().decode())['session_secret']
+
+
 TIMEOUT_SECONDS = 10
 PASS_COUNT = 0
 FAIL_COUNT = 0
@@ -38,7 +45,10 @@ async def run_tests():
     """Connect to WS and test each new handler."""
     print("\n=== AMANDLA WebSocket Handler Tests ===\n")
 
-    async with websockets.connect(WS_URI) as ws:
+    token = _fetch_session_secret()
+    ws_uri = f"ws://localhost:8000/ws/test-handlers/hearing?token={token}"
+
+    async with websockets.connect(ws_uri) as ws:
         # 1. Connection test — expect status message
         raw = await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_SECONDS)
         msg = json.loads(raw)

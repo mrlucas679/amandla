@@ -1,0 +1,342 @@
+/* ── deaf.css — Styles for the AMANDLA Deaf window ── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0D0D0D;
+  color: #F5F0E8;
+  font-family: Arial, Helvetica, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── TOP BAR ── */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px;
+  background: #111;
+  border-bottom: 1px solid #222;
+  flex-shrink: 0;
+  gap: 10px;
+}
+#topbar .brand { font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #8B6FD4; white-space: nowrap; }
+#topbar .right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+#conn-status { font-size: 11px; color: #888; }
+/* noinspection CssUnusedSymbol */ #conn-status.connected { color: #2EA880; }
+#status-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #2EA880; flex-shrink: 0;
+  transition: background 0.3s;
+}
+/* noinspection CssUnusedSymbol */ #status-dot.offline { background: #FC8181; }
+
+/* ── OFFLINE BANNER (UX-1) — shown when Ollama AI is not running ── */
+#offline-banner {
+  display: none; flex-shrink: 0;
+  align-items: center; justify-content: center; gap: 10px;
+  padding: 6px 14px;
+  background: #44370a; border-bottom: 1px solid #665510;
+  color: #fcd34d; font-size: 12px; font-weight: 600;
+  text-align: center;
+}
+/* noinspection CssUnusedSymbol */ #offline-banner.visible { display: flex; }
+#offline-banner button {
+  background: transparent; border: 1px solid #fcd34d55;
+  color: #fcd34d; border-radius: 4px; padding: 2px 8px;
+  cursor: pointer; font-size: 11px;
+}
+#offline-banner button:hover { background: #fcd34d20; }
+
+/* ── TURN INDICATOR — classes set by JS via className = 'hearing'|'deaf' ── */
+#turn-indicator {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #555;
+  background: #0a0a0a;
+  border-bottom: 1px solid #1a1a1a;
+  transition: color 0.3s;
+}
+/* noinspection CssUnusedSymbol */ #turn-indicator.hearing { color: #2EA880; }
+/* noinspection CssUnusedSymbol */ #turn-indicator.deaf    { color: #8B6FD4; }
+
+/* ── AVATAR fills most of the height ── */
+#avatar-panel {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+#avatar-canvas { width: 100%; height: 100%; display: block; }
+
+#avatar-sign-label {
+  position: absolute;
+  bottom: 50px; left: 50%; transform: translateX(-50%);
+  font-size: 24px; font-weight: 700;
+  color: #fff; text-shadow: 0 2px 12px #000;
+  letter-spacing: 2px; pointer-events: none; white-space: nowrap;
+}
+#detected-sign {
+  font-size: 42px; font-weight: 700; color: #2EA880;
+  text-align: center; opacity: 0;
+  transition: opacity 0.3s; margin: 6px 0;
+  letter-spacing: 1px; pointer-events: none;
+  position: absolute; top: 10px; left: 0; right: 0;
+}
+/* SASL gloss — prominent display, all caps */
+#gloss-display {
+  position: absolute;
+  bottom: 28px; left: 0; right: 0;
+  padding: 4px 16px;
+  font-size: 22px; font-weight: 800;
+  color: #C4B5FD; letter-spacing: 3px;
+  text-align: center; pointer-events: none;
+  text-shadow: 0 2px 8px #000a;
+  white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Original English — smaller, below the SASL gloss */
+#sentence-display {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 4px 16px;
+  background: linear-gradient(transparent, #000c);
+  font-size: 12px; color: #888;
+  text-align: center; pointer-events: none; min-height: 28px;
+  font-style: italic;
+}
+
+/* UX-2: Sign progress indicator — shows "Signing 2 of 5" during avatar animation */
+#sign-progress {
+  position: absolute; bottom: 50px; right: 12px;
+  font-size: 11px; color: #8B6FD4; font-weight: 600;
+  pointer-events: none; opacity: 0; transition: opacity 0.3s;
+}
+#sign-progress.visible { opacity: 1; }
+
+/* UX-3: Replay button — lets deaf user replay last sign sequence */
+#replay-btn {
+  position: absolute; bottom: 50px; left: 12px;
+  font-size: 11px; color: #888; background: #1a1a2e;
+  border: 1px solid #333; border-radius: 4px;
+  padding: 3px 10px; cursor: pointer;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+#replay-btn.visible { opacity: 1; pointer-events: auto; }
+#replay-btn:hover { color: #C4B5FD; border-color: #8B6FD4; }
+
+/* ── SASL TEXT INPUT PANEL ── */
+#sasl-input-panel {
+  flex-shrink: 0;
+  background: #0f0f1a;
+  border-top: 1px solid #2a2040;
+  padding: 8px 10px 6px;
+}
+#sasl-label {
+  font-size: 10px;
+  color: #8B6FD4;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+#sasl-input-row {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+#sasl-input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #8B6FD480;
+  background: #1a1230;
+  color: #F5F0E8;
+  font-size: 14px;
+  font-family: Arial, Helvetica, sans-serif;
+}
+#sasl-input:focus {
+  outline: none;
+  border-color: #8B6FD4;
+}
+#sasl-input::placeholder { color: #555; }
+#sasl-send-btn {
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #8B6FD4;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+#sasl-send-btn:hover { background: #7058bc; }
+#sasl-send-btn:active { transform: scale(0.95); }
+#sasl-send-status {
+  font-size: 11px;
+  color: #2EA880;
+  margin-top: 4px;
+  min-height: 15px;
+}
+
+/* ── MODE TOGGLE ── */
+#modeToggleBtn {
+  padding: 5px 10px; border-radius: 6px;
+  border: 1px solid #8B6FD4; background: transparent;
+  color: #8B6FD4; cursor: pointer; font-size: 11px; font-weight: 700;
+  transition: background 0.2s;
+}
+#modeToggleBtn:hover { background: #8B6FD420; }
+
+/* ── CAMERA PREVIEW (MediaPipe) ── */
+#camera-container {
+  position: absolute; top: 8px; right: 8px;
+  width: 160px; height: 120px; border-radius: 8px;
+  overflow: hidden; border: 2px solid #8B6FD440;
+  z-index: 10; background: #000;
+}
+#camera-container.hidden { display: none; }
+#camera-video {
+  width: 100%; height: 100%; object-fit: cover;
+  transform: scaleX(-1);
+}
+#camera-toggle {
+  position: absolute; bottom: 4px; right: 4px;
+  padding: 3px 7px; border-radius: 4px; border: none;
+  background: rgba(0,0,0,0.6); color: #fff;
+  font-size: 10px; cursor: pointer; z-index: 11;
+}
+
+/* ── ASSIST CONTAINER ── */
+#assistContainer {
+  flex: 1; min-height: 0; overflow-y: auto;
+  --color-text-primary: #F5F0E8;
+  --color-text-secondary: #aaa;
+  --color-text-tertiary: #666;
+  --color-text-success: #082018;
+  --color-background-primary: #0B0B0B;
+  --color-background-secondary: #1a1230;
+  --color-background-tertiary: #2a2050;
+  --color-background-info: #0f2e20;
+  --color-background-success: #2EA880;
+  --color-border-secondary: #8B6FD480;
+  --color-border-tertiary: #333;
+  --color-border-info: #2EA880;
+  --color-border-success: #2EA880;
+  --font-sans: Arial, Helvetica, sans-serif;
+}
+
+/* ── CATEGORY TABS ── */
+#category-tabs {
+  flex-shrink: 0;
+  display: flex; gap: 2px; padding: 4px 8px 0;
+  background: #0a0a0a;
+  border-top: 1px solid #1c1c1c;
+  overflow-x: auto;
+}
+.cat-tab {
+  background: transparent; border: none;
+  color: #6B5C48; font-size: 11px; font-weight: 700;
+  padding: 5px 9px; cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap; letter-spacing: 0.3px;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.cat-tab:hover { color: #F5F0E8; }
+.cat-tab.active { color: #8B6FD4; border-bottom-color: #8B6FD4; }
+
+/* ── QUICK-SIGN BUTTONS ── */
+#quick-signs {
+  flex-shrink: 0;
+  display: flex; flex-wrap: wrap;
+  gap: 6px; padding: 6px 10px 8px;
+  background: #0a0a0a;
+  justify-content: center;
+  min-height: 44px;
+}
+.qs-btn {
+  padding: 7px 12px; border-radius: 7px;
+  border: 1px solid #8B6FD480;
+  background: #1a1230; color: #C4B5FD;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.5px;
+  transition: background 0.15s, transform 0.1s, border-color 0.15s;
+  user-select: none;
+}
+.qs-btn:hover  { background: #8B6FD430; border-color: #8B6FD4; }
+.qs-btn:active { transform: scale(0.94); }
+.qs-btn.sent   { border-color: #2EA880; color: #2EA880; background: #0f2e20; }
+.qs-btn.emergency {
+  border-color: #FC818180; background: #2e0a0a; color: #FCA5A5;
+}
+.qs-btn.emergency:hover { background: #FC818130; border-color: #FC8181; }
+
+/* ── EMERGENCY OVERLAY ── */
+#emergency-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(229,62,62,0.95);
+  flex-direction: column; align-items: center;
+  justify-content: center; gap: 20px;
+  text-align: center; padding: 40px;
+  animation: emg-pulse 1s ease-in-out infinite;
+}
+#emergency-overlay.active { display: flex; }
+@keyframes emg-pulse {
+  0%, 100% { background: rgba(229,62,62,0.95); }
+  50%       { background: rgba(200,30,30,0.98); }
+}
+.emg-icon  { font-size: 72px; }
+.emg-title { font-size: 52px; font-weight: 900; color: #fff; letter-spacing: -2px; }
+.emg-sub   { font-size: 20px; color: rgba(255,255,255,0.85); }
+.emg-dismiss {
+  background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4);
+  color: #fff; font-size: 15px; font-weight: 700;
+  padding: 14px 36px; border-radius: 12px; cursor: pointer;
+  margin-top: 10px;
+}
+.emg-dismiss:hover { background: rgba(255,255,255,0.35); }
+
+/* ── CONNECTION ERROR BANNER ── */
+#conn-banner {
+  display: none;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9997;
+  background: #FC818130; border-bottom: 2px solid #FC8181;
+  padding: 10px 16px; text-align: center;
+  font-size: 13px; color: #FCA5A5;
+  animation: banner-in 0.3s ease;
+}
+/* noinspection CssUnusedSymbol */ #conn-banner.visible { display: flex; align-items: center; justify-content: center; gap: 12px; }
+#conn-banner button { background: #FC818140; border: 1px solid #FC8181; color: #fff; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+@keyframes banner-in { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
+/* ── EMERGENCY COUNTDOWN ── */
+.emg-countdown { font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 6px; }
+
+/* ── STARTUP OVERLAY ── */
+#startup-overlay {
+  position: fixed; inset: 0; z-index: 9998;
+  background: #0D0D0D;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 22px; padding: 32px;
+}
+#startup-overlay h1 { font-size: 30px; color: #8B6FD4; letter-spacing: 2px; }
+#startup-overlay p  { color: #aaa; text-align: center; max-width: 360px; line-height: 1.5; }
+#start-btn {
+  padding: 13px 46px; border-radius: 12px; border: none;
+  background: #8B6FD4; color: #fff; font-size: 19px; font-weight: 700;
+  cursor: pointer; transition: background 0.2s;
+}
+#start-btn:hover { background: #7058bc; }
+

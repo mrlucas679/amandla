@@ -9,7 +9,6 @@ No cloud API keys needed — everything runs locally.
 import os
 import json
 import logging
-import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -64,28 +63,49 @@ async def _try_ollama(text: str):
             f'WASH, WRITE, READ, SIGN, TELL, LAUGH, CRY, HUG, OPEN, CLOSE, GOOD, BAD, '
             f'BIG, SMALL, HOT, COLD, QUIET, FAST, SLOW, HOME, SCHOOL, FAMILY, MOM, '
             f'DAD, BABY, FRIEND, CHILD, MONEY, FREE, RIGHTS, LAW, EQUAL, CAR, TAXI, '
-            f'BUS, TODAY, NOW, MORNING, NIGHT.\n'
+            f'BUS, TODAY, NOW, MORNING, NIGHT, '
+            # Critical SASL grammar markers — these carry aspect, tense, modality,
+            # negation, degree, and conjunction meaning in SASL grammar.
+            # They MUST appear in the prompt so the LLM knows they are valid signs.
+            f'FINISH, WILL, MUST, CAN, NOT, VERY, ALSO.\n'
+            f'SASL grammar note: use FINISH for completed actions (past tense), '
+            f'WILL for future, MUST/CAN for obligation/ability, NOT for negation.\n'
             f'Example: ["HELLO", "HOW ARE YOU"]'
         )
 
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            r = await client.post(
-                f"{base}/api/generate",
-                json={"model": model, "prompt": prompt, "stream": False, "temperature": 0.1}
-            )
-            if r.status_code != 200:
-                return None
+        from backend.services.ollama_pool import get_client
+        client = get_client()
+        r = await client.post(
+            f"{base}/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                # Override the Modelfile system prompt so this call is treated
+                # as a sign-name converter, not a landmark classifier.
+                "system": (
+                    "You are a South African Sign Language (SASL) converter. "
+                    "Given an English sentence, return ONLY a JSON array of "
+                    "uppercase SASL sign name strings in SASL grammar order. "
+                    "No explanation. No text outside the JSON array."
+                ),
+                "stream": False,
+                "temperature": 0.1,
+            },
+            timeout=6.0,
+        )
+        if r.status_code != 200:
+            return None
 
-            raw = r.json().get("response", "").strip()
+        raw = r.json().get("response", "").strip()
 
-            start = raw.find("[")
-            end = raw.rfind("]") + 1
-            if start < 0 or end <= start:
-                return None
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        if start < 0 or end <= start:
+            return None
 
-            signs = json.loads(raw[start:end])
-            if isinstance(signs, list) and all(isinstance(s, str) for s in signs):
-                return [s.upper() for s in signs]
+        signs = json.loads(raw[start:end])
+        if isinstance(signs, list) and all(isinstance(s, str) for s in signs):
+            return [s.upper() for s in signs]
 
     except Exception as e:
         logger.debug(f"[OllamaClient] Ollama text-to-signs unavailable: {e}")

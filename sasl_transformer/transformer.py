@@ -110,7 +110,11 @@ class SASLTransformer:
             return self._empty_response(english_text)
 
         # Check cache first
-        cache_key = f"{english_text}|{request.include_non_manual}"
+        # Include 'context' in the cache key so the same sentence asked in
+        # different conversational contexts produces distinct cache entries.
+        # Without context in the key, "Are you okay?" after an emergency vs.
+        # after a greeting could return the same (wrong) cached translation.
+        cache_key = f"{english_text}|{request.include_non_manual}|{request.context}"
         if self._cache_enabled and cache_key in self._cache:
             logger.debug("Cache hit for: %s", english_text[:50])
             self._cache.move_to_end(cache_key)
@@ -194,13 +198,14 @@ class SASLTransformer:
             )
 
         # Combine system prompt + user message into one prompt for Ollama
-        full_prompt = f"{SASL_SYSTEM_PROMPT}\n\n{user_message}"
-
-        # Call Ollama's local /api/generate endpoint
+        # ISSUE 2 FIX: pass SASL_SYSTEM_PROMPT as the "system" key so the
+        # Modelfile's built-in landmark-recognition system prompt is overridden.
+        # The user message is sent alone as "prompt".
         ollama_url = f"{settings.ollama_base_url}/api/generate"
         request_body = {
             "model": settings.ollama_model,
-            "prompt": full_prompt,
+            "prompt": user_message,
+            "system": SASL_SYSTEM_PROMPT,
             "stream": False,
             "temperature": 0.1,
         }
@@ -281,6 +286,25 @@ class SASLTransformer:
                 raw[:500],
             )
             raise ValueError(f"Invalid JSON from LLM: {e}") from e
+
+    def translate_with_rules(
+        self,
+        english_text: str,
+        request: TranslationRequest,
+    ) -> TranslationResponse:
+        """Public wrapper for the rule-based fallback translator.
+
+        Delegates to _translate_with_rules(). Exposed as a public method so
+        callers outside this class do not need to access a private method.
+
+        Args:
+            english_text: Plain English sentence to convert.
+            request: The original TranslationRequest (carries metadata flags).
+
+        Returns:
+            TranslationResponse with rule-based SASL tokens.
+        """
+        return self._translate_with_rules(english_text, request)
 
     def _translate_with_rules(
         self,

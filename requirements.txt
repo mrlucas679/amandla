@@ -23,7 +23,7 @@ python-dotenv==1.0.1
 aiofiles==24.1.0
 
 # Multipart file uploads (speech audio)
-python-multipart==0.0.6
+python-multipart>=0.0.22
 
 # HTTP requests
 requests>=2.32.0

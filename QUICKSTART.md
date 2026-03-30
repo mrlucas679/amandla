@@ -1,29 +1,71 @@
 # AMANDLA Desktop — Quick Start Guide
 
-**Last Updated**: March 24, 2026
+**Last Updated**: March 30, 2026
+
+> For full architecture and constraints: see **`CLAUDE.md`**
 
 ---
 
-## ⚡ 30-Second Startup
+## ⚡ Start the App
 
-### Terminal 1: Backend
-```powershell
-cd C:\Users\Admin\amandla-desktop
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### Terminal 2: Ollama (if needed)
+### Step 1 — Start Ollama (separate terminal, keep it running)
 ```powershell
 ollama serve
 ```
 
-### Terminal 3: Electron App
+### Step 2 — Start AMANDLA
 ```powershell
 cd C:\Users\Admin\amandla-desktop
 npm start
 ```
 
-**Wait for**: Split-screen Electron window with two panes.
+`npm start` starts FastAPI on port 8000, waits for the health check, then
+launches the split-screen Electron window automatically.
+
+---
+
+## 🧪 Test It Works
+
+1. **Hearing window** (left): Type `"Hello, how are you?"`
+2. **Click Send**
+3. **Deaf window** (right): Avatar should animate + gloss text appears
+4. **DevTools** (F12 in either window): Check console for WebSocket logs
+
+Expected console output:
+```
+[Preload] WebSocket connected: session=amandla-... role=hearing
+[Preload] WebSocket connected: session=amandla-... role=deaf
+```
+
+---
+
+## 📋 Services at a Glance
+
+| Service | Port | Health check |
+|---------|------|--------------|
+| FastAPI Backend | 8000 | `http://localhost:8000/health` |
+| Ollama LLM | 11434 | `ollama list` |
+| Electron App | — | Split-screen window |
+
+---
+
+## 🔧 One-Time Setup (first run only)
+
+```powershell
+# Install Node dependencies
+npm install
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Create Ollama model
+ollama create amandla -f Modelfile
+
+# Copy env file
+copy .env.example .env
+```
+
+---
 
 ---
 
