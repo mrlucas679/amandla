@@ -5,11 +5,9 @@ Uses the local amandla model to recognize SASL signs from landmark data
 import os
 import json
 import logging
-import httpx
 import asyncio
-from dotenv import load_dotenv
 
-load_dotenv()
+# Note: dotenv is loaded once by backend.main at startup — do NOT call load_dotenv() here
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +22,87 @@ _LANDMARK_NAMES = [
     "PINKY_MCP", "PINKY_PIP", "PINKY_DIP", "PINKY_TIP",
 ]
 
+# Landmark index constants — MediaPipe hand model (21 points).
+_WRIST       = 0
+_THUMB_TIP   = 4;  _THUMB_MCP   = 2
+_INDEX_TIP   = 8;  _INDEX_MCP   = 5
+_MIDDLE_TIP  = 12; _MIDDLE_MCP  = 9
+_RING_TIP    = 16; _RING_MCP    = 13
+_PINKY_TIP   = 20; _PINKY_MCP   = 17
+_INDEX_PIP   = 6;  _MIDDLE_PIP  = 10
+_RING_PIP    = 14; _PINKY_PIP   = 18
+
+
+def _extract_features(landmarks: list) -> str:
+    """Convert raw MediaPipe landmarks to a plain-English feature description.
+
+    Raw x,y,z coordinates are meaningless to an LLM. This function computes
+    geometric features — finger extension, thumb position, palm orientation,
+    finger spread — and returns them as a readable string the model can
+    classify against its list of known SASL signs.
+
+    MediaPipe coordinate system:
+        x: 0 (left) → 1 (right)
+        y: 0 (top)  → 1 (bottom)  — NOTE: y increases downward
+        z: depth (negative = toward camera)
+
+    Args:
+        landmarks: List of 21 dicts with 'x', 'y', 'z' keys (normalised 0–1).
+
+    Returns:
+        Plain-English feature string (e.g. "Index: extended. Middle: extended.
+        Ring: curled. Pinky: curled. Thumb: abducted. Palm: facing camera.
+        Fingers: spread.")
+    """
+    if len(landmarks) < 21:
+        return "Insufficient landmark data."
+
+    def pt(idx: int) -> dict:
+        """Safe landmark accessor."""
+        return landmarks[idx] if idx < len(landmarks) else {"x": 0.0, "y": 0.5, "z": 0.0}
+
+    # ── Finger extension ───────────────────────────────────────────────────
+    # A finger is extended when its tip is HIGHER (smaller y) than its MCP.
+    # A small margin prevents borderline neutral positions from being called extended.
+    def is_extended(tip_idx: int, mcp_idx: int, threshold: float = 0.04) -> bool:
+        """Return True if the fingertip is above the MCP knuckle (extended)."""
+        return (pt(mcp_idx)["y"] - pt(tip_idx)["y"]) > threshold
+
+    index_ext  = is_extended(_INDEX_TIP,  _INDEX_MCP)
+    middle_ext = is_extended(_MIDDLE_TIP, _MIDDLE_MCP)
+    ring_ext   = is_extended(_RING_TIP,   _RING_MCP)
+    pinky_ext  = is_extended(_PINKY_TIP,  _PINKY_MCP)
+
+    # ── Thumb: abducted if tip is far left/right of index MCP ─────────────
+    thumb_x_dist = abs(pt(_THUMB_TIP)["x"] - pt(_INDEX_MCP)["x"])
+    thumb_abducted = thumb_x_dist > 0.08
+
+    # ── Palm orientation: z-coordinate of wrist vs middle MCP ─────────────
+    # Positive z diff → palm faces toward camera
+    palm_z = pt(_WRIST)["z"] - pt(_MIDDLE_MCP)["z"]
+    if palm_z > 0.02:
+        palm_orientation = "facing camera"
+    elif palm_z < -0.02:
+        palm_orientation = "facing away"
+    else:
+        palm_orientation = "sideways"
+
+    # ── Finger spread: distance between index and pinky tips ──────────────
+    spread = abs(pt(_INDEX_TIP)["x"] - pt(_PINKY_TIP)["x"])
+    fingers_spread = spread > 0.15
+
+    # ── Compose readable feature string ───────────────────────────────────
+    parts = [
+        f"Index: {'extended' if index_ext else 'curled'}.",
+        f"Middle: {'extended' if middle_ext else 'curled'}.",
+        f"Ring: {'extended' if ring_ext else 'curled'}.",
+        f"Pinky: {'extended' if pinky_ext else 'curled'}.",
+        f"Thumb: {'abducted' if thumb_abducted else 'folded'}.",
+        f"Palm: {palm_orientation}.",
+        f"Fingers: {'spread' if fingers_spread else 'together'}.",
+    ]
+    return " ".join(parts)
+
 
 async def recognize_sign(landmark_data: dict) -> dict:
     """
@@ -36,54 +115,62 @@ async def recognize_sign(landmark_data: dict) -> dict:
         Dict with 'sign', 'confidence', and 'description'
     """
     try:
-        # Build a named-landmark prompt that matches the Modelfile's expected format.
-        # Convert raw list (or dict with 'landmarks' key) to [{id, name, x, y, z}].
-        raw_landmarks = landmark_data.get("landmarks", landmark_data) if isinstance(landmark_data, dict) else landmark_data
-        named = []
-        for i, pt in enumerate(raw_landmarks[:21]):
-            named.append({
-                "id":   i,
-                "name": _LANDMARK_NAMES[i] if i < len(_LANDMARK_NAMES) else f"pt{i}",
-                "x":    round(pt.get("x", 0.0), 4),
-                "y":    round(pt.get("y", 0.0), 4),
-                "z":    round(pt.get("z", 0.0), 4),
-            })
-        prompt = f"Landmarks: {json.dumps(named)}"
+        # Build a geometric-feature prompt that the LLM can actually classify.
+        # Raw x,y,z numbers are meaningless to a language model; computed features
+        # (finger extension, palm orientation, spread) match what the Modelfile
+        # system prompt teaches it to recognise.
+        raw_landmarks = (
+            landmark_data.get("landmarks", landmark_data)
+            if isinstance(landmark_data, dict)
+            else landmark_data
+        )
+        features = _extract_features(raw_landmarks)
+        handedness = (
+            landmark_data.get("handedness", "Right")
+            if isinstance(landmark_data, dict)
+            else "Right"
+        )
+        prompt = (
+            f"Hand: {handedness}. "
+            f"Features: {features}"
+        )
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "temperature": 0.1
-                }
-            )
+        from backend.services.ollama_pool import get_client
+        client = get_client()
+        response = await client.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "temperature": 0.1
+            },
+            timeout=15.0,
+        )
 
-            if response.status_code != 200:
-                logger.error(f"Ollama error: {response.status_code}")
-                return {
-                    'sign': 'UNKNOWN',
-                    'confidence': 0.0,
-                    'description': 'Sign recognition failed'
-                }
+        if response.status_code != 200:
+            logger.error(f"Ollama error: {response.status_code}")
+            return {
+                'sign': 'UNKNOWN',
+                'confidence': 0.0,
+                'description': 'Sign recognition failed'
+            }
 
-            data = response.json()
-            response_text = data.get('response', '').strip()
+        data = response.json()
+        response_text = data.get('response', '').strip()
 
-            # Try to parse JSON response
-            try:
-                result = json.loads(response_text)
-                logger.info(f"Sign recognized: {result.get('sign')} (conf={result.get('confidence')})")
-                return result
-            except json.JSONDecodeError:
-                logger.warning(f"Ollama returned non-JSON: {response_text[:100]}")
-                return {
-                    'sign': 'UNKNOWN',
-                    'confidence': 0.0,
-                    'description': 'Invalid response format'
-                }
+        # Try to parse JSON response
+        try:
+            result = json.loads(response_text)
+            logger.info(f"Sign recognized: {result.get('sign')} (conf={result.get('confidence')})")
+            return result
+        except json.JSONDecodeError:
+            logger.warning(f"Ollama returned non-JSON: {response_text[:100]}")
+            return {
+                'sign': 'UNKNOWN',
+                'confidence': 0.0,
+                'description': 'Invalid response format'
+            }
 
     except asyncio.TimeoutError:
         logger.warning("Ollama request timeout — trying NVIDIA NIM fallback")
@@ -119,30 +206,31 @@ async def _recognize_via_nim(landmark_data: dict) -> dict:
         return result
     except Exception as e:
         logger.error(f"[NIM] Fallback recognition failed: {e}")
-        return {'sign': 'UNKNOWN', 'confidence': 0.0, 'description': f'All recognition failed: {e}'}
+        return {'sign': 'UNKNOWN', 'confidence': 0.0, 'description': 'Sign recognition unavailable — please try again'}
 
 
 async def health_check() -> bool:
     """Check if Ollama service is running and amandla model is available"""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            # Check if Ollama is running
-            response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+        from backend.services.ollama_pool import get_client
+        client = get_client()
+        # Check if Ollama is running
+        response = await client.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5.0)
 
-            if response.status_code != 200:
-                logger.warning(f"Ollama health check failed: {response.status_code}")
-                return False
+        if response.status_code != 200:
+            logger.warning(f"Ollama health check failed: {response.status_code}")
+            return False
 
-            # Check if amandla model exists
-            data = response.json()
-            models = [m.get('name', '').split(':')[0] for m in data.get('models', [])]
+        # Check if amandla model exists
+        data = response.json()
+        models = [m.get('name', '').split(':')[0] for m in data.get('models', [])]
 
-            if OLLAMA_MODEL in models:
-                logger.info(f"Ollama {OLLAMA_MODEL} model is available")
-                return True
-            else:
-                logger.warning(f"Ollama model '{OLLAMA_MODEL}' not found. Available: {models}")
-                return False
+        if OLLAMA_MODEL in models:
+            logger.info(f"Ollama {OLLAMA_MODEL} model is available")
+            return True
+        else:
+            logger.warning(f"Ollama model '{OLLAMA_MODEL}' not found. Available: {models}")
+            return False
 
     except Exception as e:
         logger.error(f"Ollama health check error: {e}")

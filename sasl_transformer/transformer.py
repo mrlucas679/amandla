@@ -2,12 +2,12 @@
 SASL Transformer — the core translation engine.
 
 Takes English text (from Whisper STT) and converts it to SASL gloss
-notation using the Gemini API. Falls back to rule-based conversion
-if the API is unavailable.
+notation using the local Ollama model. Falls back to rule-based conversion
+if Ollama is unavailable.
 
 Flow:
     1. Receive English sentence
-    2. Send to Gemini API with SASL grammar rules (system prompt)
+    2. Send to Ollama with SASL grammar rules (system prompt)
     3. Parse the structured JSON response
     4. Check each token against the sign library
     5. Return TranslationResponse with tokens, gloss text, and metadata
@@ -16,8 +16,9 @@ Flow:
 import json
 import logging
 import re
+import time as _time
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Tuple
 
 from sasl_transformer.config import settings
 from sasl_transformer.grammar_rules import (
@@ -44,8 +45,8 @@ class SASLTransformer:
     """
     Converts English sentences to SASL gloss notation.
 
-    Uses the Gemini API as the primary translation engine, with a
-    rule-based fallback for when the API is unavailable.
+    Uses the local Ollama model as the primary translation engine, with a
+    rule-based fallback for when Ollama is unavailable.
 
     Usage:
         transformer = SASLTransformer()
@@ -69,14 +70,17 @@ class SASLTransformer:
         lib_path = sign_library_path or settings.sign_library_path
         self._sign_library = SignLibrary(lib_path)
 
-        # Simple LRU cache for repeated translations
-        self._cache: OrderedDict[str, TranslationResponse] = OrderedDict()
+        # Simple LRU cache for repeated translations — stores (response, timestamp) tuples
+        self._cache: OrderedDict[str, Tuple[TranslationResponse, float]] = OrderedDict()
         self._cache_enabled = settings.sasl_cache_enabled
         self._cache_max_size = settings.sasl_cache_max_size
+        # Cache TTL in seconds — entries older than this are treated as stale
+        self._cache_ttl_s: float = 3600.0  # 1 hour
 
         logger.info(
-            "SASL Transformer initialised — model: %s, library: %d signs, cache: %s",
-            settings.gemini_model,
+            "SASL Transformer initialised — model: %s @ %s, library: %d signs, cache: %s",
+            settings.ollama_model,
+            settings.ollama_base_url,
             self._sign_library.total_signs,
             "enabled" if self._cache_enabled else "disabled",
         )
@@ -108,12 +112,22 @@ class SASLTransformer:
         if not english_text:
             return self._empty_response(english_text)
 
-        # Check cache first
-        cache_key = f"{english_text}|{request.include_non_manual}"
+        # Check cache first (with TTL — stale entries are evicted)
+        # Include 'context' in the cache key so the same sentence asked in
+        # different conversational contexts produces distinct cache entries.
+        # Without context in the key, "Are you okay?" after an emergency vs.
+        # after a greeting could return the same (wrong) cached translation.
+        cache_key = f"{english_text}|{request.include_non_manual}|{request.context}"
         if self._cache_enabled and cache_key in self._cache:
-            logger.debug("Cache hit for: %s", english_text[:50])
-            self._cache.move_to_end(cache_key)
-            return self._cache[cache_key]
+            cached_response, cached_time = self._cache[cache_key]
+            if (_time.monotonic() - cached_time) < self._cache_ttl_s:
+                logger.debug("Cache hit for: %s", english_text[:50])
+                self._cache.move_to_end(cache_key)
+                return cached_response
+            else:
+                # Stale entry — remove it so we re-translate below
+                del self._cache[cache_key]
+                logger.debug("Cache expired for: %s", english_text[:50])
 
         # Try LLM-based translation first
         try:
@@ -137,9 +151,9 @@ class SASLTransformer:
         # Enrich tokens with sign library data
         response = self._enrich_with_library(response)
 
-        # Cache the result
+        # Cache the result with a timestamp for TTL expiry
         if self._cache_enabled:
-            self._cache[cache_key] = response
+            self._cache[cache_key] = (response, _time.monotonic())
             # Evict oldest if cache is full
             while len(self._cache) > self._cache_max_size:
                 self._cache.popitem(last=False)
@@ -165,42 +179,72 @@ class SASLTransformer:
         request: TranslationRequest,
     ) -> TranslationResponse:
         """
-        Use the Gemini API to translate English → SASL gloss.
+        Use the local Ollama model to translate English → SASL gloss.
 
-        This is the primary and most accurate translation method.
+        Sends the SASL grammar system prompt + user text to Ollama's
+        /api/generate endpoint. This is the primary and most accurate
+        translation method when Ollama is running.
+
+        Args:
+            english_text: The English sentence to translate.
+            request: The full translation request with options.
+
+        Returns:
+            TranslationResponse with gloss text and tokens.
+
+        Raises:
+            RuntimeError: If Ollama is unreachable or returns an error.
         """
-        if not settings.gemini_api_key:
-            raise RuntimeError("GEMINI_API_KEY not set — using rule-based fallback")
-
-        # Build the user message
+        # Build the user message with optional context
         user_message = f"Convert this English sentence to SASL gloss:\n\n{english_text}"
-
         if request.context:
             user_message = (
                 f"Previous context: {request.context}\n\n"
                 f"Convert this English sentence to SASL gloss:\n\n{english_text}"
             )
 
-        full_prompt = f"{SASL_SYSTEM_PROMPT}\n\n{user_message}"
+        # Combine system prompt + user message into one prompt for Ollama
+        # ISSUE 2 FIX: pass SASL_SYSTEM_PROMPT as the "system" key so the
+        # Modelfile's built-in landmark-recognition system prompt is overridden.
+        # The user message is sent alone as "prompt".
+        ollama_url = f"{settings.ollama_base_url}/api/generate"
+        request_body = {
+            "model": settings.ollama_model,
+            "prompt": user_message,
+            "system": SASL_SYSTEM_PROMPT,
+            "stream": False,
+            "temperature": 0.1,
+        }
 
-        # Call Gemini API (synchronous SDK wrapped in executor for async compat)
-        import asyncio
-        from google import genai
+        try:
+            # PERF-4: Reuse the shared Ollama connection pool instead of
+            # creating a new httpx.AsyncClient per call (saves TCP overhead).
+            from backend.services.ollama_pool import get_client
+            client = get_client()
+            response = await client.post(ollama_url, json=request_body, timeout=15.0)
 
-        client = genai.Client(api_key=settings.gemini_api_key)
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: client.models.generate_content(
-                model=settings.gemini_model,
-                contents=full_prompt,
-            ),
-        )
+            if response.status_code != 200:
+                raise RuntimeError(
+                    f"Ollama returned status {response.status_code} — is 'ollama serve' running?"
+                )
 
-        # Extract the text response
-        raw_response = response.text.strip()
+            # Extract text from Ollama's JSON response
+            raw_response = response.json().get("response", "").strip()
 
-        # Parse the JSON response
+            if not raw_response:
+                raise RuntimeError("Ollama returned an empty response")
+
+        except Exception as conn_err:
+            if "connect" in str(type(conn_err).__name__).lower() or "connect" in str(conn_err).lower():
+                raise RuntimeError(
+                    "Cannot connect to Ollama — make sure 'ollama serve' is running on "
+                    f"{settings.ollama_base_url}"
+                ) from conn_err
+            if "timeout" in str(type(conn_err).__name__).lower() or "timeout" in str(conn_err).lower():
+                raise RuntimeError("Ollama request timed out — the model may be loading") from conn_err
+            raise
+
+        # Parse the JSON response from the LLM
         parsed = self._parse_llm_response(raw_response)
 
         # Build tokens list
@@ -233,7 +277,7 @@ class SASLTransformer:
 
     def _parse_llm_response(self, raw: str) -> dict:
         """
-        Parse the JSON response from Claude.
+        Parse the JSON response from the LLM (Ollama).
 
         Handles edge cases like markdown code fences around the JSON.
         """
@@ -253,6 +297,25 @@ class SASLTransformer:
                 raw[:500],
             )
             raise ValueError(f"Invalid JSON from LLM: {e}") from e
+
+    def translate_with_rules(
+        self,
+        english_text: str,
+        request: TranslationRequest,
+    ) -> TranslationResponse:
+        """Public wrapper for the rule-based fallback translator.
+
+        Delegates to _translate_with_rules(). Exposed as a public method so
+        callers outside this class do not need to access a private method.
+
+        Args:
+            english_text: Plain English sentence to convert.
+            request: The original TranslationRequest (carries metadata flags).
+
+        Returns:
+            TranslationResponse with rule-based SASL tokens.
+        """
+        return self._translate_with_rules(english_text, request)
 
     def _translate_with_rules(
         self,
