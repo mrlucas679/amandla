@@ -97,8 +97,15 @@ window.amandla.onMessage(function (msg) {
   // ── HEARING → DEAF acknowledgement: backend sends back the SASL gloss
   // that was actually delivered to the deaf person's screen.
   // This lets the hearing user see "what the deaf person saw" for transparency.
+  // FEAT-5: If a non-English source language was detected, show the translation chain.
   if (msg.type === 'sasl_ack' && msg.sasl_gloss) {
-    transcriptEl.textContent = '✓ Sent as SASL: ' + msg.sasl_gloss
+    var ackText = '✓ Sent as SASL: ' + msg.sasl_gloss
+    if (msg.source_language && msg.source_language !== 'en') {
+      var langEntry = SA_LANGUAGES[msg.source_language]
+      var langLabel = langEntry ? langEntry.label : msg.source_language
+      ackText = '✓ Translated from ' + langLabel + ' → SASL: ' + msg.sasl_gloss
+    }
+    transcriptEl.textContent = ackText
     return
   }
 
@@ -300,8 +307,15 @@ async function uploadAudio(blob, mimeType) {
       if (data.language) setDetectedLanguage(data.language)
       setTurnIndicator('hearing')
       // Show the SASL gloss that was delivered to the deaf person
+      // FEAT-5: Include source language info when non-English speech was translated
       if (data.sasl_gloss) {
-        transcriptEl.textContent = '✓ Sent as SASL: ' + data.sasl_gloss
+        if (data.source_language && data.source_language !== 'en') {
+          var langEntry = SA_LANGUAGES[data.source_language]
+          var langLabel = langEntry ? langEntry.label : data.source_language
+          transcriptEl.textContent = '✓ Translated from ' + langLabel + ' → SASL: ' + data.sasl_gloss
+        } else {
+          transcriptEl.textContent = '✓ Sent as SASL: ' + data.sasl_gloss
+        }
       }
     } else {
       transcriptEl.textContent = 'Could not transcribe — try typing'

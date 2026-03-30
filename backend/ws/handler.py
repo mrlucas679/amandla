@@ -182,14 +182,17 @@ async def _handle_text(websocket, session, session_id, msg):
     if deaf_ws:
         await send_safe(deaf_ws, {"type": "translating", "session_id": session_id})
 
-    sasl = await text_to_sasl_signs(text)
+    sasl = await text_to_sasl_signs(text, language=language)
     out = {
         "type":             "signs",
         "signs":            sasl["signs"],
         "text":             sasl["text"],
         "original_english": sasl["original_english"],
         "language":         language,
+        "source_language":  sasl.get("source_language"),
+        "original_input":   sasl.get("original_input"),
         "session_id":       session_id,
+        "non_manual_markers": sasl.get("non_manual_markers", []),
     }
     await broadcast(session, websocket, out)
     await broadcast_all(session, {"type": "turn", "speaker": "hearing"})
@@ -213,6 +216,8 @@ async def _handle_text(websocket, session, session_id, msg):
         "type":             "sasl_ack",
         "sasl_gloss":       sasl["text"],
         "original_english": text,
+        "source_language":  sasl.get("source_language"),
+        "original_input":   sasl.get("original_input"),
     })
 
 
@@ -449,18 +454,21 @@ async def _handle_speech_upload(websocket, session, session_id, msg):
         from backend.services.whisper_service import transcribe_audio
         result = await transcribe_audio(audio_bytes, mime_type)
         text = result.get("text", "").strip()
+        detected_language = result.get("language", "en")
 
-        # Convert to SASL signs
-        sasl = await text_to_sasl_signs(text)
+        # Convert to SASL signs (FEAT-5: pass detected language for pre-translation)
+        sasl = await text_to_sasl_signs(text, language=detected_language)
 
         # Reply to the sender with transcription result (includes request_id)
         await send_safe(websocket, {
-            "request_id": request_id,
-            "text":       text,
-            "signs":      sasl["signs"],
-            "sasl_gloss": sasl["text"],
-            "language":   result.get("language", "en"),
-            "confidence": result.get("confidence", 0.0),
+            "request_id":      request_id,
+            "text":            text,
+            "signs":           sasl["signs"],
+            "sasl_gloss":      sasl["text"],
+            "language":        detected_language,
+            "confidence":      result.get("confidence", 0.0),
+            "source_language": sasl.get("source_language"),
+            "original_input":  sasl.get("original_input"),
         })
 
         # FEAT-3: Log speech upload to conversation history
@@ -483,9 +491,12 @@ async def _handle_speech_upload(websocket, session, session_id, msg):
                 "type":             "signs",
                 "signs":            sasl["signs"],
                 "text":             sasl["text"],
-                "original_english": text,
-                "language":         result.get("language"),
+                "original_english": sasl.get("original_english", text),
+                "language":         detected_language,
+                "source_language":  sasl.get("source_language"),
+                "original_input":   sasl.get("original_input"),
                 "session_id":       session_id,
+                "non_manual_markers": sasl.get("non_manual_markers", []),
             }
             await broadcast(session, websocket, signs_msg)
             await broadcast_all(session, {"type": "turn", "speaker": "hearing"})

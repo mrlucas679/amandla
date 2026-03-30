@@ -18,6 +18,13 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "amandla")
 
 # ── Import canonical rule-based converter from shared module ──────────────
 from backend.services.sign_maps import sentence_to_sign_names as _rule_based_signs
+from backend.services.sign_maps import WORD_MAP as _WORD_MAP
+
+# ── Dynamic sign list for the Ollama prompt ───────────────────────────────
+# Generated at import time from the single-source-of-truth WORD_MAP so the
+# prompt always reflects the current sign inventory (no stale hardcoded list).
+_ALL_SIGN_NAMES = sorted(set(_WORD_MAP.values()))
+_SIGN_LIST_STR = ", ".join(_ALL_SIGN_NAMES)
 
 
 async def classify_text_to_signs(text: str) -> list:
@@ -54,20 +61,7 @@ async def _try_ollama(text: str):
             f'Convert this English sentence to SASL sign names.\n'
             f'Sentence: "{text}"\n'
             f'Reply ONLY with a JSON array of uppercase sign name strings.\n'
-            f'Valid signs: HELLO, GOODBYE, PLEASE, THANK YOU, SORRY, YES, NO, HELP, '
-            f'WAIT, STOP, REPEAT, UNDERSTAND, WATER, PAIN, HURT, DOCTOR, NURSE, '
-            f'HOSPITAL, SICK, MEDICINE, AMBULANCE, EMERGENCY, HAPPY, SAD, ANGRY, '
-            f'SCARED, LOVE, I LOVE YOU, TIRED, HUNGRY, THIRSTY, WORRIED, CONFUSED, '
-            f'WHO, WHAT, WHERE, WHEN, WHY, HOW, I, YOU, WE, THEY, COME, GO, LISTEN, '
-            f'LOOK, KNOW, WANT, GIVE, EAT, DRINK, SLEEP, SIT, STAND, WALK, RUN, WORK, '
-            f'WASH, WRITE, READ, SIGN, TELL, LAUGH, CRY, HUG, OPEN, CLOSE, GOOD, BAD, '
-            f'BIG, SMALL, HOT, COLD, QUIET, FAST, SLOW, HOME, SCHOOL, FAMILY, MOM, '
-            f'DAD, BABY, FRIEND, CHILD, MONEY, FREE, RIGHTS, LAW, EQUAL, CAR, TAXI, '
-            f'BUS, TODAY, NOW, MORNING, NIGHT, '
-            # Critical SASL grammar markers — these carry aspect, tense, modality,
-            # negation, degree, and conjunction meaning in SASL grammar.
-            # They MUST appear in the prompt so the LLM knows they are valid signs.
-            f'FINISH, WILL, MUST, CAN, NOT, VERY, ALSO.\n'
+            f'Valid signs: {_SIGN_LIST_STR}.\n'
             f'SASL grammar note: use FINISH for completed actions (past tense), '
             f'WILL for future, MUST/CAN for obligation/ability, NOT for negation.\n'
             f'Example: ["HELLO", "HOW ARE YOU"]'

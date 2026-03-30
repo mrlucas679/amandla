@@ -144,6 +144,12 @@ window.amandla.onMessage(function (msg) {
       lastSignText = msg.text || msg.signs.join(' ')
       replayBtn.classList.add('visible')
 
+      // NMM: Activate non-manual markers (facial expressions, head movements)
+      // for SASL grammatical correctness (de Villiers 2014, van Zijl 2006)
+      if (Array.isArray(msg.non_manual_markers) && msg.non_manual_markers.length > 0 && window.AmandlaAvatar && window.AmandlaAvatar.setNMMs) {
+        window.AmandlaAvatar.setNMMs(msg.non_manual_markers)
+      }
+
       if (window.avatarPlaySigns) {
         window.avatarPlaySigns(msg.signs, msg.text || msg.signs.join(' '))
       } else {

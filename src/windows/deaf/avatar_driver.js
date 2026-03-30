@@ -11,19 +11,17 @@
  * Must load after signs_library.js and three.js, before avatar.js.
  *
  * ── CURRENT STATUS ─────────────────────────────────────────────────────────
- * NOTE: This driver is loaded and ready but the current avatar uses a
- * PROCEDURAL SKELETON built in avatar.js (geometric shapes — no external file
- * needed). It works out-of-the-box with no extra assets.
+ * R1 IMPLEMENTED: This driver is actively used when the GLB human avatar
+ * loads successfully (avatar.js → loadHumanAvatar() → bindBonesFromGLTF).
  *
- * WHEN A GLTF/GLB MODEL IS ADDED:
- *   1. Load the model with THREE.GLTFLoader (already in the CSP allow-list).
- *   2. Call AvatarDriver.bindBonesFromGLTF(gltfModel, avatarBones) to map
- *      Mixamo rig bones → the avatarBones object used by avatar.js.
- *   3. Replace applyPoseDirect() calls in avatar.js with
- *      AvatarDriver.applyPoseToGLTF(pose, avatarBones) for proper Mixamo
- *      axis remapping.
+ * The procedural skeleton (cylinders/spheres) is built as an instant fallback
+ * and is hidden once the GLB model loads. If the GLB fails, the procedural
+ * skeleton remains visible and this driver is not invoked.
  *
- * The human_signing.glb model is available at assets/models/ for this upgrade.
+ * WHEN SWAPPING THE GLB MODEL:
+ *   1. Place the new .glb in assets/models/ (Mixamo-rigged, T-pose).
+ *   2. Call window.AmandlaAvatar.setAvatarUrl('path/to/new.glb') before init.
+ *   3. AvatarDriver auto-detects rig type (mixamorig / mixamorig2 / galtis).
  * ────────────────────────────────────────────────────────────────────────────
  */
 

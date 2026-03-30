@@ -63,7 +63,9 @@ SINGLE_SIGN_SENTENCES: Dict[str, str] = {
 }
 
 # ── Sign name → natural English word (for multi-sign reconstruction) ─────────
-SIGN_WORD_MAP: Dict[str, str] = {
+# Hand-curated overrides — these take priority over auto-generated mappings
+# because they produce more natural English than the raw word form.
+_SIGN_WORD_OVERRIDES: Dict[str, str] = {
     "I": "I", "YOU": "you", "WE": "we", "THEY": "they",
     "WANT": "need", "HELP": "help", "WATER": "water",
     "DOCTOR": "a doctor", "NURSE": "a nurse", "HOSPITAL": "the hospital",
@@ -78,6 +80,23 @@ SIGN_WORD_MAP: Dict[str, str] = {
     "STOP": "stop", "WAIT": "wait", "COME": "come", "GO": "go",
     "HOME": "home", "SCHOOL": "school", "WORK": "work",
 }
+
+# Auto-generate reverse mappings from the canonical sign_maps.WORD_MAP.
+# For each (english_word → SIGN_NAME) pair, pick the shortest English word
+# as the most natural reverse mapping. Hand-curated overrides take priority.
+from backend.services.sign_maps import WORD_MAP as _WORD_MAP
+
+# Invert WORD_MAP: collect all English words per sign name, pick shortest
+_auto_reverse: Dict[str, str] = {}
+for _word, _sign in _WORD_MAP.items():
+    _sign_upper = _sign.upper()
+    # Skip if already have a shorter word for this sign
+    if _sign_upper in _auto_reverse and len(_auto_reverse[_sign_upper]) <= len(_word):
+        continue
+    _auto_reverse[_sign_upper] = _word
+
+# Merge: auto-generated first, then overrides on top (overrides win)
+SIGN_WORD_MAP: Dict[str, str] = {**_auto_reverse, **_SIGN_WORD_OVERRIDES}
 
 # ── Multi-word sign detection (BUG-1 fix) ────────────────────────────────────
 # Collect every multi-word sign name from the lookup tables so the SASL-text
@@ -300,4 +319,18 @@ async def debounce_and_flush(session_id: str, session: dict) -> None:
             "signs": signs,
         })
         logger.info("[Signs2English] Sent to hearing: %r", english)
+
+        # Log to conversation history (must never break the main flow)
+        try:
+            from backend.services.history_db import log_message
+            await log_message(
+                session_id=session_id,
+                direction="deaf_to_hearing",
+                original_text=" ".join(signs),
+                sasl_gloss=" ".join(signs),
+                translated_text=english,
+                source="sign_button",
+            )
+        except Exception:
+            pass
 

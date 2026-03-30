@@ -70,11 +70,12 @@ Avatar (src/windows/deaf/avatar.js)
 ```
 
 ### Communication Flow (Hearing → Deaf)
-1. Hearing user types or speaks
-2. `window.amandla.send({type:'text', text:'...'})` → WebSocket → backend
-3. Backend: `_text_to_sasl_signs(text)` → SASL transformer → sign names array
-4. Backend broadcasts `{type:'signs', signs:[...]}` to deaf window
-5. Deaf window calls `window.avatarPlaySigns(signs, text)` to animate
+1. Hearing user types or speaks (in any of SA's 11 official languages)
+2. `window.amandla.send({type:'text', text:'...', language:'af'})` → WebSocket → backend
+3. Backend: if language ≠ English → `_translate_to_english(text)` via Ollama (FEAT-5)
+4. Backend: `text_to_sasl_signs(text)` → SASL transformer → sign names array
+5. Backend broadcasts `{type:'signs', signs:[...]}` to deaf window
+6. Deaf window calls `window.avatarPlaySigns(signs, text)` to animate
 
 ### Communication Flow (Deaf → Hearing)
 1. Deaf user taps quick-sign button or MediaPipe detects a sign
@@ -137,6 +138,8 @@ If you see these mentioned in any other doc file, ignore it — those docs are s
 - Modal verbs (`will`, `must`, `can`, etc.) map to SASL signs — they are NOT in FILLER
 - `FINISH`/`WILL` aspect markers are critical SASL grammar — never drop them
 - `FILLER` only contains words with zero SASL equivalent (articles, prepositions, etc.)
+- Non-English input is pre-translated to English via Ollama before the SASL pipeline (FEAT-5)
+- English input (`language=None` or `language='en'`) bypasses translation — no double-translation
 
 ---
 
@@ -145,9 +148,10 @@ If you see these mentioned in any other doc file, ignore it — those docs are s
 ```
 WHISPER_MODEL=small          # tiny|base|small|medium|large
 WHISPER_DEVICE=cpu           # cpu|cuda
-WHISPER_LANGUAGE=            # empty = auto-detect (recommended)
+WHISPER_LANGUAGE=            # empty = auto-detect (recommended for multilingual)
 OLLAMA_MODEL=amandla         # must be created: ollama create amandla -f Modelfile
 OLLAMA_BASE_URL=http://localhost:11434
+TRANSLATION_OLLAMA_MODEL=    # optional — defaults to OLLAMA_MODEL if not set
 BACKEND_HOST=0.0.0.0
 BACKEND_PORT=8000
 NVIDIA_ENABLED=false         # set true only if you have an NVIDIA API key

@@ -193,6 +193,7 @@ curl http://localhost:8000/health
 |------|---------|
 | **`CLAUDE.md`** | ⭐ Single source of truth — architecture, constraints, rules |
 | **`AGENTS.md`** | AI agent coding conventions and full file map |
+| `PROJECT_PLAN.md` | Self-contained project plan: status, open items, next steps |
 | **`PRODUCTION_READINESS.md`** | Audit of all issues, fixes, and remaining work |
 | `AMANDLA_FINAL_BLUEPRINT.md` | Avatar and Three.js implementation spec |
 | `AMANDLA_MISSING_PIECES.md` | Backend integration blueprint |

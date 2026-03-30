@@ -216,6 +216,71 @@ These messages use `request_id` for promise resolution in the preload bridge. Th
 
 ---
 
+#### `history_request` — Conversation history retrieval
+
+**Direction:** Any → Backend → Same client  
+**Rate limited:** No
+
+**Request (session messages):**
+```json
+{
+  "type": "history_request",
+  "session_id": "amandla-abc123",
+  "limit": 100,
+  "request_id": 5
+}
+```
+
+**Optional fields:** `session_id` (defaults to current session), `limit` (default 100, capped at 500)
+
+**Response:**
+```json
+{
+  "request_id": 5,
+  "type": "history_response",
+  "session_id": "amandla-abc123",
+  "messages": [
+    {
+      "id": 1,
+      "session_id": "amandla-abc123",
+      "timestamp": "2026-03-30T10:00:00+00:00",
+      "direction": "hearing_to_deaf",
+      "original_text": "Hello how are you",
+      "sasl_gloss": "HELLO HOW YOU",
+      "translated_text": "HELLO HOW YOU",
+      "source": "text"
+    }
+  ]
+}
+```
+
+**Request (list all sessions):**
+```json
+{
+  "type": "history_request",
+  "list_sessions": true,
+  "request_id": 6
+}
+```
+
+**Response:**
+```json
+{
+  "request_id": 6,
+  "type": "history_response",
+  "sessions": [
+    {
+      "session_id": "amandla-abc123",
+      "message_count": 42,
+      "first_message": "2026-03-30T09:00:00+00:00",
+      "last_message": "2026-03-30T10:30:00+00:00"
+    }
+  ]
+}
+```
+
+---
+
 ### Broadcast Messages (Fire-and-Forget)
 
 These messages do **not** use `request_id`. They are sent via `window.amandla.send()` and received via `window.amandla.onMessage()`.
@@ -405,9 +470,10 @@ The hearing window speaks this aloud via TTS.
 ```
 
 **Backend actions:**
-1. Passes to `ollama_service.recognize_sign()`
-2. If confidence ≥ 0.5: buffers sign name, echoes `sign` back to deaf window
-3. Signs are flushed via the same debounce mechanism as quick-sign buttons
+1. Tier 1: HARPS ML classifier (`harps_recognizer.py`) — fast, no LLM needed
+2. Tier 2 fallback: `ollama_service.recognize_sign()` — if HARPS unavailable
+3. If confidence ≥ 0.5: buffers sign name, echoes `sign` back to deaf window
+4. Signs are flushed via the same debounce mechanism as quick-sign buttons
 
 ---
 
@@ -514,4 +580,6 @@ The renderer accesses the WebSocket through `window.amandla`:
 | `openRights()` | Promise | Open the Know Your Rights window |
 | `getSessionId()` | Promise | Get session ID from main process |
 | `onEmergencyShortcut(callback)` | void | Register global emergency handler |
+| `requestHistory(sessionId?, limit?)` | Promise | Get conversation history for a session |
+| `listSessions()` | Promise | List all sessions with message counts |
 

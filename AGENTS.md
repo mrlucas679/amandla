@@ -111,16 +111,21 @@ Deaf taps button or MediaPipe detects sign
 - CORS must stay `allow_origins=["*"]` — Electron doesn't originate from localhost
 - CSP must include `fonts.googleapis.com` (style-src) and `fonts.gstatic.com` (font-src)
 - CSP must include `cdn.jsdelivr.net` (script-src + connect-src) for MediaPipe WASM
+- Global emergency shortcut: `Ctrl+E` (or `Cmd+E` on macOS) triggers emergency overlay in both windows
+- Auto-updater (`electron-updater`) runs only in packaged builds — no-op in dev mode
+- Startup checks for Ollama availability; shows warning dialog if not running
 
 ### WebSocket message types
 Valid types (all lowercase): `text`, `speech_text`, `speech_upload`, `signs`, `sign`,
 `translating`, `deaf_speech`, `sasl_text`, `assist_phrase`, `landmarks`, `emergency`,
-`status_request`, `rights_analyze`, `rights_letter`, `sasl_ack`, `turn`
+`status_request`, `rights_analyze`, `rights_letter`, `history_request`, `history_response`,
+`sasl_ack`, `turn`
 
 - Request/response messages **must** include `request_id`
 - Broadcast messages (`signs`, `deaf_speech`, `turn`) must **not** include `request_id`
 - `speech_text` is a synonym for `text` (both handled identically from hearing role)
 - `assist_phrase` is pre-formed English from assist mode — no SASL reconstruction needed
+- `history_request` can retrieve per-session messages or list all sessions (set `list_sessions: true`)
 
 ### WebSocket authentication
 - Backend generates a `SESSION_SECRET` at startup (`backend/shared.py`)
@@ -136,6 +141,9 @@ Valid types (all lowercase): `text`, `speech_text`, `speech_upload`, `signs`, `s
 - All user text must pass through `sanitise_text()` from `backend/shared.py` before processing
 - Max 10 concurrent WebSocket sessions (`MAX_CONCURRENT_SESSIONS` in `shared.py`)
 - Heavy AI operations (`speech_upload`, `rights_analyze`, `rights_letter`) are per-session rate-limited via `check_rate_limit()` in `shared.py`
+- Lifespan startup order: `init_db()` → session reaper task → Whisper pre-load → Ollama pool start
+- Conversation history is persisted in SQLite (`data/conversations.db`) — survives restarts
+- All WS text/speech/sign handlers log to history via `history_db.log_message()` — failures are silently caught (must never break main flow)
 
 ### SASL / Signs
 - `backend/services/sign_maps.py` — single source of truth for word→sign mappings
@@ -158,7 +166,7 @@ Valid types (all lowercase): `text`, `speech_text`, `speech_upload`, `signs`, `s
 | `src/windows/deaf/deaf.css` | Deaf window styles | Occasionally |
 | `src/windows/deaf/deaf.js` | Deaf window logic: avatar, sign buttons, camera, mode toggle | Often |
 | `src/windows/deaf/avatar.js` | Three.js avatar v2 (TransitionEngine) | Occasionally |
-| `src/windows/deaf/avatar_driver.js` | Mixamo GLB bone driver (loaded, not active with procedural skeleton) | Rarely |
+| `src/windows/deaf/avatar_driver.js` | Mixamo GLB bone driver (R1: actively used when GLB loads) | Rarely |
 | `src/windows/deaf/mode_controller.js` | Sign mode ↔ assist mode toggle | Occasionally |
 | `src/windows/rights/index.html` | Rights UI: HTML shell | Occasionally |
 | `src/windows/rights/rights.css` | Rights window styles | Occasionally |
@@ -179,6 +187,9 @@ Valid types (all lowercase): `text`, `speech_text`, `speech_upload`, `signs`, `s
 | `backend/services/harps_recognizer.py` | HARPS ML sign recogniser (replaces Ollama for landmarks) | Occasionally |
 | `backend/services/mediapipe_bridge.py` | MediaPipe landmarks → HARPS numpy arrays | Rarely |
 | `backend/services/sign_buffer.py` | Sliding-window frame accumulator for HARPS | Rarely |
+| `backend/services/ollama_pool.py` | Shared httpx connection pool for all Ollama calls (PERF-4) | Rarely |
+| `backend/services/history_db.py` | SQLite conversation history (data/conversations.db) | Rarely |
+| `backend/services/gemini_service.py` | DEPRECATED stub — kept to prevent ImportError | Never |
 | `backend/services/whisper_service.py` | Speech-to-text (faster-whisper + ffmpeg) | Rarely |
 | `backend/services/ollama_service.py` | Sign recognition via Ollama | Rarely |
 | `backend/services/ollama_client.py` | Text → sign names via Ollama | Rarely |
@@ -187,9 +198,22 @@ Valid types (all lowercase): `text`, `speech_text`, `speech_upload`, `signs`, `s
 | `backend/harps/` | HARPS ML framework: datasets, transforms, models, train | Rarely |
 | `backend/harps_model/` | Trained checkpoint: model.pth, meta.json, scaler.json | Rarely |
 | `sasl_transformer/transformer.py` | SASL grammar transformer | Occasionally |
+| `sasl_transformer/routes.py` | FastAPI routes for `/api/sasl/*` endpoints | Rarely |
+| `sasl_transformer/config.py` | Transformer settings (Ollama model, cache, etc.) | Rarely |
+| `sasl_transformer/grammar_rules.py` | SASL grammar reordering rules | Occasionally |
+| `sasl_transformer/models.py` | Pydantic request/response models | Rarely |
+| `sasl_transformer/sign_library.py` | Sign library loader for transformer | Rarely |
+| `sasl_transformer/websocket_handler.py` | WS handler class for real-time SASL translation | Rarely |
+| `data/sign_library.json` | Sign library data (JSON) | Rarely |
+| `data/conversations.db` | SQLite conversation history (auto-created) | Never (auto) |
+| `docs/WEBSOCKET_PROTOCOL.md` | Full WebSocket message type reference | Occasionally |
+| `tests/test_sign_maps.py` | Unit tests for sign map lookups (49 tests) | Occasionally |
+| `tests/test_e2e_pipeline.py` | End-to-end pipeline tests (requires backend) | Occasionally |
+| `tests/test_transformer.py` | SASL transformer unit tests | Occasionally |
 | `scripts/test_all_ws_handlers.py` | End-to-end WebSocket handler test | Rarely |
 | `scripts/train_harps.py` | Train HARPS model (WLASL or synthetic demo) | Rarely |
 | `scripts/gen_harps_from_library.py` | Generate HARPS training data from signs_library.js | Rarely |
+| `scripts/syntax_check.py` | Python syntax check for all backend files | Rarely |
 | `Modelfile` | Ollama amandla model definition | Once |
 
 ---
@@ -227,18 +251,56 @@ Then add the English word mapping in `backend/services/sign_maps.py` → `WORD_M
 |---------|--------------|
 | Avatar not animating | `signs_library.js` — check sign name matches exactly (UPPERCASE) |
 | Signs dropped from translation | `sign_maps.py` FILLER set — word may be wrongly listed there |
-| WebSocket not connecting | Backend not started / Ollama not running |
+| WebSocket not connecting | Backend not started / Ollama not running / bad session token |
 | Google Fonts blocked | CSP in `src/main.js` — must include `fonts.googleapis.com` |
+| MediaPipe WASM blocked | CSP in `src/main.js` — must include `cdn.jsdelivr.net` |
 | Frontend fetch calls backend directly | Forbidden — use `window.amandla.*` preload methods only |
+| Conversation history missing | Check `data/conversations.db` exists; `history_db.init_db()` runs at startup |
+| Ollama calls slow / timing out | Check `ollama_pool.py` startup ran; `ollama serve` must be running |
+
+---
+
+## Running Tests
+
+```bash
+# Unit tests — sign map lookups (49 tests)
+python -m pytest tests/test_sign_maps.py -v
+
+# SASL transformer unit tests
+python -m pytest tests/test_transformer.py -v
+
+# End-to-end pipeline tests (requires backend running)
+python tests/test_e2e_pipeline.py
+
+# WebSocket handler smoke test (requires backend running)
+python scripts/test_all_ws_handlers.py
+
+# Python syntax check for all backend files
+python scripts/syntax_check.py
+
+# Quick health check
+curl http://localhost:8000/health
+```
+
+---
+
+## Stale Docs — Ignore These
+
+All archived docs have been moved to the `archive/` directory. Their first line says
+"ARCHIVED". Do not follow their instructions — they reference deleted files and
+contain outdated fixes (e.g. wrong CORS configuration that breaks Electron).
 
 ---
 
 ## References (current, valid files only)
 
 - `CLAUDE.md` — authoritative state: what exists, what was deleted, what must not change
+- `PROJECT_PLAN.md` — self-contained project plan: what's done, what remains, next steps
 - `AMANDLA_FINAL_BLUEPRINT.md` — complete avatar.js and Three.js implementation spec
 - `AMANDLA_MISSING_PIECES.md` — backend integration blueprint and gap fixes
 - `SASL_Transformer_README.md` — SASL grammar transformer documentation
+- `PRODUCTION_READINESS.md` — audit of all issues, fixes, and remaining work
+- `docs/WEBSOCKET_PROTOCOL.md` — full WebSocket message type reference with examples
 - `signs_library.js` — 100+ SASL signs with full bone data
 
 ---

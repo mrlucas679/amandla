@@ -2,7 +2,7 @@
 > **Generated**: March 30, 2026  
 > **Scope**: Full read of every source file in the codebase  
 > **Purpose**: Document EVERY issue, gap, improvement, and task needed to ship AMANDLA as a real product  
-> **Status**: 34 of 37 issues FIXED — Phases 1–5 complete, 3 feature items + 2 build items remaining
+> **Status**: 35 of 37 issues FIXED — Phases 1–6 complete, 2 build items remaining
 
 ---
 
@@ -754,20 +754,26 @@ Added a "🖨 Print" button (`print-btn`) in the hearing window toolbar. `hearin
 
 ---
 
-### FEAT-5 — No multilingual SASL support — only English → SASL
+### FEAT-5 — ~~No multilingual SASL support — only English → SASL~~ ✅ FIXED
 
 **Severity:** LOW  
 **Category:** Feature  
+**Status:** COMPLETED — March 30, 2026
 
-**What is wrong:**  
-SASL is language-agnostic (it's a visual language), but the text→SASL pipeline assumes English input. South Africa has 11 official languages. Whisper can transcribe isiZulu, isiXhosa, Afrikaans etc., but the SASL transformer only has English grammar rules.
+**What was wrong:**  
+SASL is language-agnostic (it's a visual language), but the text→SASL pipeline assumed English input. South Africa has 11 official languages. Whisper can transcribe isiZulu, isiXhosa, Afrikaans etc., but the SASL transformer only had English grammar rules.
 
-**Fix plan (future):**  
-1. Whisper already auto-detects the language — this works.
-2. Add a pre-translation step: non-English text → English (via Ollama) → SASL.
-3. This requires a multilingual prompt for Ollama.
-
-**Effort:** 4 hr
+**What was done:**  
+1. Added `_translate_to_english()` in `sasl_pipeline.py` — calls Ollama (shared pool) to translate non-English text to English before entering the SASL pipeline.
+2. Updated `text_to_sasl_signs()` signature with optional `language` parameter — English input bypasses translation entirely (no double-translation).
+3. Added `SA_LANGUAGE_LABELS` dict covering all 11 official SA languages for human-readable prompts.
+4. Added `TRANSLATION_SYSTEM_PROMPT`, `TRANSLATION_TIMEOUT_S`, `TRANSLATION_TEMPERATURE` named constants.
+5. Added `TRANSLATION_OLLAMA_MODEL` env var (defaults to `OLLAMA_MODEL`) for optional override with a general-purpose model.
+6. Wired `language` through `_handle_text` and `_handle_speech_upload` in `handler.py`.
+7. `sasl_ack` and `signs` broadcasts now include `source_language` and `original_input` metadata.
+8. Hearing window UI shows "✓ Translated from {language} → SASL: ..." for non-English input.
+9. Changed `WHISPER_LANGUAGE=` to empty (auto-detect) in `.env` and `.env.example`.
+10. Graceful fallback: if Ollama translation fails, original text passes through unchanged.
 
 ---
 
@@ -878,7 +884,7 @@ Implement in this order to get maximum value with minimum risk:
 | 4 | Build & Distribution | 3/5 done — BUILD-2 (icons) + BUILD-3 (pyinstaller) remain |
 | 5 | Architecture & Polish | ✅ COMPLETE |
 | 6 | Feature Enhancements | ✅ COMPLETE |
-| **TOTAL REMAINING** | | **~2 items (~4 hr) — BUILD-2 + BUILD-3 only** |
+| **TOTAL REMAINING** | | **~2 items (~5 hr) — BUILD-2 + BUILD-3 only** |
 
 ---
 

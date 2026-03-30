@@ -9,6 +9,9 @@
     "backend": "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload",
     "dev": "electron . --inspect",
     "build": "electron-builder",
+    "build:backend": "python scripts/build_backend.py",
+    "build:all": "npm run build:backend && npm run build",
+    "generate-icons": "python scripts/generate_icons.py",
     "convert-fbx": "blender --background --python scripts/fbx_to_glb.py",
     "retarget-sasl": "blender --background --python scripts/retarget_sasl_to_mixamo.py"
   },
@@ -24,6 +27,22 @@
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "dist/amandla-backend",
+        "to": "backend",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "data",
+        "to": "data",
+        "filter": ["**/*"]
+      },
+      {
+        "from": ".env.example",
+        "to": ".env.example"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "assets/icons/icon.ico"

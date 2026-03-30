@@ -16,8 +16,9 @@ Flow:
 import json
 import logging
 import re
+import time as _time
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Tuple
 
 from sasl_transformer.config import settings
 from sasl_transformer.grammar_rules import (
@@ -69,10 +70,12 @@ class SASLTransformer:
         lib_path = sign_library_path or settings.sign_library_path
         self._sign_library = SignLibrary(lib_path)
 
-        # Simple LRU cache for repeated translations
-        self._cache: OrderedDict[str, TranslationResponse] = OrderedDict()
+        # Simple LRU cache for repeated translations — stores (response, timestamp) tuples
+        self._cache: OrderedDict[str, Tuple[TranslationResponse, float]] = OrderedDict()
         self._cache_enabled = settings.sasl_cache_enabled
         self._cache_max_size = settings.sasl_cache_max_size
+        # Cache TTL in seconds — entries older than this are treated as stale
+        self._cache_ttl_s: float = 3600.0  # 1 hour
 
         logger.info(
             "SASL Transformer initialised — model: %s @ %s, library: %d signs, cache: %s",
@@ -109,16 +112,22 @@ class SASLTransformer:
         if not english_text:
             return self._empty_response(english_text)
 
-        # Check cache first
+        # Check cache first (with TTL — stale entries are evicted)
         # Include 'context' in the cache key so the same sentence asked in
         # different conversational contexts produces distinct cache entries.
         # Without context in the key, "Are you okay?" after an emergency vs.
         # after a greeting could return the same (wrong) cached translation.
         cache_key = f"{english_text}|{request.include_non_manual}|{request.context}"
         if self._cache_enabled and cache_key in self._cache:
-            logger.debug("Cache hit for: %s", english_text[:50])
-            self._cache.move_to_end(cache_key)
-            return self._cache[cache_key]
+            cached_response, cached_time = self._cache[cache_key]
+            if (_time.monotonic() - cached_time) < self._cache_ttl_s:
+                logger.debug("Cache hit for: %s", english_text[:50])
+                self._cache.move_to_end(cache_key)
+                return cached_response
+            else:
+                # Stale entry — remove it so we re-translate below
+                del self._cache[cache_key]
+                logger.debug("Cache expired for: %s", english_text[:50])
 
         # Try LLM-based translation first
         try:
@@ -142,9 +151,9 @@ class SASLTransformer:
         # Enrich tokens with sign library data
         response = self._enrich_with_library(response)
 
-        # Cache the result
+        # Cache the result with a timestamp for TTL expiry
         if self._cache_enabled:
-            self._cache[cache_key] = response
+            self._cache[cache_key] = (response, _time.monotonic())
             # Evict oldest if cache is full
             while len(self._cache) > self._cache_max_size:
                 self._cache.popitem(last=False)
@@ -186,9 +195,6 @@ class SASLTransformer:
         Raises:
             RuntimeError: If Ollama is unreachable or returns an error.
         """
-        import httpx
-        import asyncio
-
         # Build the user message with optional context
         user_message = f"Convert this English sentence to SASL gloss:\n\n{english_text}"
         if request.context:
@@ -211,8 +217,11 @@ class SASLTransformer:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as http_client:
-                response = await http_client.post(ollama_url, json=request_body)
+            # PERF-4: Reuse the shared Ollama connection pool instead of
+            # creating a new httpx.AsyncClient per call (saves TCP overhead).
+            from backend.services.ollama_pool import get_client
+            client = get_client()
+            response = await client.post(ollama_url, json=request_body, timeout=15.0)
 
             if response.status_code != 200:
                 raise RuntimeError(
@@ -225,13 +234,15 @@ class SASLTransformer:
             if not raw_response:
                 raise RuntimeError("Ollama returned an empty response")
 
-        except httpx.ConnectError:
-            raise RuntimeError(
-                "Cannot connect to Ollama — make sure 'ollama serve' is running on "
-                f"{settings.ollama_base_url}"
-            )
-        except httpx.TimeoutException:
-            raise RuntimeError("Ollama request timed out — the model may be loading")
+        except Exception as conn_err:
+            if "connect" in str(type(conn_err).__name__).lower() or "connect" in str(conn_err).lower():
+                raise RuntimeError(
+                    "Cannot connect to Ollama — make sure 'ollama serve' is running on "
+                    f"{settings.ollama_base_url}"
+                ) from conn_err
+            if "timeout" in str(type(conn_err).__name__).lower() or "timeout" in str(conn_err).lower():
+                raise RuntimeError("Ollama request timed out — the model may be loading") from conn_err
+            raise
 
         # Parse the JSON response from the LLM
         parsed = self._parse_llm_response(raw_response)
