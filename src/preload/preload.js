@@ -84,9 +84,12 @@ function connect(sessionId, role, secret) {
     ws.close()
   }
 
-  const url = `ws://localhost:8000/ws/${sessionId}/${role}?token=${encodeURIComponent(currentSecret || '')}`
+  // Pass the session secret as a WebSocket subprotocol so it never appears
+  // in server access logs, reverse proxy logs, or browser history (ARCH-7).
+  // The server echoes back the subprotocol in its accept response.
+  const url = `ws://localhost:8000/ws/${sessionId}/${role}`
   console.log(`[Preload] Connecting to ${url}`)
-  ws = new WebSocket(url)
+  ws = new WebSocket(url, [`amandla-${currentSecret || ''}`])
   // Tag the socket so we can detect duplicates above
   ws._amandlaSession = sessionKey
 
@@ -294,6 +297,19 @@ contextBridge.exposeInMainWorld('amandla', {
     type: 'history_request',
     list_sessions: true
   }),
+
+  /**
+   * Export conversation history to a file (FEAT-1).
+   * Asks the main process to open a Save dialog and write the file —
+   * renderers cannot use the fs module directly.
+   *
+   * @param {'txt'|'pdf'} format      - Export format.
+   * @param {string}      content     - Pre-formatted text (TXT) or HTML string (PDF).
+   * @param {string}      defaultName - Suggested filename including extension.
+   * @returns {Promise<{success:boolean, path?:string, error?:string}>}
+   */
+  exportConversation: (format, content, defaultName) =>
+    ipcRenderer.invoke('export-conversation', { format, content, defaultName }),
 })
 
 // ── IPC: receive session ID, secret, and role from the main process ──────────

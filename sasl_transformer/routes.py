@@ -125,6 +125,42 @@ async def library_stats() -> dict:
     }
 
 
+@router.get("/word-map")
+async def get_word_map() -> dict:
+    """Return the canonical English → SASL sign name mappings (ARCH-1).
+
+    Frontend (signs_library.js) fetches this at startup to stay in sync with
+    the backend's WORD_MAP and PHRASE_MAP — the single source of truth.
+
+    Returns:
+        {
+            word_map:   { english_word: "SIGN_NAME", ... },
+            phrase_map: { "multi word phrase": ["SIGN", ...], ... }
+        }
+    """
+    from backend.services.sign_maps import WORD_MAP, PHRASE_MAP
+    return {
+        "word_map": WORD_MAP,
+        "phrase_map": PHRASE_MAP,
+    }
+
+
+@router.get("/filler-words")
+async def get_filler_words() -> dict:
+    """Return the canonical set of filler words to skip in SASL conversion (ARCH-2).
+
+    Frontend (signs_library.js) fetches this at startup and replaces its
+    hardcoded inline array so both sides skip the same words.
+
+    Returns:
+        { filler_words: ["the", "a", "an", ...] }
+    """
+    from backend.services.sign_maps import FILLER
+    return {
+        "filler_words": sorted(FILLER),
+    }
+
+
 @router.post("/cache/clear")
 async def clear_cache(request: Request) -> dict:
     """

@@ -1,6 +1,8 @@
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, dialog, shell } = require('electron')
 const { spawn } = require('child_process')
+const fs = require('fs')
 const http = require('http')
+const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
 
@@ -314,6 +316,72 @@ ipcMain.handle('open-rights', () => {
 
 // IPC: Allow renderer to ask for the session ID at any time
 ipcMain.handle('get-session-id', () => SESSION_ID)
+
+// IPC: Export conversation history to TXT or PDF (FEAT-1)
+// Renderer sends { format: 'txt'|'pdf', content: string, defaultName: string }
+// Main opens a save dialog and writes the file — renderers cannot use fs directly.
+ipcMain.handle('export-conversation', async (_event, { format, content, defaultName }) => {
+  try {
+    if (format === 'txt') {
+      const result = await dialog.showSaveDialog({
+        title: 'Save Conversation Record',
+        defaultPath: defaultName,
+        filters: [
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      })
+      if (result.canceled || !result.filePath) return { success: false }
+      await fs.promises.writeFile(result.filePath, content, 'utf8')
+      shell.showItemInFolder(result.filePath)
+      return { success: true, path: result.filePath }
+    }
+
+    if (format === 'pdf') {
+      const result = await dialog.showSaveDialog({
+        title: 'Save Conversation Record',
+        defaultPath: defaultName,
+        filters: [
+          { name: 'PDF Files', extensions: ['pdf'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      })
+      if (result.canceled || !result.filePath) return { success: false }
+
+      // Write HTML to a temp file, render it in a hidden BrowserWindow, then
+      // call printToPDF() to produce the actual PDF bytes.
+      const tmpPath = path.join(os.tmpdir(), 'amandla-export-' + Date.now() + '.html')
+      await fs.promises.writeFile(tmpPath, content, 'utf8')
+
+      const printWin = new BrowserWindow({
+        show: false,
+        width: 900,
+        height: 1200,
+        webPreferences: { nodeIntegration: false, contextIsolation: true },
+      })
+
+      await printWin.loadFile(tmpPath)
+
+      const pdfBuffer = await printWin.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { marginType: 'custom', top: 0.5, bottom: 0.5, left: 0.75, right: 0.75 },
+      })
+
+      printWin.close()
+      try { await fs.promises.unlink(tmpPath) } catch (_) { /* temp cleanup is best-effort */ }
+
+      await fs.promises.writeFile(result.filePath, pdfBuffer)
+      shell.showItemInFolder(result.filePath)
+      return { success: true, path: result.filePath }
+    }
+
+    return { success: false, error: 'Unknown export format: ' + format }
+  } catch (err) {
+    console.error('[Main] Export error:', err.message)
+    return { success: false, error: err.message }
+  }
+})
 
 /**
  * Set up electron-updater event handlers for auto-update flow.

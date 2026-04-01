@@ -1423,8 +1423,19 @@ const WORD_MAP = {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// SECTION 13 — SENTENCE PARSER (unchanged from v1)
+// SECTION 13 — SENTENCE PARSER
 // ═══════════════════════════════════════════════════════════════════
+
+// Canonical filler-word set — words with no SASL sign equivalent.
+// Initialised from the hardcoded list below; overridden at startup by
+// initFromBackend() which fetches the authoritative list from the backend
+// (GET /api/sasl/filler-words), ensuring front-end and back-end stay in sync.
+const FILLER_SET = new Set([
+  'the','a','an','is','are','was','were','be','been',
+  'of','to','in','for','on','with','at','by','as',
+  'it','its','this','that','and','but','or','so',
+  'um','uh','ah','oh','hmm',
+]);
 
 function sentenceToSigns(text) {
   if (!text) return [];
@@ -1437,7 +1448,7 @@ function sentenceToSigns(text) {
 
   let i = 0;
   while (i < words.length) {
-    if (i + 2 < words.length) {
+    if (i + 3 <= words.length) {
       const phrase3 = words.slice(i, i+3).join(' ');
       const key3 = WORD_MAP[phrase3];
       if (key3 && SIGN_LIBRARY[key3]) { result.push(SIGN_LIBRARY[key3]); i += 3; continue; }
@@ -1448,10 +1459,7 @@ function sentenceToSigns(text) {
       if (key2 && SIGN_LIBRARY[key2]) { result.push(SIGN_LIBRARY[key2]); i += 2; continue; }
     }
     const word = words[i];
-    if (['the','a','an','is','are','was','were','be','been',
-         'of','to','in','for','on','with','at','by','as',
-         'it','its','this','that','and','but','or','so',
-         'um','uh','ah','oh','hmm'].includes(word)) { i++; continue; }
+    if (FILLER_SET.has(word)) { i++; continue; }
     const mapped = WORD_MAP[word];
     if (mapped && SIGN_LIBRARY[mapped]) { result.push(SIGN_LIBRARY[mapped]); i++; continue; }
     const upper = word.toUpperCase();
@@ -1517,7 +1525,62 @@ function getSignsByCategory(category) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SECTION 14 — EXAMPLE: HOW TO USE TRANSITIONENGINE IN THREE.JS
+// SECTION 14 — BACKEND SYNC (ARCH-1 / ARCH-2)
+// ═══════════════════════════════════════════════════════════════════
+/**
+ * Fetch the canonical word-map and filler-words from the backend and merge
+ * them into WORD_MAP / FILLER_SET.  Called once when the deaf window loads.
+ *
+ * Falls back silently to the hardcoded defaults if the backend is unreachable —
+ * the app still works, it just won't reflect the latest backend mappings.
+ *
+ * The backend is the single source of truth (sign_maps.py).  This sync ensures
+ * the JavaScript frontend uses exactly the same mappings, preventing the
+ * divergence described in ARCH-1/ARCH-2.
+ */
+async function initFromBackend() {
+  try {
+    const [wordMapRes, fillerRes] = await Promise.all([
+      fetch('http://localhost:8000/api/sasl/word-map'),
+      fetch('http://localhost:8000/api/sasl/filler-words'),
+    ]);
+
+    if (wordMapRes.ok) {
+      const { word_map } = await wordMapRes.json();
+      // Merge backend word_map into WORD_MAP — backend takes precedence.
+      // Object.assign mutates the existing const object (this is intentional).
+      if (word_map && typeof word_map === 'object') {
+        Object.assign(WORD_MAP, word_map);
+      }
+    }
+
+    if (fillerRes.ok) {
+      const { filler_words } = await fillerRes.json();
+      // Replace FILLER_SET with the backend's authoritative list
+      if (Array.isArray(filler_words)) {
+        FILLER_SET.clear();
+        filler_words.forEach(w => FILLER_SET.add(w));
+      }
+    }
+  } catch (e) {
+    // Backend not yet running or unreachable — hardcoded defaults remain active.
+    if (typeof console !== 'undefined') {
+      console.warn('[AMANDLA] Could not sync word map from backend:', e.message || e);
+    }
+  }
+}
+
+// Auto-initialise when running in a browser/Electron renderer context
+if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFromBackend);
+  } else {
+    initFromBackend();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 16 — EXAMPLE: HOW TO USE TRANSITIONENGINE IN THREE.JS
 // ═══════════════════════════════════════════════════════════════════
 /**
  * Drop-in usage example for your Three.js animation loop.
@@ -1567,15 +1630,17 @@ function getSignsByCategory(category) {
  */
 
 // ═══════════════════════════════════════════════════════════════════
-// SECTION 15 — EXPORTS
+// SECTION 17 — EXPORTS
 // ═══════════════════════════════════════════════════════════════════
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     // Data
-    SIGN_LIBRARY, WORD_MAP, ALPHABET, HS, ARM,
+    SIGN_LIBRARY, WORD_MAP, FILLER_SET, ALPHABET, HS, ARM,
     JOINT_LIMITS, TRANSITION_HINTS,
     // Functions — core
     sentenceToSigns, fingerspell, getSign, getAllSignNames, getSignsByCategory,
+    // Functions — backend sync (ARCH-1/2)
+    initFromBackend,
     // Functions — transition engine (new in v2)
     TransitionEngine, getTransitionHint,
     // Functions — math utils (exposed for custom use)
@@ -1587,9 +1652,10 @@ if (typeof module !== 'undefined' && module.exports) {
 
 if (typeof window !== 'undefined') {
   window.AMANDLA_SIGNS = {
-    SIGN_LIBRARY, WORD_MAP, ALPHABET, HS, ARM,
+    SIGN_LIBRARY, WORD_MAP, FILLER_SET, ALPHABET, HS, ARM,
     JOINT_LIMITS, TRANSITION_HINTS,
     sentenceToSigns, fingerspell, getSign, getAllSignNames, getSignsByCategory,
+    initFromBackend,
     TransitionEngine, getTransitionHint,
     eulerToQuat, quatToEuler, slerp, normaliseQuat,
     lerpHandShape, slerpArmPose, armToQuat,

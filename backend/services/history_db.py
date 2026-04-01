@@ -15,7 +15,7 @@ Database location: data/conversations.db (relative to project root).
 import asyncio
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -85,6 +85,11 @@ def _init_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_conversations_timestamp
         ON conversations (timestamp)
     """)
+    # Composite index: eliminates sort step in per-session history queries (ARCH-4)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_conversations_session_time
+        ON conversations (session_id, timestamp DESC)
+    """)
     conn.commit()
     logger.info("[HistoryDB] Tables initialised")
 
@@ -94,11 +99,12 @@ def init_db() -> None:
 
     Creates the data/ directory and conversations table if they don't exist.
     Safe to call multiple times (CREATE TABLE IF NOT EXISTS).
+
+    Raises:
+        Exception: Propagated from _init_tables() so the caller (main.py lifespan)
+        can fail fast instead of starting a degraded server (ARCH-9).
     """
-    try:
-        _init_tables()
-    except Exception as exc:
-        logger.error("[HistoryDB] Failed to initialise database: %s", exc)
+    _init_tables()
 
 
 def _sync_log_message(
@@ -235,4 +241,43 @@ async def get_all_sessions() -> List[Dict[str, Any]]:
         List of session summary dicts.
     """
     return await asyncio.to_thread(_sync_get_all_sessions)
+
+
+def _sync_delete_old_messages(days: int = 90) -> int:
+    """Delete conversation records older than `days` days (synchronous).
+
+    Args:
+        days: Retain messages newer than this many days. Default: 90.
+
+    Returns:
+        Number of rows deleted.
+    """
+    try:
+        conn = _get_connection()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        cursor = conn.execute(
+            "DELETE FROM conversations WHERE timestamp < ?",
+            (cutoff,),
+        )
+        conn.commit()
+        count = cursor.rowcount
+        logger.info("[HistoryDB] Retention: deleted %d messages older than %d days", count, days)
+        return count
+    except Exception as exc:
+        logger.error("[HistoryDB] Failed to delete old messages: %s", exc)
+        return 0
+
+
+async def delete_old_messages(days: int = 90) -> int:
+    """Delete conversation records older than `days` days (async).
+
+    Called weekly by the session reaper to prevent unbounded database growth.
+
+    Args:
+        days: Retain messages newer than this many days. Default: 90.
+
+    Returns:
+        Number of rows deleted.
+    """
+    return await asyncio.to_thread(_sync_delete_old_messages, days)
 

@@ -10,6 +10,7 @@ in backend/main.py — it does not call load_dotenv() itself.
 
 import hmac
 import logging
+import os
 import re
 import secrets
 import time as _time
@@ -38,7 +39,8 @@ sessions: Dict[str, Dict[str, Any]] = {}
 MAX_CONCURRENT_SESSIONS: int = 10
 
 # Sessions idle for longer than this (in seconds) are cleaned up by the reaper task.
-SESSION_EXPIRY_S: int = 1800  # 30 minutes
+# Override via SESSION_EXPIRY_S env var — medical appointments can run 45-90 min.
+SESSION_EXPIRY_S: int = int(os.getenv("SESSION_EXPIRY_S", "3600"))  # 1 hour default
 
 # ── Sign reconstruction buffers ───────────────────────────────────────────────
 # Per-session: accumulate signs from deaf user, then reconstruct to English.
@@ -61,6 +63,10 @@ HEAVY_CALL_INTERVALS: Dict[str, float] = {
     "rights_letter":  45.0,   # Ollama takes 10–30s
 }
 HEAVY_CALL_INTERVAL_DEFAULT: float = 2.0  # Fallback for unlisted types
+
+# Message types that are ALWAYS allowed — never rate-limited (HARPS-3)
+# Emergency and assist phrases must reach the hearing user instantly.
+RATE_LIMIT_EXEMPT_TYPES: set = {"emergency", "assist_phrase"}
 
 # ── Text sanitisation ─────────────────────────────────────────────────────────
 # Precompiled regex: matches C0/C1 control characters EXCEPT tab (\t), newline (\n),
@@ -96,6 +102,9 @@ def check_rate_limit(session_id: str, msg_type: str) -> bool:
     Enforces a per-session, per-message-type cooldown window for heavy AI
     operations. Runs in constant time and requires no external dependencies.
 
+    Emergency and assist_phrase messages are always allowed — they must never
+    be throttled (HARPS-3).
+
     Args:
         session_id: The WebSocket session identifier.
         msg_type:   The WebSocket message type being throttled.
@@ -104,6 +113,9 @@ def check_rate_limit(session_id: str, msg_type: str) -> bool:
         True  — call is allowed (cooldown has elapsed or this is the first call).
         False — call is denied (still inside the cooldown window).
     """
+    if msg_type in RATE_LIMIT_EXEMPT_TYPES:
+        return True  # Emergency / assist phrases are never throttled
+
     now = _time.monotonic()
     session_calls = last_heavy_call.setdefault(session_id, {})
     last = session_calls.get(msg_type, 0.0)

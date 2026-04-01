@@ -331,6 +331,7 @@ async def debounce_and_flush(session_id: str, session: dict) -> None:
                 translated_text=english,
                 source="sign_button",
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[History] Failed to log message: %s", e)
+            # History failure must never break the main flow
 

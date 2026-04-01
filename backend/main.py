@@ -27,8 +27,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
+# ── SSRF guard: OLLAMA_BASE_URL must point to localhost only ─────────────────
+# A misconfigured or compromised .env file could otherwise redirect
+# all Ollama requests to arbitrary internal services.
+from urllib.parse import urlparse as _urlparse
+_ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+_parsed_ollama = _urlparse(_ollama_url)
+if _parsed_ollama.hostname not in ("localhost", "127.0.0.1", "::1"):
+    raise ValueError(
+        f"SECURITY: OLLAMA_BASE_URL must point to localhost. "
+        f"Got hostname: {_parsed_ollama.hostname!r}"
+    )
+
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, Query
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 # ── Logging: console + rotating file ────────────────────────────────────────
@@ -68,7 +80,14 @@ async def _lifespan(_app: FastAPI):
     from backend.services.history_db import init_db
 
     # FEAT-3: Initialise SQLite conversation history database
-    init_db()
+    # Fail fast — if the DB can't be created, every WS connection will silently
+    # fail to log messages. Better to surface the error at startup (ARCH-9).
+    try:
+        init_db()
+    except Exception as _db_err:
+        raise RuntimeError(
+            f"[Startup] Database initialisation failed — check data/ directory permissions: {_db_err}"
+        ) from _db_err
 
     asyncio.create_task(session_reaper())
 
@@ -129,8 +148,7 @@ async def ws_endpoint(
     websocket: WebSocket,
     sessionId: str,
     role: str,
-    token: str = Query(default=""),
 ):
     """WebSocket entry point — delegates to the handler module."""
     from backend.ws.handler import websocket_endpoint
-    await websocket_endpoint(websocket, sessionId, role, token)
+    await websocket_endpoint(websocket, sessionId, role)

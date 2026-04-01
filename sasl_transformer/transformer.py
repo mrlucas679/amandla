@@ -29,6 +29,7 @@ from sasl_transformer.grammar_rules import (
     TIME_WORDS,
     QUESTION_WORDS,
     IRREGULAR_VERB_BASE_FORMS,
+    MODAL_VERB_MAP,
 )
 from sasl_transformer.models import (
     GlossToken,
@@ -331,11 +332,30 @@ class SASLTransformer:
         """
         words = english_text.lower().split()
 
+        # Phase 0: Detect perfect aspect (have/has + past participle) before the
+        # main pass, so the FINISH aspect marker is added even when the auxiliary
+        # "have/has" is dropped by AUXILIARY_VERBS_TO_DROP (QUAL-3).
+        # e.g. "I have eaten" → "have" dropped, "eaten" base-formed to "eat",
+        # but without this pre-scan no FINISH marker would be generated.
+        _words_clean = [w.strip(".,!?;:'\"") for w in words]
+        _perfect_aux = {"have", "has"}
+        _has_perfect_aspect = False
+        for _pi, _pw in enumerate(_words_clean[:-1]):
+            if _pw in _perfect_aux:
+                _nw = _words_clean[_pi + 1]
+                if (
+                    _nw in IRREGULAR_VERB_BASE_FORMS
+                    or _nw.endswith("ed")
+                    or _nw.endswith("en")
+                ):
+                    _has_perfect_aspect = True
+                    break
+
         # Phase 1: Separate time words, question words, and content words
         time_markers = []
         question_markers = []
         content_words = []
-        has_past_tense = False
+        has_past_tense = _has_perfect_aspect  # Inherit perfect-aspect detection
 
         for word in words:
             clean = word.strip(".,!?;:'\"")
@@ -355,6 +375,12 @@ class SASLTransformer:
 
             # Drop most prepositions
             if clean in PREPOSITIONS_TO_DROP:
+                continue
+
+            # Map modal verbs to their SASL equivalents (ARCH-3)
+            # "could/should/would" etc. must not be fingerspelled — they have signs.
+            if clean in MODAL_VERB_MAP:
+                content_words.append(MODAL_VERB_MAP[clean])
                 continue
 
             # Collect time words
@@ -407,12 +433,16 @@ class SASLTransformer:
                 )
             )
 
-        # Non-manual markers for questions
+        # Non-manual markers for questions (QUAL-4)
         non_manual = []
-        if request.include_non_manual and question_markers:
-            if any(q in question_markers for q in ["WHO", "WHAT", "WHERE", "WHEN", "WHY", "HOW"]):
-                non_manual = ["furrowed brows", "head tilt forward"]
-            else:
+        if request.include_non_manual:
+            if question_markers:
+                if any(q in question_markers for q in ["WHO", "WHAT", "WHERE", "WHEN", "WHY", "HOW"]):
+                    non_manual = ["furrowed brows", "head tilt forward"]
+                else:
+                    non_manual = ["raised eyebrows"]
+            elif english_text.rstrip().endswith("?"):
+                # Yes/no question — no WH word, but still needs raised eyebrows
                 non_manual = ["raised eyebrows"]
 
         gloss_text = " ".join(gloss_parts)

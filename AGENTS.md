@@ -284,6 +284,50 @@ curl http://localhost:8000/health
 
 ---
 
+---
+
+## Skill Library — Use These at Every Opportunity
+
+All 16 skills live in `.aiassistant/rules/skills/`. Each skill is a full markdown guide
+to read when the trigger conditions are met. Load the skill file, follow its process, then continue.
+
+> **Rule**: When a task matches a skill's trigger, READ that skill file before writing any code or advice.
+
+### Trigger Map
+
+| Skill | File | Activate when… |
+|-------|------|----------------|
+| **amandla-code-standards** | `amandla-code-standards.md` | Writing, reviewing, or planning ANY code for Amandla. Mentions of avatar, signs, WebSocket, hearing/deaf/rights window, FastAPI, Electron. **Always active.** |
+| **security-audit** | `security-audit.md` | "is this secure?", "check for vulnerabilities", "security check", "before I deploy", "production ready", reviewing auth/error-handling/env-var usage, WebSocket or Electron security config |
+| **code-review** | `code-review.md` | "review this", "does this look good?", "check my code", "is this clean?", "refactor this", "is this production ready?", pasting code for feedback |
+| **git-workflow** | `git-workflow.md` | Commits, branching, PRs, merge conflicts, GitHub Actions, CI/CD, "what commit message?", "how do I push?", "protect main" |
+| **api-design** | `api-design.md` | New endpoint, new WebSocket message type, "design an API", "how should I structure this request/response", "new route", designing frontend↔backend data flow |
+| **debugging** | `debugging.md` | "it's broken", "I'm getting an error", "not working", "why is it failing?", "exception", "crash", "undefined", "null", "404", "500", "WebSocket disconnecting", "avatar not moving", stack trace pasted |
+| **documentation** | `documentation.md` | "write docs", "document this", "update README", "add comments", "write a docstring", "update CHANGELOG", "explain the architecture", after completing a major feature |
+| **electron-ipc** | `electron-ipc.md` | Working on `src/main.js`, `src/preload/preload.js`, any renderer JS, adding new hearing↔backend or deaf↔backend communication, "how do I call the backend from the renderer?", new IPC channel |
+| **performance-optimization** | `performance-optimization.md` | "it's slow", "avatar lags", "app is freezing", "high CPU", "memory leak", "optimize this", animation stutters, WebSocket latency issues |
+| **product-planning** | `product-planning.md` | "I have an idea", "let's build X", "new feature", "PRD", "what should we build next?", "MVP", "user story", vague concept that needs shaping before coding |
+| **project-bootstrap** | `project-bootstrap.md` | "start a new project", "scaffold this", "create a new app", setting up structure/config from scratch |
+| **python-fastapi** | `python-fastapi.md` | Any Python backend code: routes, services, middleware, WebSocket handlers, Pydantic models, async functions. "Is this the right way to use FastAPI?" |
+| **refactoring** | `refactoring.md` | "clean this up", "this is messy", "there's duplication", "this function is too long", "technical debt", file >200 lines, function >30 lines |
+| **skill-manager** | `skill-manager.md` | "what skills do we have?", "do we need a new skill?", unfamiliar technology, starting a project where existing skills may not cover all needs |
+| **testing-strategy** | `testing-strategy.md` | "how do I test this?", "write tests for X", "TDD", "unit test", "integration test", after new functionality is built (proactively suggest tests), when a bug is found |
+| **ui-ux-design** | `ui-ux-design.md` | "redesign this", "improve the UI", "fix the UX", "accessibility", "make it intuitive", "design the layout", "color scheme", any new UI component or window |
+
+### How to Use a Skill
+
+1. Identify which skill(s) apply to the current task
+2. Read the skill file: `.aiassistant/rules/skills/<skill-name>.md`
+3. Follow the skill's process and checklist exactly
+4. Multiple skills can apply at once — e.g. adding a new endpoint triggers `api-design` + `python-fastapi` + `amandla-code-standards`
+
+### Skills Always Active Together
+- `amandla-code-standards` applies to **every** task without exception
+- `security-audit` quick-checks apply whenever writing backend or frontend code
+- `git-workflow` reminders apply whenever code is finished and ready to commit
+
+---
+
 ## Stale Docs — Ignore These
 
 All archived docs have been moved to the `archive/` directory. Their first line says

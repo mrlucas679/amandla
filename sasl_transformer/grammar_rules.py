@@ -208,6 +208,22 @@ TIME_WORDS = {
 
 QUESTION_WORDS = {"who", "what", "where", "when", "why", "how", "which"}
 
+# Modal verbs → their SASL sign equivalents (ARCH-3)
+# Used by the rule-based fallback in transformer.py so "could/should/would"
+# produce the correct signs (CAN/MUST/WILL) rather than being fingerspelled.
+MODAL_VERB_MAP: dict = {
+    "can":    "CAN",
+    "could":  "CAN",
+    "able":   "CAN",
+    "may":    "CAN",
+    "might":  "CAN",
+    "must":   "MUST",
+    "should": "MUST",
+    "will":   "WILL",
+    "shall":  "WILL",
+    "would":  "WILL",
+}
+
 # Common irregular verb → base form mappings for the fallback converter
 IRREGULAR_VERB_BASE_FORMS = {
     "went": "go",

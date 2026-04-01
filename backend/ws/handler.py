@@ -22,7 +22,7 @@ import json
 import logging
 import time as _time
 
-from fastapi import WebSocket, WebSocketDisconnect, Query
+from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.shared import (
     sessions,
@@ -48,18 +48,33 @@ async def websocket_endpoint(
     websocket: WebSocket,
     sessionId: str,
     role: str,
-    token: str = Query(default=""),
 ):
     """Main WebSocket endpoint for real-time communication.
+
+    Token is passed via the Sec-WebSocket-Protocol header (not the URL query
+    string) to prevent the secret from appearing in server access logs (ARCH-7).
 
     Args:
         websocket: The WebSocket connection.
         sessionId: The session identifier shared between hearing + deaf windows.
         role:      One of 'hearing', 'deaf', or 'rights'.
-        token:     Session authentication token (query parameter).
     """
+    # ── Token extraction from Sec-WebSocket-Protocol header (ARCH-7) ─────
+    # Client sends: new WebSocket(url, ['amandla-<TOKEN>'])
+    # We echo back the chosen subprotocol in websocket.accept() so the browser
+    # doesn't close the connection after the handshake.
+    _protocol_header = websocket.headers.get("sec-websocket-protocol", "")
+    _token = ""
+    _accepted_subprotocol = None
+    for _part in _protocol_header.split(","):
+        _part = _part.strip()
+        if _part.startswith("amandla-"):
+            _token = _part[len("amandla-"):]
+            _accepted_subprotocol = _part
+            break
+
     # ── Token validation ─────────────────────────────────────────────────
-    if not verify_session_token(token):
+    if not verify_session_token(_token):
         await websocket.close(code=1008, reason="Invalid or missing session token")
         logger.warning("[WS] Rejected connection — bad token session=%s role=%s", sessionId, role)
         return
@@ -79,7 +94,7 @@ async def websocket_endpoint(
         )
         return
 
-    await websocket.accept()
+    await websocket.accept(subprotocol=_accepted_subprotocol)
     logger.info("[WS] connect session=%s role=%s", sessionId, role)
 
     session = sessions.setdefault(sessionId, {"users": {}, "queue": []})
@@ -118,7 +133,7 @@ async def websocket_endpoint(
 
             # ── ASSIST-MODE PHRASE → HEARING ──────────────────────────
             if msg_type == "assist_phrase" and role == "deaf":
-                await _handle_assist_phrase(session, msg)
+                await _handle_assist_phrase(session, session_id, msg)
                 continue
 
             # ── DEAF QUICK-SIGN BUTTON ────────────────────────────────
@@ -208,8 +223,9 @@ async def _handle_text(websocket, session, session_id, msg):
             translated_text=" ".join(sasl.get("signs", [])),
             source="text",
         )
-    except Exception:
-        pass  # History logging must never break the main flow
+    except Exception as e:
+        logger.warning("[History] Failed to log message: %s", e)
+        # History failure must never break the main flow
 
     # Send SASL gloss acknowledgement back to the hearing user
     await send_safe(websocket, {
@@ -356,14 +372,20 @@ async def _handle_sasl_text(session, session_id, msg):
                 translated_text=english,
                 source="text",
             )
-        except Exception:
-            pass  # History logging must never break the main flow
+        except Exception as e:
+            logger.warning("[History] Failed to log message: %s", e)
+            # History failure must never break the main flow
 
 
-async def _handle_assist_phrase(session, msg):
+async def _handle_assist_phrase(session, session_id, msg):
     """Handle assist-mode English phrase → forward directly to hearing.
 
     BUG-2 fix: Assist phrases are already natural English — no SASL reconstruction.
+
+    Args:
+        session:    The current session dict.
+        session_id: The session identifier (needed for history logging).
+        msg:        The incoming message dict with 'text' field.
     """
     phrase = sanitise_text(msg.get("text", "")).strip()
     if not phrase:
@@ -382,15 +404,16 @@ async def _handle_assist_phrase(session, msg):
         try:
             from backend.services.history_db import log_message
             await log_message(
-                session_id="",
+                session_id=session_id,
                 direction="deaf_to_hearing",
                 original_text=phrase,
                 sasl_gloss="",
                 translated_text=phrase,
                 source="assist",
             )
-        except Exception:
-            pass  # History logging must never break the main flow
+        except Exception as e:
+            logger.warning("[History] Failed to log message: %s", e)
+            # History failure must never break the main flow
 
 
 async def _handle_sign(websocket, session, session_id, msg):
@@ -482,8 +505,9 @@ async def _handle_speech_upload(websocket, session, session_id, msg):
                 translated_text=" ".join(sasl.get("signs", [])),
                 source="speech",
             )
-        except Exception:
-            pass  # History logging must never break the main flow
+        except Exception as e:
+            logger.warning("[History] Failed to log message: %s", e)
+            # History failure must never break the main flow
 
         # Also broadcast signs to deaf window (NO request_id)
         if sasl["signs"]:
@@ -552,7 +576,12 @@ async def _handle_rights_analyze(websocket, session_id, msg):
             })
             return
 
+        # Whitelist incident_type to prevent prompt injection into Ollama (ARCH-8)
+        _VALID_INCIDENT_TYPES = {"workplace", "hospital", "school", "public", "other"}
         incident_type = sanitise_text(msg.get("incident_type", "workplace"))
+        if incident_type not in _VALID_INCIDENT_TYPES:
+            incident_type = "workplace"
+
         from backend.services.claude_service import analyse_incident
         result = await analyse_incident(description, incident_type)
         await send_safe(websocket, {
@@ -632,6 +661,16 @@ async def _handle_history_request(websocket, session_id, msg):
     request_id = msg.get("request_id")
     target_session = msg.get("session_id", session_id)
     limit = min(msg.get("limit", 100), 500)  # Cap at 500 to prevent abuse
+
+    # Security: only allow reading another session when listing sessions.
+    # A regular history fetch must always use the caller's own session_id.
+    if not msg.get("list_sessions") and target_session != session_id:
+        await send_safe(websocket, {
+            "request_id": request_id,
+            "type":       "history_response",
+            "error":      "You can only view your own session history.",
+        })
+        return
 
     try:
         if msg.get("list_sessions"):

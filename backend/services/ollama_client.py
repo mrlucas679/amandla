@@ -26,6 +26,13 @@ from backend.services.sign_maps import WORD_MAP as _WORD_MAP
 _ALL_SIGN_NAMES = sorted(set(_WORD_MAP.values()))
 _SIGN_LIST_STR = ", ".join(_ALL_SIGN_NAMES)
 
+# ── Translation cache (QUAL-1) ────────────────────────────────────────────
+# Simple ordered dict cache: identical input → identical output, no re-call.
+# Emergency phrases ("HELP", "STOP") hit this on every subsequent tap → <1ms.
+from collections import OrderedDict as _OrderedDict
+_classify_cache: _OrderedDict = _OrderedDict()
+_CLASSIFY_CACHE_MAX: int = 500
+
 
 async def classify_text_to_signs(text: str) -> list:
     """Convert English text to an ordered list of SASL sign name strings.
@@ -41,14 +48,23 @@ async def classify_text_to_signs(text: str) -> list:
     if not text:
         return []
 
+    # Cache hit — return immediately, no Ollama or rule-based work needed
+    if text in _classify_cache:
+        _classify_cache.move_to_end(text)
+        logger.debug("[OllamaClient] Cache hit: %s", text[:50])
+        return list(_classify_cache[text])  # Return a copy so callers can mutate safely
+
     # 1. Try local Ollama model
     ollama_result = await _try_ollama(text)
     if ollama_result is not None:
+        _cache_result(text, ollama_result)
         return ollama_result
 
     # 2. Rule-based fallback (no cloud AI — fully offline)
     logger.info("[OllamaClient] Ollama unavailable, using rule-based fallback")
-    return _rule_based_signs(text)
+    result = _rule_based_signs(text)
+    _cache_result(text, result)
+    return result
 
 
 async def _try_ollama(text: str):
@@ -105,3 +121,10 @@ async def _try_ollama(text: str):
         logger.debug(f"[OllamaClient] Ollama text-to-signs unavailable: {e}")
 
     return None
+
+
+def _cache_result(text: str, result: list) -> None:
+    """Store a classification result in the LRU cache (evicts oldest if full)."""
+    if len(_classify_cache) >= _CLASSIFY_CACHE_MAX:
+        _classify_cache.popitem(last=False)  # Remove the oldest entry
+    _classify_cache[text] = tuple(result)   # Store as tuple (immutable)
