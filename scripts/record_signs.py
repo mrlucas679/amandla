@@ -33,9 +33,7 @@ so merge_sign_data.py can process both sources the same way.
 """
 
 import sys
-import os
 import json
-import time
 import argparse
 import math
 from datetime import datetime
@@ -129,7 +127,6 @@ def landmark_to_arm_angles(pose_landmarks, side):
     upper_arm = el_pt - sh_pt
     # Reference vectors for shoulder angles
     body_down  = hip_pt - sh_pt           # direction of hanging arm
-    body_front = np.array([0, 0, -1], dtype=np.float32)  # into screen
 
     # Shoulder elevation (flex/extension): angle of upper_arm vs body_down in sagittal plane
     sh_flex = _angle_between(

@@ -38,7 +38,6 @@ SMPL-X body joint indices we care about (axis-angle triplets):
 import pickle
 import numpy as np
 import json
-import os
 import argparse
 from pathlib import Path
 
@@ -384,7 +383,7 @@ def convert_dataset(input_dir, output_path, n_keyframes=10, legacy=False):
 
     With legacy=True, outputs single-frame poses (v1 behaviour).
     """
-    print(f"\nAMANDLA SignAvatars Converter v2.0")
+    print("\nAMANDLA SignAvatars Converter v2.0")
     print(f"Input:     {input_dir}")
     print(f"Output:    {output_path}")
     print(f"Keyframes: {n_keyframes} per sign")
@@ -399,7 +398,7 @@ def convert_dataset(input_dir, output_path, n_keyframes=10, legacy=False):
 
         pkl_path = find_pkl_for_sign(input_dir, folder_name)
         if pkl_path is None:
-            print(f"  NOT FOUND — will use existing hand-crafted sign")
+            print("  NOT FOUND — will use existing hand-crafted sign")
             missing.append(amandla_name)
             continue
 
@@ -407,7 +406,7 @@ def convert_dataset(input_dir, output_path, n_keyframes=10, legacy=False):
         raw_frames = extract_all_frames(str(pkl_path))
 
         if not raw_frames:
-            print(f"  EXTRACTION FAILED")
+            print("  EXTRACTION FAILED")
             missing.append(amandla_name)
             continue
 

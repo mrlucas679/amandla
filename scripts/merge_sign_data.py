@@ -167,8 +167,8 @@ def build_overrides_block(sign_data):
         lines.append(f"  '{name}': {{")
         lines.append(f"    duration: {dur},")
         lines.append(f"    frames: {frames_js},")
-        lines.append(f"    nmm: null,")
-        lines.append(f"  }},")
+        lines.append("    nmm: null,")
+        lines.append("  }},")  # noqa: the double-brace is intentional JS literal
 
     lines += [
         '};',
@@ -257,7 +257,7 @@ def print_coverage_report(all_sign_names, real_data, source_js_path=None):
     total_synth = (len(lib_names) - total_real) if lib_names else '?'
 
     print(f"\n{'─'*55}")
-    print(f"  COVERAGE REPORT")
+    print("  COVERAGE REPORT")
     print(f"{'─'*55}")
     print(f"  Library signs:   {total_lib}")
     print(f"  Real-data signs: {total_real}")
@@ -338,7 +338,7 @@ if __name__ == '__main__':
     if not expanded_paths:
         sys.exit("ERROR: No data files found. Check your --data argument.")
 
-    print(f"\nAMANDLA Signs Library Merge Tool")
+    print("\nAMANDLA Signs Library Merge Tool")
     print(f"Source:  {args.source}")
     print(f"Data:    {len(expanded_paths)} file(s)")
     print(f"Output:  {args.output}")
@@ -360,7 +360,7 @@ if __name__ == '__main__':
     if args.check_html:
         html_files = find_html_files(args.check_html)
         if html_files:
-            print(f"\nHTML files to update (replace signs_library.js → signs_library_generated.js):")
+            print("\nHTML files to update (replace signs_library.js → signs_library_generated.js):")
             for f in html_files:
                 print(f"  {f}")
         else:
