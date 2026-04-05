@@ -137,6 +137,32 @@ class SASLTransformer:
         # Enrich tokens with sign library data
         response = self._enrich_with_library(response)
 
+        # Coverage retry: if >30% of tokens will be fingerspelled, try again
+        # with a conservative prompt that constrains output to known signs.
+        coverage = self._compute_coverage(response)
+        if coverage < 0.70 and settings.gemini_api_key:
+            logger.warning(
+                "Low sign coverage (%.0f%%) for '%s' — retrying with conservative prompt",
+                coverage * 100,
+                english_text[:40],
+            )
+            try:
+                retry_response = await self._translate_with_llm_conservative(
+                    english_text, request
+                )
+                retry_response = self._enrich_with_library(retry_response)
+                retry_coverage = self._compute_coverage(retry_response)
+                if retry_coverage >= coverage:
+                    logger.info(
+                        "Conservative retry improved coverage: %.0f%% → %.0f%%",
+                        coverage * 100, retry_coverage * 100,
+                    )
+                    response = retry_response
+                else:
+                    logger.info("Conservative retry did not improve coverage — keeping original")
+            except Exception as retry_exc:
+                logger.warning("Conservative retry failed: %s", retry_exc)
+
         # Cache the result
         if self._cache_enabled:
             self._cache[cache_key] = response
@@ -214,6 +240,7 @@ class SASLTransformer:
                     in_library=False,         # Will be updated by _enrich_with_library
                     position=i,
                     notes=token_data.get("notes", ""),
+                    uncertain=bool(token_data.get("uncertain", False)),
                 )
             )
 
@@ -430,14 +457,26 @@ class SASLTransformer:
     def _enrich_with_library(self, response: TranslationResponse) -> TranslationResponse:
         """
         Check each token against the sign library and update sign_type
-        and in_library fields. Builds the unknown_words list.
+        and in_library fields. Builds unknown_words, sign_coverage, and
+        fingerspelled_words.
         """
         unknown_words = []
+        fingerspelled_words = []
         enriched_tokens = []
 
         for token in response.tokens:
-            # Check the sign library
-            if self._sign_library.has_sign(token.gloss):
+            # Uncertain tokens (flagged by the LLM) are fingerspelled even if
+            # the gloss happens to match a library entry.
+            if token.uncertain:
+                enriched = token.model_copy(
+                    update={
+                        "in_library": False,
+                        "sign_type": SignType.FINGERSPELL,
+                    }
+                )
+                fingerspelled_words.append(token.gloss)
+                unknown_words.append(token.gloss)
+            elif self._sign_library.has_sign(token.gloss):
                 enriched = token.model_copy(
                     update={
                         "in_library": True,
@@ -458,15 +497,106 @@ class SASLTransformer:
                         "sign_type": SignType.FINGERSPELL,
                     }
                 )
+                fingerspelled_words.append(token.gloss)
                 unknown_words.append(token.gloss)
 
             enriched_tokens.append(enriched)
 
+        # Coverage = fraction of tokens that will be fully signed
+        signed = sum(
+            1 for t in enriched_tokens
+            if t.sign_type in (SignType.SIGN, SignType.NUMBER)
+        )
+        coverage = signed / len(enriched_tokens) if enriched_tokens else 1.0
+
         return response.model_copy(
             update={
-                "tokens": enriched_tokens,
-                "unknown_words": unknown_words,
+                "tokens":             enriched_tokens,
+                "unknown_words":      unknown_words,
+                "fingerspelled_words": fingerspelled_words,
+                "sign_coverage":      round(coverage, 3),
             }
+        )
+
+    def _compute_coverage(self, response: TranslationResponse) -> float:
+        """Return fraction of tokens with a known signed representation."""
+        if not response.tokens:
+            return 1.0
+        signed = sum(
+            1 for t in response.tokens
+            if t.sign_type in (SignType.SIGN, SignType.NUMBER)
+        )
+        return signed / len(response.tokens)
+
+    async def _translate_with_llm_conservative(
+        self,
+        english_text: str,
+        request: TranslationRequest,
+    ) -> TranslationResponse:
+        """
+        Conservative LLM translation: constrains output to known signs only.
+        Called when the first attempt had <70% coverage.
+        """
+        # Build a hint list from the sign library (capped to avoid token bloat)
+        known = sorted(self._sign_library.signs.keys())[:120]
+        known_hint = ", ".join(known)
+
+        conservative_suffix = (
+            f"\n\nIMPORTANT: Only use SASL glosses from this known-sign list: {known_hint}. "
+            "For any concept not in this list, use the closest available synonym from the list, "
+            "or mark the token with \"uncertain\": true so it will be fingerspelled."
+        )
+
+        if not settings.gemini_api_key:
+            raise RuntimeError("GEMINI_API_KEY not set")
+
+        user_message = (
+            f"Convert this English sentence to SASL gloss "
+            f"(use only known signs):\n\n{english_text}{conservative_suffix}"
+        )
+        full_prompt = f"{SASL_SYSTEM_PROMPT}\n\n{user_message}"
+
+        import asyncio
+        from google import genai
+
+        client = genai.Client(api_key=settings.gemini_api_key)
+        loop = asyncio.get_running_loop()
+        api_response = await loop.run_in_executor(
+            None,
+            lambda: client.models.generate_content(
+                model=settings.gemini_model,
+                contents=full_prompt,
+            ),
+        )
+
+        raw = api_response.text.strip()
+        parsed = self._parse_llm_response(raw)
+
+        tokens = []
+        for i, token_data in enumerate(parsed.get("tokens", [])):
+            tokens.append(
+                GlossToken(
+                    gloss=token_data["gloss"].upper(),
+                    original_english=token_data.get("original_english", ""),
+                    sign_type=SignType.SIGN,
+                    in_library=False,
+                    position=i,
+                    notes=token_data.get("notes", ""),
+                    uncertain=bool(token_data.get("uncertain", False)),
+                )
+            )
+
+        non_manual = []
+        if request.include_non_manual:
+            non_manual = parsed.get("non_manual_markers", [])
+
+        return TranslationResponse(
+            original_english=english_text,
+            gloss_text=parsed.get("gloss_text", ""),
+            tokens=tokens,
+            non_manual_markers=non_manual,
+            unknown_words=[],
+            translation_notes=parsed.get("translation_notes", "") + " [conservative retry]",
         )
 
     def _empty_response(self, original: str) -> TranslationResponse:

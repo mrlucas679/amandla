@@ -954,6 +954,16 @@
     if (el) el.textContent = text || ''
   }
 
+  function buildNMMMarkers (nmm) {
+    const out = []
+    if (nmm.browLift   > 0)  out.push('raised eyebrows')
+    if (nmm.browFurrow > 0)  out.push('furrowed brows')
+    if (nmm.mouthOpen  > 0)  out.push('mouth open')
+    if (nmm.headShake)       out.push('head shake')
+    if (nmm.headNod)         out.push('head nod')
+    return out
+  }
+
   function startNextTransition (fromOverride) {
     const TE = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.TransitionEngine
     if (!TE || signQueue.length === 0) return
@@ -965,6 +975,13 @@
     animState = 'transitioning'
     updateLabel(currentSign ? currentSign.name : '')
     computeHeadTarget(currentSign)
+
+    // Apply sign-level non-manual markers if the sign data includes them
+    if (currentSign && currentSign.nmm) {
+      const markers = buildNMMMarkers(currentSign.nmm)
+      const signDur = currentSign.duration ? currentSign.duration / 1000 : SIGN_HOLD
+      if (markers.length > 0) setNMMs(markers, signDur)
+    }
   }
 
   // ── ANIMATION LOOP ────────────────────────────────────────────────────
@@ -986,7 +1003,9 @@
       if (TE.isDone()) {
         finalPose    = pose
         const isFS   = currentSign && currentSign.isFingerspell
-        holdTotal    = isFS ? SIGN_FS_HOLD : SIGN_HOLD
+        holdTotal    = currentSign && currentSign.duration
+          ? (currentSign.duration / 1000)
+          : (isFS ? SIGN_FS_HOLD : SIGN_HOLD)
         holdTimer    = holdTotal
         holdStartOsc = oscTime
         animState    = 'holding'

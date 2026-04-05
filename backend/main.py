@@ -153,6 +153,8 @@ async def _text_to_sasl_signs(text: str) -> dict:
                 "text": response.gloss_text,
                 "original_english": text,
                 "non_manual_markers": list(response.non_manual_markers) if response.non_manual_markers else [],
+                "sign_coverage": getattr(response, "sign_coverage", 1.0),
+                "fingerspelled": list(getattr(response, "fingerspelled_words", [])),
             }
     except Exception as e:
         logger.warning(f"[SASL] Transformer failed, falling back: {e}")
@@ -216,7 +218,9 @@ async def upload_speech(
             "sasl_gloss": sasl["text"],          # SASL grammar — for deaf window only
             "signs": sasl["signs"],
             "language": detected,
-            "confidence": result.get("confidence", 0.0)
+            "confidence": result.get("confidence", 0.0),
+            "sign_coverage": sasl.get("sign_coverage", 1.0),
+            "fingerspelled_words": sasl.get("fingerspelled", []),
         }
     except Exception as e:
         logger.error(f"[Speech] Transcription error: {e}")
@@ -448,13 +452,15 @@ async def websocket_endpoint(websocket: WebSocket, sessionId: str, role: str):
                 language = msg.get("language")   # Whisper-detected language code, e.g. "zu"
                 sasl = await _text_to_sasl_signs(text)
                 out = {
-                    "type":             "signs",
-                    "signs":            sasl["signs"],
-                    "text":             sasl["text"],
-                    "original_english": sasl["original_english"],
-                    "language":         language,
-                    "session_id":       sessionId,
+                    "type":               "signs",
+                    "signs":              sasl["signs"],
+                    "text":               sasl["text"],
+                    "original_english":   sasl["original_english"],
+                    "language":           language,
+                    "session_id":         sessionId,
                     "non_manual_markers": sasl.get("non_manual_markers", []),
+                    "sign_coverage":      sasl.get("sign_coverage", 1.0),
+                    "fingerspelled_words": sasl.get("fingerspelled", []),
                 }
                 await _broadcast(session, websocket, out)
                 # Also echo turn indicator to both sides

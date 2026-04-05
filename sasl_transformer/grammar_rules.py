@@ -97,6 +97,46 @@ Include these as notes when relevant:
 - Negation: head shake
 - Emphasis: wider signing space, slower movement, facial expression
 
+### 14. Classifier Predicates
+When describing movement or location of an object, use classifier handshapes rather than
+descriptive verbs. In SASL gloss, represent these as CL:description.
+- English: "The car drove fast" → SASL: CAR CL:vehicle-move-fast
+- English: "People are walking around" → SASL: PERSON CL:many-walk-around
+Note: only use CL: if the concept cannot be expressed with a known single-word sign.
+
+### 15. Size and Shape Specifiers (SASSes)
+For physical descriptions of size or shape, prefer known handshape signs over
+complex verbal descriptions. If a SASS is needed, use SASS:description in gloss.
+- English: "A long, thin stick" → SASL: STICK SASS:long-thin
+- English: "A round ball" → SASL: BALL (shape is inherent, no SASS needed)
+Only include SASS when the physical property is not already encoded in the noun.
+
+### 16. Topic-Comment with Topicalization
+For complex sentences, the topic (what you are talking about) is established first
+with raised eyebrows, then the comment follows.
+- English: "As for my sister, she works at the hospital" → SASL: MY SISTER HOSPITAL WORK
+- English: "Regarding the meeting, I will attend" → SASL: MEETING I ATTEND WILL
+Raise eyebrows on the topic noun — note this in non_manual_markers as "topicalization".
+
+### 17. Plurality
+Use MANY, FEW, or SEVERAL rather than reduplication in gloss output.
+- English: "Many students came" → SASL: STUDENT MANY COME
+- English: "A few dogs" → SASL: DOG FEW
+Do NOT write "STUDENT STUDENT STUDENT" in the gloss — write "STUDENT MANY".
+
+### 18. Spatial Grammar and Referents
+When persons or objects are assigned locations in space (spatial loci), use
+directional verbs. In gloss, indicate spatial referents with POINT-AT or locus markers.
+- English: "She told him" → SASL: SHE TELL-TO-HIM (directional verb)
+- English: "I gave it to you" → SASL: I GIVE-YOU
+If both parties are present (signer and addressee), directional verbs are implied
+by the physical direction — note this in translation_notes.
+
+## IMPORTANT: Token Confidence
+If you are uncertain whether a specific gloss word exists in standard SASL
+(e.g., rare technical words, proper nouns), add `"uncertain": true` to that token.
+The system will then fingerspell uncertain tokens rather than attempt an unknown sign.
+
 ## Output Format
 
 You MUST respond with ONLY valid JSON (no markdown, no backticks, no preamble).
@@ -108,7 +148,8 @@ Use this exact structure:
         {
             "gloss": "WORD",
             "original_english": "original",
-            "notes": ""
+            "notes": "",
+            "uncertain": false
         }
     ],
     "non_manual_markers": ["marker1", "marker2"],
