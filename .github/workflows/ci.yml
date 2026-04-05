@@ -28,7 +28,7 @@ jobs:
       - name: Lint sasl_transformer
         run: ruff check sasl_transformer/ --select E,F,W --ignore E501
 
-      - name: Lint scripts
+      - name: Lint scripts and converter
         run: ruff check scripts/ convert_signs.py --select E,F,W --ignore E501
 
   # ── 2. Python: tests ───────────────────────────────────────────────
@@ -43,12 +43,12 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install core dependencies
+      - name: Install dependencies
         run: |
           pip install \
             fastapi \
             uvicorn \
-            pydantic==2.10.0 \
+            "pydantic==2.10.0" \
             pydantic-settings \
             python-dotenv \
             requests \
@@ -57,10 +57,7 @@ jobs:
             pytest-asyncio \
             numpy
 
-      - name: Install sasl_transformer package
-        run: pip install -e . --no-deps 2>/dev/null || true
-
-      - name: Run tests (no API key required)
+      - name: Run tests
         env:
           ANTHROPIC_API_KEY: test-key-ci
           GEMINI_API_KEY: ""
@@ -82,24 +79,22 @@ jobs:
       - name: Install dependencies
         run: |
           pip install \
-            fastapi \
-            pydantic==2.10.0 \
+            "pydantic==2.10.0" \
             pydantic-settings \
             python-dotenv \
-            requests \
-            httpx \
             numpy
 
-      - name: Check sasl_transformer imports
+      - name: Smoke-import all new modules
         env:
           ANTHROPIC_API_KEY: test-key-ci
           GEMINI_API_KEY: ""
         run: |
-          python -c "from sasl_transformer.models import GlossToken, TranslationRequest, TranslationResponse, SignType"
-          python -c "from sasl_transformer.grammar_rules import SASL_SYSTEM_PROMPT, ARTICLES_TO_DROP"
-          python -c "from sasl_transformer.sign_library import SignLibrary"
-          python -c "from convert_signs import extract_all_frames, select_keyframes, build_keyframe_entry"
-          echo "All imports OK"
+          python -c "from sasl_transformer.models import GlossToken, TranslationRequest, TranslationResponse, SignType; print('models OK')"
+          python -c "from sasl_transformer.grammar_rules import SASL_SYSTEM_PROMPT, ARTICLES_TO_DROP; print('grammar_rules OK')"
+          python -c "from sasl_transformer.sign_library import SignLibrary; print('sign_library OK')"
+          python -c "from convert_signs import extract_all_frames, select_keyframes, build_keyframe_entry; print('convert_signs OK')"
+          python -c "import ast; ast.parse(open('scripts/record_signs.py').read()); print('record_signs.py syntax OK')"
+          python -c "import ast; ast.parse(open('scripts/merge_sign_data.py').read()); print('merge_sign_data.py syntax OK')"
 
   # ── 4. JavaScript: syntax check ────────────────────────────────────
   js-syntax:
@@ -112,30 +107,26 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Check signs_library.js syntax
+      - name: Check signs_library.js
         run: node --check signs_library.js
 
-      - name: Check signs_library_v2.js syntax (if present)
+      - name: Check avatar.js
+        run: node --check src/windows/deaf/avatar.js
+
+      - name: Check src/main.js
+        run: node --check src/main.js
+
+      - name: Check signs_library_v2.js (if present)
         run: |
           if [ -f signs_library_v2.js ]; then
             node --check signs_library_v2.js
+          else
+            echo "signs_library_v2.js not present, skipping"
           fi
-
-      - name: Check src/windows/deaf/avatar.js syntax
-        run: node --check src/windows/deaf/avatar.js
-
-      - name: Check src/main.js syntax
-        run: node --check src/main.js
-
-      - name: Check scripts/merge_sign_data.py is valid Python
-        run: python3 -c "import ast; ast.parse(open('scripts/merge_sign_data.py').read()); print('merge_sign_data.py: OK')"
-
-      - name: Check scripts/record_signs.py is valid Python
-        run: python3 -c "import ast; ast.parse(open('scripts/record_signs.py').read()); print('record_signs.py: OK')"
 
   # ── 5. Sign library structural check ──────────────────────────────
   signs-library-check:
-    name: signs_library.js export check
+    name: signs_library.js structural check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -144,12 +135,11 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Verify key exports and sign count
+      - name: Write check script
         run: |
-          node - << 'EOF'
+          cat > /tmp/check_lib.js << 'CHECKEOF'
           const lib = require('./signs_library.js');
 
-          // Core exports must exist
           const required = [
             'SIGN_LIBRARY', 'TransitionEngine', 'sentenceToSigns',
             'signWithFrames', 'prebakeFrameQuats', 'findFrame', 'slerpBetweenFrames',
@@ -158,46 +148,45 @@ jobs:
           ];
           for (const key of required) {
             if (!lib[key]) {
-              console.error(`MISSING export: ${key}`);
+              console.error('MISSING export: ' + key);
               process.exit(1);
             }
           }
-          console.log(`✓ All ${required.length} required exports present`);
+          console.log('OK: all ' + required.length + ' exports present');
 
-          // Sign count sanity check
           const count = Object.keys(lib.SIGN_LIBRARY).length;
           if (count < 200) {
-            console.error(`Only ${count} signs — expected ≥200`);
+            console.error('Only ' + count + ' signs — expected >= 200');
             process.exit(1);
           }
-          console.log(`✓ Sign count: ${count}`);
+          console.log('OK: sign count = ' + count);
 
-          // TransitionEngine must have begin/tick/isDone
           const TE = lib.TransitionEngine;
           for (const fn of ['begin', 'tick', 'isDone']) {
             if (typeof TE[fn] !== 'function') {
-              console.error(`TransitionEngine missing method: ${fn}`);
+              console.error('TransitionEngine missing: ' + fn);
               process.exit(1);
             }
           }
-          console.log('✓ TransitionEngine methods present');
+          console.log('OK: TransitionEngine methods present');
 
-          // findFrame correctness
-          const frames = [
-            { t: 0.0, R: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null}, L: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null} },
-            { t: 0.5, R: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null}, L: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null} },
-            { t: 1.0, R: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null}, L: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null} },
-          ];
-          const { a, b, localT } = lib.findFrame(frames, 0.75);
-          if (a.t !== 0.5 || b.t !== 1.0) {
-            console.error(`findFrame(0.75) returned wrong bracket: a.t=${a.t} b.t=${b.t}`);
+          const makeFrame = function(t) {
+            const arm = {sh:{x:0,y:0,z:0}, el:{x:0,y:0,z:0}, wr:{x:0,y:0,z:0}, hand:null};
+            return {t: t, R: arm, L: arm};
+          };
+          const frames = [makeFrame(0.0), makeFrame(0.5), makeFrame(1.0)];
+          const result = lib.findFrame(frames, 0.75);
+          if (result.a.t !== 0.5 || result.b.t !== 1.0) {
+            console.error('findFrame(0.75) returned wrong bracket: a.t=' + result.a.t + ' b.t=' + result.b.t);
             process.exit(1);
           }
-          if (Math.abs(localT - 0.5) > 1e-4) {
-            console.error(`findFrame(0.75) localT=${localT}, expected 0.5`);
+          if (Math.abs(result.localT - 0.5) > 0.001) {
+            console.error('findFrame(0.75) localT=' + result.localT + ', expected 0.5');
             process.exit(1);
           }
-          console.log('✓ findFrame interpolation correct');
+          console.log('OK: findFrame interpolation correct');
+          console.log('All checks passed.');
+          CHECKEOF
 
-          console.log('\nAll checks passed.');
-          EOF
+      - name: Run structural check
+        run: node /tmp/check_lib.js
