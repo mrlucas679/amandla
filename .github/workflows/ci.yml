@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**", "feature/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ── 1. Python: lint ────────────────────────────────────────────────
+  python-lint:
+    name: Python lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint backend
+        run: ruff check backend/ --select E,F,W --ignore E501
+
+      - name: Lint sasl_transformer
+        run: ruff check sasl_transformer/ --select E,F,W --ignore E501
+
+      - name: Lint scripts
+        run: ruff check scripts/ convert_signs.py --select E,F,W --ignore E501
+
+  # ── 2. Python: tests ───────────────────────────────────────────────
+  python-tests:
+    name: Python tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install core dependencies
+        run: |
+          pip install \
+            fastapi \
+            uvicorn \
+            pydantic==2.10.0 \
+            pydantic-settings \
+            python-dotenv \
+            requests \
+            httpx \
+            pytest \
+            pytest-asyncio \
+            numpy
+
+      - name: Install sasl_transformer package
+        run: pip install -e . --no-deps 2>/dev/null || true
+
+      - name: Run tests (no API key required)
+        env:
+          ANTHROPIC_API_KEY: test-key-ci
+          GEMINI_API_KEY: ""
+          OLLAMA_MODEL: amandla
+        run: pytest tests/ -v --tb=short
+
+  # ── 3. Python: import smoke test ───────────────────────────────────
+  python-imports:
+    name: Python import check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            fastapi \
+            pydantic==2.10.0 \
+            pydantic-settings \
+            python-dotenv \
+            requests \
+            httpx \
+            numpy
+
+      - name: Check sasl_transformer imports
+        env:
+          ANTHROPIC_API_KEY: test-key-ci
+          GEMINI_API_KEY: ""
+        run: |
+          python -c "from sasl_transformer.models import GlossToken, TranslationRequest, TranslationResponse, SignType"
+          python -c "from sasl_transformer.grammar_rules import SASL_SYSTEM_PROMPT, ARTICLES_TO_DROP"
+          python -c "from sasl_transformer.sign_library import SignLibrary"
+          python -c "from convert_signs import extract_all_frames, select_keyframes, build_keyframe_entry"
+          echo "All imports OK"
+
+  # ── 4. JavaScript: syntax check ────────────────────────────────────
+  js-syntax:
+    name: JavaScript syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check signs_library.js syntax
+        run: node --check signs_library.js
+
+      - name: Check signs_library_v2.js syntax (if present)
+        run: |
+          if [ -f signs_library_v2.js ]; then
+            node --check signs_library_v2.js
+          fi
+
+      - name: Check src/windows/deaf/avatar.js syntax
+        run: node --check src/windows/deaf/avatar.js
+
+      - name: Check src/main.js syntax
+        run: node --check src/main.js
+
+      - name: Check scripts/merge_sign_data.py is valid Python
+        run: python3 -c "import ast; ast.parse(open('scripts/merge_sign_data.py').read()); print('merge_sign_data.py: OK')"
+
+      - name: Check scripts/record_signs.py is valid Python
+        run: python3 -c "import ast; ast.parse(open('scripts/record_signs.py').read()); print('record_signs.py: OK')"
+
+  # ── 5. Sign library structural check ──────────────────────────────
+  signs-library-check:
+    name: signs_library.js export check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify key exports and sign count
+        run: |
+          node - << 'EOF'
+          const lib = require('./signs_library.js');
+
+          // Core exports must exist
+          const required = [
+            'SIGN_LIBRARY', 'TransitionEngine', 'sentenceToSigns',
+            'signWithFrames', 'prebakeFrameQuats', 'findFrame', 'slerpBetweenFrames',
+            'lerpHandShape', 'slerpArmPose', 'armToQuat',
+            'Easing', 'HS',
+          ];
+          for (const key of required) {
+            if (!lib[key]) {
+              console.error(`MISSING export: ${key}`);
+              process.exit(1);
+            }
+          }
+          console.log(`✓ All ${required.length} required exports present`);
+
+          // Sign count sanity check
+          const count = Object.keys(lib.SIGN_LIBRARY).length;
+          if (count < 200) {
+            console.error(`Only ${count} signs — expected ≥200`);
+            process.exit(1);
+          }
+          console.log(`✓ Sign count: ${count}`);
+
+          // TransitionEngine must have begin/tick/isDone
+          const TE = lib.TransitionEngine;
+          for (const fn of ['begin', 'tick', 'isDone']) {
+            if (typeof TE[fn] !== 'function') {
+              console.error(`TransitionEngine missing method: ${fn}`);
+              process.exit(1);
+            }
+          }
+          console.log('✓ TransitionEngine methods present');
+
+          // findFrame correctness
+          const frames = [
+            { t: 0.0, R: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null}, L: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null} },
+            { t: 0.5, R: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null}, L: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null} },
+            { t: 1.0, R: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null}, L: {sh:{x:0,y:0,z:0},el:{x:0,y:0,z:0},wr:{x:0,y:0,z:0},hand:null} },
+          ];
+          const { a, b, localT } = lib.findFrame(frames, 0.75);
+          if (a.t !== 0.5 || b.t !== 1.0) {
+            console.error(`findFrame(0.75) returned wrong bracket: a.t=${a.t} b.t=${b.t}`);
+            process.exit(1);
+          }
+          if (Math.abs(localT - 0.5) > 1e-4) {
+            console.error(`findFrame(0.75) localT=${localT}, expected 0.5`);
+            process.exit(1);
+          }
+          console.log('✓ findFrame interpolation correct');
+
+          console.log('\nAll checks passed.');
+          EOF
