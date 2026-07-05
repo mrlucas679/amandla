@@ -371,3 +371,8 @@ on ours. License check before every download.
   debt (measured):** 16 transformer signs the avatar cannot play — BOOK, BUY, FEEL,
   HE, LEARN, LIKE, LIVE, MAKE, MILK, MY, NAME, PHONE, SOUTH AFRICA, TEACH, THINK,
   YOUR. Record real signer data for these (plus CALL, HERE) before expanding further.
+- 2026-07-05 — First dev-tag mining complete: offline phrase library (60 phrases,
+  Tier 0 exact-match before all other tiers) + contraction/SA-slang normalisation
+  ported from `rescue/dev-2026-07` into the rules-first pipeline. Copula 'AM'
+  glosses removed from the phrase data (copulas are not signed); the full file is
+  flagged for SASL interpreter review (D15). 8 new tests.
