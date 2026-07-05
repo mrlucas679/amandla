@@ -1,0 +1,236 @@
+/*
+ * AMANDLA — Design System
+ * Ubuntu Electric: Afrofuturist South African
+ * ─────────────────────────────────────────────
+ * Display:  Space Grotesk (bold, distinctive)
+ * Body:     Plus Jakarta Sans (clean, readable)
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+/* ─── DESIGN TOKENS ─────────────────────────────────────────── */
+:root {
+  /* ── Palette ── */
+  --void:          #050810;
+  --surface:       #0B0E1A;
+  --surface2:      #111626;
+  --surface3:      #181E34;
+  --surface4:      #1E2640;
+
+  --teal:          #00D4A3;
+  --teal-dim:      #2EA880;
+  --teal-bg:       rgba(0, 212, 163, 0.08);
+  --teal-border:   rgba(0, 212, 163, 0.25);
+  --teal-glow:     rgba(0, 212, 163, 0.35);
+
+  --gold:          #F0B429;
+  --gold-dim:      #C48A15;
+  --gold-bg:       rgba(240, 180, 41, 0.10);
+  --gold-border:   rgba(240, 180, 41, 0.30);
+
+  --purple:        #B06EF3;
+  --purple-dim:    #8B6FD4;
+  --purple-bg:     rgba(176, 110, 243, 0.08);
+  --purple-border: rgba(176, 110, 243, 0.25);
+  --purple-glow:   rgba(176, 110, 243, 0.35);
+
+  --crimson:       #FF4060;
+  --crimson-bg:    rgba(255, 64, 96, 0.10);
+  --crimson-border:rgba(255, 64, 96, 0.30);
+
+  --cream:         #F0EAE0;
+  --cream-dim:     #BDB8B2;
+  --muted:         #8A8A9E;
+  --dim:           #40456A;
+  --barrier:       rgba(255, 255, 255, 0.05);
+
+  /* ── Box shadows / glows ── */
+  --shadow-teal:   0 0 24px rgba(0, 212, 163, 0.4);
+  --shadow-purple: 0 0 24px rgba(176, 110, 243, 0.4);
+  --shadow-gold:   0 0 24px rgba(240, 180, 41, 0.35);
+  --shadow-crimson:0 0 24px rgba(255, 64, 96, 0.4);
+  --shadow-card:   0 4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-float:  0 8px 40px rgba(0, 0, 0, 0.6);
+
+  /* ── Typography ── */
+  --font-display:  'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-body:     'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+
+  /* ── Spacing & Radius ── */
+  --r-xs:   4px;
+  --r-sm:   8px;
+  --r-md:   12px;
+  --r-lg:   16px;
+  --r-xl:   24px;
+  --r-2xl:  32px;
+  --r-pill: 9999px;
+
+  /* ── Motion ── */
+  --ease:       cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:   cubic-bezier(0, 0, 0.2, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --spring:     cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-soft:cubic-bezier(0.25, 1.30, 0.5, 1);
+
+  --t-fast:   120ms;
+  --t-med:    220ms;
+  --t-slow:   400ms;
+  --t-xslow:  700ms;
+
+  /* ── Z-index layers ── */
+  --z-base:   1;
+  --z-overlay:100;
+  --z-modal:  200;
+  --z-top:    9999;
+}
+
+/* ─── BASE RESET ──────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+
+body {
+  background: var(--void);
+  color: var(--cream);
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+
+/* ─── SCROLLBAR ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface4); border-radius: var(--r-pill); }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+/* ─── TYPOGRAPHY UTILITIES ────────────────────────────────────── */
+.font-display { font-family: var(--font-display); }
+.font-body    { font-family: var(--font-body); }
+
+.text-brand {
+  font-family: var(--font-display);
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+}
+.text-label {
+  font-family: var(--font-display);
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted);
+}
+.text-gradient {
+  background: linear-gradient(135deg, var(--teal), var(--gold), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ─── SURFACE UTILITIES ───────────────────────────────────────── */
+.surface-1 { background: var(--surface); }
+.surface-2 { background: var(--surface2); }
+.surface-3 { background: var(--surface3); }
+
+.card {
+  background: var(--surface2);
+  border: 1px solid var(--barrier);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.panel-border-teal {
+  border-bottom: 1px solid var(--teal-border);
+  box-shadow: 0 1px 0 rgba(0,212,163,0.10);
+}
+.panel-border-purple {
+  border-bottom: 1px solid var(--purple-border);
+  box-shadow: 0 1px 0 rgba(176,110,243,0.10);
+}
+
+/* ─── BADGE UTILITIES ─────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: var(--r-pill);
+  font-family: var(--font-display);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.badge-teal   { background: var(--teal-bg);   border: 1px solid var(--teal-border);   color: var(--teal); }
+.badge-purple { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+.badge-gold   { background: var(--gold-bg);   border: 1px solid var(--gold-border);   color: var(--gold); }
+.badge-crimson{ background: var(--crimson-bg);border: 1px solid var(--crimson-border);color: var(--crimson); }
+
+/* ─── STATUS DOT ──────────────────────────────────────────────── */
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
+}
+.status-dot.online  { background: var(--teal);   box-shadow: 0 0 8px rgba(0,212,163,0.7); }
+.status-dot.offline { background: var(--crimson); box-shadow: 0 0 8px rgba(255,64,96,0.5); }
+.status-dot.pending { background: var(--gold);    box-shadow: 0 0 8px rgba(240,180,41,0.5); }
+
+/* ─── BUTTON UTILITIES ────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 20px; border-radius: var(--r-md); border: none;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 13px; letter-spacing: 0.5px; cursor: pointer;
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease),
+              background var(--t-fast) var(--ease);
+  user-select: none;
+}
+.btn:active { transform: scale(0.95) !important; }
+.btn-teal {
+  background: linear-gradient(135deg, var(--teal), #00B890);
+  color: #021A12;
+  box-shadow: 0 4px 16px rgba(0,212,163,0.35);
+}
+.btn-teal:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,212,163,0.55); }
+.btn-purple {
+  background: linear-gradient(135deg, var(--purple), #8B4FD0);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(176,110,243,0.35);
+}
+.btn-purple:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(176,110,243,0.55); }
+.btn-ghost-teal {
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-border);
+  color: var(--teal);
+}
+.btn-ghost-teal:hover { background: rgba(0,212,163,0.15); border-color: var(--teal); }
+.btn-ghost-purple {
+  background: var(--purple-bg);
+  border: 1px solid var(--purple-border);
+  color: var(--purple);
+}
+.btn-ghost-purple:hover { background: rgba(176,110,243,0.15); border-color: var(--purple); }
+.btn-pill { border-radius: var(--r-pill); }
+
+/* ─── GLOW LINE (decorative) ──────────────────────────────────── */
+.glow-line-teal {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--teal) 50%, transparent 100%);
+  opacity: 0.5;
+}
+.glow-line-purple {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--purple) 50%, transparent 100%);
+  opacity: 0.5;
+}
+.glow-line-gold {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--gold) 50%, transparent 100%);
+  opacity: 0.4;
+}
+
+/* ─── REDUCED MOTION ──────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

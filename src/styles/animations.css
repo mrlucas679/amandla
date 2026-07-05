@@ -1,0 +1,328 @@
+/*
+ * AMANDLA — Animation System
+ * ────────────────────────────────────────────────────────
+ * Central keyframe registry + utility classes
+ * Every component pulls from here — no ad-hoc values scattered elsewhere
+ *
+ * MOTION PHILOSOPHY:
+ *   - State changes animate
+ *   - Recognition feedback is immediate and satisfying
+ *   - Avatar reactions are expressive
+ *   - Nothing snaps — everything breathes
+ */
+
+/* ══════════════════════════════════════════════════════════
+   KEYFRAMES — ENTRANCES
+══════════════════════════════════════════════════════════ */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-right {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes spring-in {
+  0%   { opacity: 0; transform: scale(0.6) translateY(16px); }
+  70%  { opacity: 1; transform: scale(1.05) translateY(-3px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Message bubble entrance */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   KEYFRAMES — EXITS
+══════════════════════════════════════════════════════════ */
+@keyframes fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes slide-up-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-12px); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   KEYFRAMES — AMBIENT / LOOPING
+══════════════════════════════════════════════════════════ */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50%       { transform: scale(1.04); opacity: 1; }
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.85); opacity: 1; }
+  100% { transform: scale(1.5);  opacity: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.8); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes spin-reverse {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes glow-pulse-teal {
+  0%, 100% { box-shadow: 0 0 12px rgba(0,212,163,0.3); }
+  50%       { box-shadow: 0 0 28px rgba(0,212,163,0.7), 0 0 60px rgba(0,212,163,0.25); }
+}
+
+@keyframes glow-pulse-purple {
+  0%, 100% { box-shadow: 0 0 12px rgba(176,110,243,0.3); }
+  50%       { box-shadow: 0 0 28px rgba(176,110,243,0.7), 0 0 60px rgba(176,110,243,0.25); }
+}
+
+@keyframes glow-pulse-gold {
+  0%, 100% { box-shadow: 0 0 12px rgba(240,180,41,0.25); }
+  50%       { box-shadow: 0 0 24px rgba(240,180,41,0.6), 0 0 50px rgba(240,180,41,0.20); }
+}
+
+/* Scan line animation for camera panel */
+@keyframes scan-line {
+  0%   { top: 0%; opacity: 0.8; }
+  50%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Recording pulse for mic */
+@keyframes mic-ring-1 {
+  from { transform: scale(0.8); opacity: 1; }
+  to   { transform: scale(1.5); opacity: 0; }
+}
+@keyframes mic-ring-2 {
+  from { transform: scale(0.8); opacity: 0.6; }
+  to   { transform: scale(1.8); opacity: 0; }
+}
+
+/* Sign recognition burst */
+@keyframes sign-burst {
+  0%   { transform: scale(0.5) translateY(10px); opacity: 0; }
+  60%  { transform: scale(1.1) translateY(-4px); opacity: 1; }
+  100% { transform: scale(1) translateY(0);     opacity: 1; }
+}
+
+@keyframes sign-burst-ring {
+  0%   { transform: scale(0.8); opacity: 0.9; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Avatar glow awakening */
+@keyframes avatar-awaken {
+  0%   { opacity: 0; }
+  25%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Emergency pulse */
+@keyframes emergency-pulse {
+  0%, 100% { background: rgba(255, 40, 70, 0.96); }
+  50%       { background: rgba(200, 15, 40, 0.99); }
+}
+
+/* Brand shimmer on startup */
+@keyframes brand-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* Waveform bars */
+@keyframes wave-1 { 0%,100%{height:4px}  50%{height:16px} }
+@keyframes wave-2 { 0%,100%{height:8px}  50%{height:24px} }
+@keyframes wave-3 { 0%,100%{height:12px} 50%{height:20px} }
+@keyframes wave-4 { 0%,100%{height:6px}  50%{height:18px} }
+@keyframes wave-5 { 0%,100%{height:10px} 50%{height:22px} }
+
+/* Chip slide in */
+@keyframes chip-in {
+  from { opacity: 0; transform: translateX(20px) scale(0.9); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* First-sign WOW moment */
+@keyframes wow-flash {
+  0%   { opacity: 0; transform: scale(0.95); }
+  15%  { opacity: 1; transform: scale(1); }
+  85%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+
+@keyframes wow-text-in {
+  0%   { opacity: 0; transform: translateY(20px) scale(0.9); letter-spacing: 20px; }
+  60%  { opacity: 1; transform: translateY(0) scale(1.02); letter-spacing: 3px; }
+  100% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 3px; }
+}
+
+@keyframes wow-ring-expand {
+  0%   { transform: scale(0.3); opacity: 1; border-width: 4px; }
+  100% { transform: scale(3);   opacity: 0; border-width: 1px; }
+}
+
+/* Skeleton loading shimmer */
+@keyframes shimmer {
+  from { background-position: -400px 0; }
+  to   { background-position:  400px 0; }
+}
+
+/* Turn indicator slide */
+@keyframes turn-slide-in {
+  from { opacity: 0; transform: scaleX(0.92); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+/* ══════════════════════════════════════════════════════════
+   UTILITY ANIMATION CLASSES
+══════════════════════════════════════════════════════════ */
+.anim-fade-in   { animation: fade-in   var(--t-med) var(--ease) both; }
+.anim-slide-up  { animation: slide-up  var(--t-med) var(--spring) both; }
+.anim-scale-in  { animation: scale-in  var(--t-med) var(--spring) both; }
+.anim-spring-in { animation: spring-in 0.45s var(--spring) both; }
+
+.anim-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Stagger delays */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.10s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.20s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.30s; }
+
+/* ══════════════════════════════════════════════════════════
+   WAVEFORM VISUALIZER
+══════════════════════════════════════════════════════════ */
+.waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+}
+.waveform .bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--teal);
+  opacity: 0.85;
+}
+.waveform.active .bar:nth-child(1) { animation: wave-1 0.7s ease-in-out infinite 0.00s; }
+.waveform.active .bar:nth-child(2) { animation: wave-2 0.7s ease-in-out infinite 0.10s; }
+.waveform.active .bar:nth-child(3) { animation: wave-3 0.7s ease-in-out infinite 0.05s; }
+.waveform.active .bar:nth-child(4) { animation: wave-4 0.7s ease-in-out infinite 0.15s; }
+.waveform.active .bar:nth-child(5) { animation: wave-5 0.7s ease-in-out infinite 0.08s; }
+
+/* ══════════════════════════════════════════════════════════
+   SPINNER — Branded AMANDLA loader
+══════════════════════════════════════════════════════════ */
+.amandla-spinner {
+  position: relative;
+  width: 36px; height: 36px;
+}
+.amandla-spinner::before,
+.amandla-spinner::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 2.5px solid transparent;
+}
+.amandla-spinner::before {
+  border-top-color: var(--teal);
+  border-right-color: var(--teal);
+  animation: spin 0.9s linear infinite;
+}
+.amandla-spinner::after {
+  inset: 6px;
+  border-top-color: var(--purple);
+  border-left-color: var(--purple);
+  animation: spin-reverse 0.7s linear infinite;
+}
+
+/* ══════════════════════════════════════════════════════════
+   SKELETON SCREEN
+══════════════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface2) 25%,
+    var(--surface3) 50%,
+    var(--surface2) 75%
+  );
+  background-size: 400px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--r-sm);
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOAST NOTIFICATION
+══════════════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  display: flex; flex-direction: column;
+  gap: 8px; z-index: var(--z-modal);
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-radius: var(--r-md);
+  background: var(--surface3);
+  border: 1px solid var(--barrier);
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-display);
+  font-size: 13px; font-weight: 600;
+  min-width: 200px;
+  animation: slide-up 0.25s var(--spring) both;
+  pointer-events: auto;
+}
+.toast.exiting {
+  animation: slide-up-out 0.2s var(--ease-in) both;
+}
+.toast-success { border-color: var(--teal-border); color: var(--teal); }
+.toast-error   { border-color: var(--crimson-border); color: var(--crimson); }
+.toast-info    { border-color: var(--purple-border); color: var(--purple); }
+
+/* ══════════════════════════════════════════════════════════
+   SIGN HISTORY CHIP
+══════════════════════════════════════════════════════════ */
+.sign-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: var(--r-pill);
+  background: var(--surface3);
+  border: 1px solid var(--purple-border);
+  color: var(--purple);
+  font-family: var(--font-display);
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  animation: chip-in 0.3s var(--spring) both;
+}

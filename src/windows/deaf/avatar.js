@@ -1,70 +1,69 @@
 // AMANDLA Avatar — Deaf window only
-// v3.0: Mixamo GLB + TransitionEngine — SLERP quaternions, coarticulation,
-//       blendshape NMMs, lifelike idle, signing space, forearm twist fix.
-//
-// Pipeline:
-//   signs_library.js → TransitionEngine → pose object
-//   pose object      → AvatarDriver (BONE_MAP + remap) → Mixamo bones
-//   Three.js render loop → screen
-//
-// Requirement sources:
-//   SignON D5.2 | VLibras WebMedia 2025 | de Villiers Stellenbosch 2014
-//   van Zijl ASSETS 2006 | Czech SL MoCap LREC 2020 | Sign-Kit ISL Toolkit
+// v2.1: R1 — GLB human avatar primary, procedural skeleton fallback
+// TransitionEngine — SLERP quaternions, coarticulation, joint limits
+// State machine: TRANSITIONING → HOLDING → GAP → IDLE
 
 (function () {
-  'use strict';
+  'use strict'
 
-  // ── CONSTANTS (Czech MoCap: 0.38s continuous signing pace) ─────────
-  const SIGN_HOLD    = 0.32   // was 0.38 — matches conversational signing
-  const SIGN_FS_HOLD = 0.19   // was 0.22 — fingerspell ~5 chars/sec
-  const SIGN_GAP     = 0.10   // was 0.18 — tighter coarticulation gap
+  // ── CONSTANTS ─────────────────────────────────────────────
+  // Timing calibrated to fluent SASL conversational pace (Czech MoCap, LREC 2020:
+  // avg sign duration 0.38s continuous signing; VLibras 2025: tighter gaps = more natural)
+  const SIGN_HOLD    = 0.32   // seconds to hold a sign at full pose (was 0.38 — dictionary pace)
+  const SIGN_FS_HOLD = 0.19   // hold for fingerspelling (~5 chars/sec readable pace)
+  const SIGN_GAP     = 0.10   // pause after last sign before returning to idle (tighter coarticulation)
 
-  // ── STATE ───────────────────────────────────────────────────────────
+  // ── STATE ─────────────────────────────────────────────────
   let scene, camera, renderer, animFrameId
-  let avatarBones   = {}
-  let signQueue     = []
-  let currentSign   = null
-  let finalPose     = null
-  let idleSign      = null
-  let animState     = 'idle'  // 'idle' | 'transitioning' | 'holding' | 'gap'
-  let holdTimer     = 0
-  let gapTimer      = 0
-  let oscTime       = 0
+  let avatarBones = {}    // { R, L, head, torso }
+  let signQueue   = []
+  let currentSign = null
+  let finalPose   = null  // last pose from TransitionEngine, applied during HOLDING
+  let idleSign    = null  // idle pose as v2-compatible sign (has _Rq, _Lq)
+  let animState   = 'idle' // 'idle' | 'transitioning' | 'holding' | 'gap'
+  let holdTimer   = 0
+  let gapTimer    = 0
+  let oscTime     = 0
   let lastFrameTime = performance.now()
-  let initialized   = false
-  let usingGLTFAvatar = false  // true once GLB loaded successfully
+  let initialized = false
 
-  let targetHeadZ   = 0
-  let targetHeadX   = 0
+  // R1: GLB avatar mode — true when human GLB model loaded successfully
+  // When true, pose application uses AvatarDriver for Mixamo axis remapping
+  let useGLBRig = false
+  // References to the procedural skeleton meshes (built only as fallback)
+  let proceduralGroup = null
 
-  // ── NMM STATE ──────────────────────────────────────────────────────
-  let nmmActive          = []
-  let nmmDuration        = 0
-  let nmmElapsed         = 0
-  let nmmOscTime         = 0
-  let nmBrowLiftTarget   = 0
-  let nmBrowFurrowTarget = 0
+  // UX-2: Sign progress tracking
+  let signProgressCallback = null
+  let totalSignCount = 0
+  let currentSignIndex = 0
+
+  let targetHeadZ = 0
+  let targetHeadX = 0
+
+  // ── NMM STATE — Non-Manual Markers (SASL grammar: obligatory, not decorative) ──
+  // Sources: de Villiers PhD Stellenbosch 2014, van Zijl ASSETS 2006
+  let nmBrowLiftTarget   = 0   // raised brows (yes/no question, topic, conditional)
   let nmBrowLiftCur      = 0
+  let nmBrowFurrowTarget = 0   // furrowed brows (wh-question, rhetorical)
   let nmBrowFurrowCur    = 0
-  let nmMouthOpenTarget  = 0
+  let nmMouthOpenTarget  = 0   // mouth open (exclamation, emphasis)
   let nmMouthOpenCur     = 0
-  let nmHeadShake        = false
-  let nmHeadNod          = false
+  let nmHeadShake        = false  // negation — head shake
+  let nmHeadNod          = false  // affirmation — head nod
+  let nmShakePhase       = 0     // oscillation phase for shake/nod
 
-  // ── MOTION STATE ───────────────────────────────────────────────────
-  let holdTotal    = 0.32
-  let holdStartOsc = 0
+  // ── LIFELIKE IDLE STATE ────────────────────────────────────
+  // Sources: SignON D5.2 (avatar quality), VLibras 2025 (realism)
+  let eyeBlinkTimer    = 3.5   // seconds until next blink
+  let eyeBlinkPhase    = 0     // 0=open, 1=closing, 2=opening
+  let eyeBlinkDuration = 0     // remaining time in current blink phase
+  let eyeGazeTimer     = 0     // seconds until next saccade
+  let eyeGazeTargetX   = 0     // horizontal micro-gaze offset
+  let eyeGazeTargetY   = 0     // vertical micro-gaze offset
 
-  // ── LIFELIKE IDLE STATE ────────────────────────────────────────────
-  let eyeGazeTimer    = 2.0
-  let eyeGazeTargetX  = 0
-  let eyeGazeTargetY  = 0
-  let eyeBlinkTimer   = 3.5
-  let eyeBlinkPhase   = 0   // 0=open, 1=closing, 2=opening
-  let _idleRetries    = 0
-
-  // ── INIT ────────────────────────────────────────────────────────────
-  function initAvatar (containerId) {
+  // ── INIT ──────────────────────────────────────────────────
+  function initAvatar(containerId) {
     containerId = containerId || 'avatar-canvas'
     const container = document.getElementById(containerId)
     if (!container) { console.error('[Avatar] container not found:', containerId); return }
@@ -77,21 +76,16 @@
     const H = container.clientHeight || 500
 
     scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x050810)
-    scene.fog = new THREE.FogExp2(0x050810, 0.18)
+    scene.background = new THREE.Color(0x0d0d0d)
 
     camera = new THREE.PerspectiveCamera(46, W / H, 0.1, 100)
     camera.position.set(0, 0.85, 4.0)
     camera.lookAt(0, 0.35, 0)
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+    renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(W, H, false)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.shadowMap.enabled    = true
-    renderer.shadowMap.type       = THREE.PCFSoftShadowMap
-    renderer.outputEncoding       = THREE.sRGBEncoding
-    renderer.toneMapping          = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure  = 1.1
+    renderer.shadowMap.enabled = true
     const canvas = renderer.domElement
     canvas.style.display = 'block'
     canvas.style.width   = '100%'
@@ -107,30 +101,29 @@
       }
     })
 
-    // ── Lighting ─────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0x8090C8, 0.40))
+    // ── Lighting ──────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55))
 
-    const key = new THREE.DirectionalLight(0xFFF5E8, 1.3)
+    const key = new THREE.DirectionalLight(0xfff5e8, 1.1)
     key.position.set(1.5, 3.5, 2.5)
     key.castShadow = true
-    key.shadow.mapSize.width  = 1024
-    key.shadow.mapSize.height = 1024
-    key.shadow.camera.near    = 0.5
-    key.shadow.camera.far     = 20
-    key.shadow.radius         = 3
     scene.add(key)
 
-    const fill = new THREE.DirectionalLight(0xB06EF3, 0.55)
-    fill.position.set(-2.5, 0.8, 1.5)
+    const fill = new THREE.DirectionalLight(0x8B6FD4, 0.45)
+    fill.position.set(-2, 0.5, -1)
     scene.add(fill)
 
-    const rim = new THREE.DirectionalLight(0x00D4A3, 0.45)
-    rim.position.set(0, -0.5, -3)
+    const rim = new THREE.DirectionalLight(0x2EA880, 0.30)
+    rim.position.set(0, -1, -3)
     scene.add(rim)
 
-    const under = new THREE.DirectionalLight(0xF0B429, 0.18)
-    under.position.set(0, -3, 1)
-    scene.add(under)
+    buildAvatarSkeleton()
+    // R1: GLB human avatar is the primary renderer — procedural skeleton is fallback only.
+    // loadHumanAvatar() will hide the procedural skeleton on GLB success,
+    // or keep it visible if the GLB fails to load.
+    loadHumanAvatar(container)
+    buildIdleSign()
+    animate()
 
     window.addEventListener('resize', function () {
       const W2 = container.clientWidth, H2 = container.clientHeight
@@ -139,146 +132,16 @@
       renderer.setSize(W2, H2, false)
     })
 
-    // Load GLB; fallback to procedural skeleton on error
-    loadHumanAvatar(container)
-
-    console.log('[Avatar] v3 initialized — deaf window')
+    console.log('[Avatar] v2 initialized — deaf window')
   }
 
-  // ── LOAD HUMAN AVATAR (GLTFLoader) ──────────────────────────────────
-  // Req 1 (SignON D5.2): Replace procedural skeleton with GLTF human avatar.
-  // Req 11 (SignON D5.2): Mobile URL support.
-  function loadHumanAvatar (container) {
-    if (typeof THREE.GLTFLoader === 'undefined') {
-      console.warn('[Avatar] THREE.GLTFLoader not available — falling back to procedural skeleton.')
-      buildAvatarSkeleton()
-      buildIdleSign()
-      animate()
-      return
-    }
-
-    // Mobile optimization (SignON D5.2 §4.2)
-    const isMobile = /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent)
-    const cfg      = window.AMANDLA_CONFIG || {}
-    const avatarUrl = isMobile
-      ? (cfg.avatarUrlMobile || 'assets/models/avatar_mobile.glb')
-      : (cfg.avatarUrl       || 'assets/models/avatar.glb')
-
-    // Show skeleton loading state
-    if (container) container.classList.add('skeleton')
-
-    const loader = new THREE.GLTFLoader()
-    loader.load(
-      avatarUrl,
-
-      // onLoad
-      function (gltf) {
-        const model = gltf.scene
-
-        // ── Scale and centre model ──────────────────────────────
-        model.position.set(0, -1.2, 0)
-
-        // ── Traverse: shadows + skin tone ─────────────────────
-        model.traverse(function (node) {
-          if (!node.isMesh) return
-          node.castShadow    = true
-          node.receiveShadow = true
-
-          const mat = node.material
-          if (!mat) return
-          const n = (mat.name || '').toLowerCase()
-          if (n.includes('skin') || n.includes('body') || n.includes('head')) {
-            mat.roughness = 0.72
-            mat.metalness = 0.0
-            // Warm South African medium-brown skin tone (preserved from v2 for cultural accuracy)
-            mat.color = new THREE.Color(0xA8734A)
-          }
-        })
-
-        scene.add(model)
-
-        // ── Bind bones via AvatarDriver ─────────────────────────
-        if (window.AvatarDriver) {
-          window.AvatarDriver.bindBonesFromGLTF(model, avatarBones)
-        } else {
-          _bindBonesFallback(model)
-        }
-
-        usingGLTFAvatar = true
-        if (container) container.classList.remove('skeleton')
-
-        buildIdleSign()
-        animate()
-        console.log('[Avatar] GLB loaded:', avatarUrl)
-      },
-
-      // onProgress
-      function (xhr) {
-        if (xhr.total > 0) {
-          const pct = Math.round(xhr.loaded / xhr.total * 100)
-          console.log('[Avatar] loading…', pct + '%')
-        }
-      },
-
-      // onError
-      function (err) {
-        console.warn('[Avatar] Failed to load GLB model. Falling back to procedural skeleton.', err)
-        if (container) container.classList.remove('skeleton')
-        buildAvatarSkeleton()
-        buildIdleSign()
-        animate()
-      }
-    )
-  }
-
-  // Inline bone binding in case AvatarDriver script didn't load
-  function _bindBonesFallback (model) {
-    const get = function (name) { return model.getObjectByName(name) || null }
-    avatarBones.head  = get('mixamorigHead')
-    avatarBones.torso = get('mixamorigSpine1')
-
-    const sides = ['R', 'L']
-    const names = {
-      R: { sh:'mixamorigRightArm', el:'mixamorigRightForeArm', wr:'mixamorigRightHand' },
-      L: { sh:'mixamorigLeftArm',  el:'mixamorigLeftForeArm',  wr:'mixamorigLeftHand'  },
-    }
-    sides.forEach(function (side) {
-      const n = names[side]
-      avatarBones[side] = {
-        shoulder: get(n.sh), elbow: get(n.el), wrist: get(n.wr),
-        fingers: _mapFingersFallback(model, side), _twistBone: null,
-      }
-    })
-
-    let faceMorphMesh = null
-    model.traverse(function (node) {
-      if (!faceMorphMesh && node.isMesh && node.morphTargetDictionary) {
-        faceMorphMesh = node
-      }
-    })
-    avatarBones.faceMorphMesh = faceMorphMesh
-    avatarBones.face = { browL: null, browR: null, mouth: null }
-  }
-
-  function _mapFingersFallback (model, side) {
-    const S     = side === 'R' ? 'Right' : 'Left'
-    const names = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']
-    return names.map(function (f) {
-      const segs = [1, 2, 3].map(function (i) {
-        const bone = model.getObjectByName('mixamorig' + S + 'Hand' + f + i)
-        return { pivot: bone || { rotation: { x: 0, y: 0, z: 0 } } }
-      })
-      return { segments: segs }
-    })
-  }
-
-  // ── IDLE SIGN — v2-compatible pose object ───────────────────────────
-  // Req 9: Infinite retry guard
-  function buildIdleSign () {
+  // ── IDLE SIGN — v2-compatible pose object ─────────────────
+  let _idleRetries = 0
+  function buildIdleSign() {
     const lib = window.AMANDLA_SIGNS
     if (!lib || !lib.armToQuat) {
       if (++_idleRetries > 80) {
-        console.error('[Avatar] AMANDLA_SIGNS never loaded after 8s. Check script order.')
+        console.error('[Avatar] AMANDLA_SIGNS library never loaded after 8s — check script order in index.html')
         return
       }
       setTimeout(buildIdleSign, 100)
@@ -293,29 +156,34 @@
       L: { sh:idleL.sh, el:idleL.el, wr:idleL.wr, hand:lib.HS.rest },
       _Rq: { end: lib.armToQuat(idleR), start: lib.armToQuat(idleR) },
       _Lq: { end: lib.armToQuat(idleL), start: lib.armToQuat(idleL) },
-      osc: null, isFingerspell: false,
+      osc: null,
+      isFingerspell: false,
     }
+    // Apply initial idle pose to bones
     applyPoseDirect({
       R: { sh:idleR.sh, el:idleR.el, wr:idleR.wr, hand:lib.HS.rest },
       L: { sh:idleL.sh, el:idleL.el, wr:idleL.wr, hand:lib.HS.rest },
     })
   }
 
-  // ── PROCEDURAL SKELETON (fallback) ──────────────────────────────────
-  // Kept intact per Req 1 — used when GLB is unavailable.
-  function buildAvatarSkeleton () {
+  // ── SKELETON BUILD (FALLBACK) ────────────────────────────
+  // Procedural cylinder/sphere skeleton — used when GLB model fails to load.
+  // Built immediately for instant visual feedback; hidden if GLB loads successfully.
+  function buildAvatarSkeleton() {
     const mat = {
-      skin:   new THREE.MeshStandardMaterial({ color: 0xA8734A, roughness: 0.72, metalness: 0.0 }),
-      shirt:  new THREE.MeshStandardMaterial({ color: 0x0B0E1A, roughness: 0.88, metalness: 0.06 }),
-      teal:   new THREE.MeshStandardMaterial({ color: 0x00D4A3, roughness: 0.28, metalness: 0.18,
-                emissive: new THREE.Color(0x00D4A3), emissiveIntensity: 0.14 }),
-      purple: new THREE.MeshStandardMaterial({ color: 0xB06EF3, roughness: 0.28, metalness: 0.18,
-                emissive: new THREE.Color(0xB06EF3), emissiveIntensity: 0.14 }),
+      skin:   new THREE.MeshPhongMaterial({ color: 0xC8A07A, shininess: 20 }),
+      shirt:  new THREE.MeshPhongMaterial({ color: 0x1A1A2E, shininess: 10 }),
+      teal:   new THREE.MeshPhongMaterial({ color: 0x2EA880, shininess: 30 }),
+      purple: new THREE.MeshPhongMaterial({ color: 0x8B6FD4, shininess: 30 }),
     }
+
+    // R1: Wrap procedural skeleton in a group so we can hide it if GLB loads
+    proceduralGroup = new THREE.Group()
+    scene.add(proceduralGroup)
 
     const torsoGroup = new THREE.Group()
     torsoGroup.position.set(0, -0.1, 0)
-    scene.add(torsoGroup)
+    proceduralGroup.add(torsoGroup)
 
     const torsoMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.26, 1.05, 12), mat.shirt)
     torsoGroup.add(torsoMesh)
@@ -334,7 +202,7 @@
     avatarBones.head = headGroup
 
     const eyeGeo = new THREE.SphereGeometry(0.028, 8, 8)
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x0A0A14, roughness: 0.15, metalness: 0.6 })
+    const eyeMat = new THREE.MeshPhongMaterial({ color: 0x111111 })
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat)
     eyeL.position.set(-0.085, 0.04, 0.18)
     headGroup.add(eyeL)
@@ -342,34 +210,137 @@
     eyeR.position.set( 0.085, 0.04, 0.18)
     headGroup.add(eyeR)
 
-    const browGeo = new THREE.BoxGeometry(0.082, 0.013, 0.013)
-    const browMat = new THREE.MeshStandardMaterial({ color: 0x2A1A0E, roughness: 0.9, metalness: 0.0 })
-
-    const browLGroup = new THREE.Group()
-    browLGroup.position.set(-0.075, 0.092, 0.170)
-    headGroup.add(browLGroup)
-    browLGroup.add(new THREE.Mesh(browGeo, browMat))
-
-    const browRGroup = new THREE.Group()
-    browRGroup.position.set(0.075, 0.092, 0.170)
-    headGroup.add(browRGroup)
-    browRGroup.add(new THREE.Mesh(browGeo, browMat))
-
-    const mouthGeo = new THREE.BoxGeometry(0.090, 0.018, 0.011)
-    const mouthMat = new THREE.MeshStandardMaterial({ color: 0x8B3A3A, roughness: 0.65, metalness: 0.0 })
-    const mouthGroup = new THREE.Group()
-    mouthGroup.position.set(0, -0.065, 0.183)
-    headGroup.add(mouthGroup)
-    mouthGroup.add(new THREE.Mesh(mouthGeo, mouthMat))
-
-    avatarBones.face = { browL: browLGroup, browR: browRGroup, mouth: mouthGroup }
-    avatarBones.faceMorphMesh = null
-
     avatarBones.R = buildArm('R', -0.34, mat, torsoGroup)
     avatarBones.L = buildArm('L',  0.34, mat, torsoGroup)
   }
 
-  function buildArm (side, torsoX, mat, parent) {
+  // ── R1: GLB HUMAN AVATAR LOADER ─────────────────────────────
+  // Primary renderer path — loads a Mixamo-rigged GLB human avatar.
+  // On success: hides procedural skeleton, uses GLB rig for all pose application.
+  // On failure: keeps the procedural skeleton (graceful fallback).
+  //
+  // Sources: SignON D5.2 (bone mapping layer), VLibras 2025 (human avatar = 62% higher
+  //          acceptance vs primitives), de Villiers PhD 2014 (5 sign parameters need
+  //          human proportions for spatial accuracy).
+  //
+  // GLB SOURCING GUIDE — SASL AVATAR
+  // ─────────────────────────────────
+  // Option 1 (RECOMMENDED — Free, 5 minutes):
+  //   1. Go to https://readyplayer.me
+  //   2. Create avatar, choose warm brown skin tone for SASL cultural accuracy
+  //   3. Export URL: https://models.readyplayer.me/[ID].glb?morphTargets=ARKit&lod=0
+  //   4. This gives you: full finger rig + 52 ARKit blendshapes for NMMs
+  //   5. Bone names: mixamorigHead, mixamorigRightArm, etc. (Mixamo standard)
+  //
+  // Option 2 (Mixamo.com — Free with Adobe account):
+  //   Upload any character mesh → auto-rig → download FBX → convert to GLB via Blender
+  //
+  // Option 3 (Character Creator 4 → Blender → Mixamo pipeline):
+  //   Per SignON D5.2: CC4 → export FBX → Blender → Mixamo (auto-rig) → GLB
+  //   Highest quality but takes ~15 minutes per avatar.
+  function loadHumanAvatar(container) {
+    // Show loading indicator while GLB downloads (33+ MB file)
+    if (container) container.classList.add('avatar-loading')
+
+    // Configurable avatar URL via window.AMANDLA_CONFIG (allows runtime avatar swap)
+    var glbUrl = (window.AMANDLA_CONFIG && window.AMANDLA_CONFIG.avatarUrl)
+      || '../../../assets/models/avatar.glb'
+
+    // Guard: GLTFLoader and AvatarDriver must both be available
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      console.log('[Avatar] GLTFLoader not available — using procedural skeleton')
+      if (container) container.classList.remove('avatar-loading')
+      return
+    }
+    if (typeof window.AvatarDriver === 'undefined') {
+      console.log('[Avatar] AvatarDriver not available — using procedural skeleton')
+      if (container) container.classList.remove('avatar-loading')
+      return
+    }
+
+    var loader = new THREE.GLTFLoader()
+
+    loader.load(
+      glbUrl,
+      function onGLBLoaded(gltf) {
+        console.log('[Avatar] GLB model loaded — binding rig to AMANDLA engine')
+        var model = gltf.scene
+
+        // Position and scale to match scene framing
+        model.scale.set(1.0, 1.0, 1.0)
+        model.position.set(0, -0.9, 0)
+
+        // Enable shadows + apply warm South African skin tone (0xA8734A)
+        // Per research: culturally appropriate representation matters for SASL users
+        model.traverse(function (node) {
+          if (!node.isMesh) return
+          node.castShadow = true
+          node.receiveShadow = true
+          // Apply skin material properties if no baked texture map exists
+          if (node.material) {
+            var matName = (node.material.name || node.name || '').toLowerCase()
+            var isSkin = matName.includes('skin') || matName.includes('body')
+              || matName.includes('head') || matName.includes('face')
+            if (isSkin) {
+              node.material.roughness = 0.72
+              node.material.metalness = 0.0
+              // Only override colour if the material has no baked texture
+              if (!node.material.map) {
+                node.material.color = new THREE.Color(0xA8734A)
+              }
+            }
+          }
+        })
+
+        // Save procedural bone references in case GLB rig binding fails
+        var savedBones = {
+          R: avatarBones.R,
+          L: avatarBones.L,
+          head: avatarBones.head,
+          torso: avatarBones.torso,
+        }
+
+        // Bind GLB bones → avatarBones dict via AvatarDriver
+        window.AvatarDriver.bindBonesFromGLTF(model, avatarBones)
+
+        // Verify at least the shoulder bones were found — rig must be usable
+        if (!avatarBones.R || !avatarBones.R.shoulder) {
+          console.warn('[Avatar] GLB rig binding incomplete — keeping procedural skeleton')
+          avatarBones.R = savedBones.R
+          avatarBones.L = savedBones.L
+          avatarBones.head = savedBones.head
+          avatarBones.torso = savedBones.torso
+          if (container) container.classList.remove('avatar-loading')
+          return
+        }
+
+        // Success: add GLB to scene and hide procedural skeleton
+        scene.add(model)
+        if (proceduralGroup) {
+          proceduralGroup.visible = false
+        }
+        useGLBRig = true
+        if (container) container.classList.remove('avatar-loading')
+        console.log('[Avatar] R1: GLB human avatar active — AMANDLA engine driving Mixamo rig')
+
+        // Re-apply idle pose to the newly bound GLB bones
+        buildIdleSign()
+      },
+      function onGLBProgress(progress) {
+        // Loading progress — log percentage for debugging large models
+        if (progress.total > 0) {
+          var pct = Math.round((progress.loaded / progress.total) * 100)
+          if (pct % 25 === 0) console.log('[Avatar] GLB loading: ' + pct + '%')
+        }
+      },
+      function onGLBError(error) {
+        console.warn('[Avatar] GLB load failed — keeping procedural skeleton:', error.message || error)
+        if (container) container.classList.remove('avatar-loading')
+      }
+    )
+  }
+
+  function buildArm(side, torsoX, mat, parent) {
     const isRight   = side === 'R'
     const fingerMat = isRight ? mat.teal : mat.purple
 
@@ -378,7 +349,8 @@
     parent.add(shoulder)
 
     const upperArm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.068, 0.062, 0.36, 10), mat.skin)
+      new THREE.CylinderGeometry(0.068, 0.062, 0.36, 10), mat.skin
+    )
     upperArm.position.set(0, -0.18, 0)
     shoulder.add(upperArm)
 
@@ -387,7 +359,8 @@
     shoulder.add(elbow)
 
     const forearm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.053, 0.048, 0.32, 10), mat.skin)
+      new THREE.CylinderGeometry(0.053, 0.048, 0.32, 10), mat.skin
+    )
     forearm.position.set(0, -0.16, 0)
     elbow.add(forearm)
 
@@ -396,7 +369,8 @@
     elbow.add(wrist)
 
     const palm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.11, 0.15, 0.045), mat.skin)
+      new THREE.BoxGeometry(0.11, 0.15, 0.045), mat.skin
+    )
     palm.position.set(0, -0.10, 0)
     wrist.add(palm)
 
@@ -405,7 +379,7 @@
     return { shoulder, elbow, wrist, fingers }
   }
 
-  function buildFingers (wristGroup, mat, isRight) {
+  function buildFingers(wristGroup, mat, isRight) {
     const fingers = []
     const xOff = isRight
       ? [-0.062, -0.030, 0.001, 0.032, 0.062]
@@ -413,7 +387,7 @@
     const segLengths = [0.036, 0.030, 0.026]
 
     for (let f = 0; f < 5; f++) {
-      const isThumb    = f === 0
+      const isThumb = f === 0
       const fingerGroup = new THREE.Group()
       fingerGroup.position.set(xOff[f], -0.20, 0)
       wristGroup.add(fingerGroup)
@@ -428,7 +402,9 @@
         else segments[s - 1].pivot.add(pivot)
 
         const mesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.013 - s * 0.002, 0.015 - s * 0.002, segLen, 7), mat)
+          new THREE.CylinderGeometry(0.013 - s * 0.002, 0.015 - s * 0.002, segLen, 7),
+          mat
+        )
         mesh.position.set(0, -segLen / 2, 0)
         pivot.add(mesh)
         segments.push({ pivot, length: segLen })
@@ -439,32 +415,28 @@
     return fingers
   }
 
-  // ── POSE APPLICATION ────────────────────────────────────────────────
-  // Req 2: remapPoseForMixamo applied when using GLB.
-  function applyPoseDirect (pose) {
+  // ── POSE APPLICATION ──────────────────────────────────────
+  // Direct-set from TransitionEngine output — no lerp, engine handles blending
+  // R1: When GLB rig is active, uses AvatarDriver for Mixamo axis remapping
+  function applyPoseDirect(pose) {
     if (!pose || !avatarBones.R) return
 
-    if (usingGLTFAvatar) {
-      // Delegate axis remapping to AvatarDriver (or inline fallback)
-      if (window.AvatarDriver) {
-        window.AvatarDriver.remapPoseForMixamo(pose, avatarBones)
-      } else {
-        _remapPoseInline(pose)
-      }
-      // Handshapes — Mixamo fingers curl on .z
-      for (const side of ['R', 'L']) {
-        const data = pose[side]
-        const arm  = avatarBones[side]
+    if (useGLBRig && window.AvatarDriver) {
+      // GLB mode: use AvatarDriver for proper Mixamo bone axis mapping
+      window.AvatarDriver.remapPoseForMixamo(pose, avatarBones)
+      // Apply handshapes using GLB finger axis (.z instead of .x)
+      for (var s = 0; s < 2; s++) {
+        var side = s === 0 ? 'R' : 'L'
+        var data = pose[side]
+        var arm  = avatarBones[side]
         if (data && data.hand && arm && arm.fingers) {
-          if (window.AvatarDriver) {
-            window.AvatarDriver.applyHandshapeGLTF(arm.fingers, data.hand)
-          } else {
-            applyHandshapeDirect(arm.fingers, data.hand)
-          }
+          window.AvatarDriver.applyHandshapeGLTF(arm.fingers, data.hand)
         }
       }
+      // Distribute wrist twist to prevent candy-wrapper deformation
+      window.AvatarDriver.updateTwistBones(scene, avatarBones)
     } else {
-      // Procedural rig — direct Euler set
+      // Procedural mode: direct Euler rotation set
       for (const side of ['R', 'L']) {
         const arm  = avatarBones[side]
         const data = pose[side]
@@ -477,37 +449,22 @@
     }
   }
 
-  // Inline remap (used if avatar_driver.js didn't load)
-  function _remapPoseInline (pose) {
-    for (const side of ['R', 'L']) {
-      const src = pose[side]
-      const arm = avatarBones[side]
-      if (!src || !arm) continue
-      const sign = side === 'R' ? 1 : -1
-      if (src.sh && arm.shoulder) arm.shoulder.rotation.set(src.sh.x||0, src.sh.y||0, src.sh.z||0)
-      if (src.el && arm.elbow)    arm.elbow.rotation.set(0, (src.el.x||0)*sign, src.el.z||0)
-      if (src.wr && arm.wrist)    arm.wrist.rotation.set(src.wr.x||0, src.wr.y||0, src.wr.z||0)
-    }
-  }
-
-  // Req 2: finger curl — procedural rig uses .x, Mixamo uses .z
-  function applyHandshapeDirect (fingers, hs) {
+  function applyHandshapeDirect(fingers, hs) {
     if (!hs) return
     const keys = ['t', 'i', 'm', 'r', 'p']
-    const axis = usingGLTFAvatar ? 'z' : 'x'
     for (let f = 0; f < 5; f++) {
       const segs = hs[keys[f]]
       if (!segs || !fingers[f]) continue
       for (let s = 0; s < 3 && s < segs.length; s++) {
         const seg = fingers[f].segments[s]
         if (!seg) continue
-        seg.pivot.rotation[axis] = segs[s] || 0
+        seg.pivot.rotation.x = segs[s] || 0
       }
     }
   }
 
-  // ── OSCILLATION ──────────────────────────────────────────────────────
-  function applyOscillation (signObj, time) {
+  // ── OSCILLATION ───────────────────────────────────────────
+  function applyOscillation(signObj, time) {
     if (!signObj || !signObj.osc) return
     const { j, ax, amp, freq } = signObj.osc
     const val = Math.sin(time * freq * Math.PI * 2) * amp
@@ -528,367 +485,213 @@
     }
   }
 
-  // ── MOTION (arc / tap / circle) ──────────────────────────────────────
-  function applyMotion (signObj, holdProgress) {
-    if (!signObj || !signObj.motion) return
-    const { type, joint, axis, amp, freq } = signObj.motion
-    const f = freq || 1.0
-    let val = 0
-
-    if (type === 'tap' || type === 'arc') {
-      val = Math.sin(holdProgress * Math.PI) * amp
-    } else if (type === 'circle') {
-      const angle = holdProgress * f * Math.PI * 2
-      val = Math.sin(angle) * amp
-      const perpAxis = (axis === 'x') ? 'z' : 'x'
-      _addJointDelta(joint, perpAxis, Math.cos(angle) * amp * 0.55)
-    }
-    _addJointDelta(joint, axis, val)
+  function lerpVal(cur, target, t) {
+    return cur + (target - cur) * Math.min(t * 1.6, 1.0)
   }
 
-  function _addJointDelta (joint, axis, val) {
-    if      (joint === 'R_sh'   && avatarBones.R) avatarBones.R.shoulder.rotation[axis] += val
-    else if (joint === 'L_sh'   && avatarBones.L) avatarBones.L.shoulder.rotation[axis] += val
-    else if (joint === 'R_el'   && avatarBones.R) avatarBones.R.elbow.rotation[axis]    += val
-    else if (joint === 'L_el'   && avatarBones.L) avatarBones.L.elbow.rotation[axis]    += val
-    else if (joint === 'R_wr'   && avatarBones.R) avatarBones.R.wrist.rotation[axis]    += val
-    else if (joint === 'L_wr'   && avatarBones.L) avatarBones.L.wrist.rotation[axis]    += val
-    else if (joint === 'both_sh') {
-      if (avatarBones.R) avatarBones.R.shoulder.rotation[axis] += val
-      if (avatarBones.L) avatarBones.L.shoulder.rotation[axis] += val
-    } else if (joint === 'both_el') {
-      if (avatarBones.R) avatarBones.R.elbow.rotation[axis] += val
-      if (avatarBones.L) avatarBones.L.elbow.rotation[axis] += val
-    } else if (joint === 'both_wr') {
-      if (avatarBones.R) avatarBones.R.wrist.rotation[axis] += val
-      if (avatarBones.L) avatarBones.L.wrist.rotation[axis] += val
-    }
-  }
-
-  // ── NMM APPLICATION ──────────────────────────────────────────────────
-  // Req 3: blendshape-based NMMs when faceMorphMesh available.
-  function applyNMMs (dt) {
-    if (nmmActive.length > 0) {
-      nmmElapsed += dt
-      nmmOscTime += dt
-      if (nmmElapsed >= nmmDuration + 0.40) nmmActive = []
-    }
-
-    let env = 0
-    if (nmmActive.length > 0) {
-      const fadeIn  = Math.min(nmmElapsed / 0.20, 1.0)
-      const fadeOut = nmmDuration > 0
-        ? Math.max(0, 1.0 - Math.max(0, nmmElapsed - nmmDuration) / 0.30)
-        : 1.0
-      env = fadeIn * fadeOut
-    }
-
-    const lerp = Math.min(7.0 * dt, 1.0)
-    nmBrowLiftCur   += (nmBrowLiftTarget   * env - nmBrowLiftCur)   * lerp
-    nmBrowFurrowCur += (nmBrowFurrowTarget * env - nmBrowFurrowCur) * lerp
-    nmMouthOpenCur  += (nmMouthOpenTarget  * env - nmMouthOpenCur)  * lerp
-
-    // ── Procedural face bones (fallback) ─────────────────────────
-    const f = avatarBones.face
-    if (f) {
-      if (f.browL) {
-        f.browL.position.y = 0.092 + nmBrowLiftCur
-        f.browL.rotation.z = -nmBrowFurrowCur
-      }
-      if (f.browR) {
-        f.browR.position.y = 0.092 + nmBrowLiftCur
-        f.browR.rotation.z =  nmBrowFurrowCur
-      }
-      if (f.mouth) {
-        f.mouth.position.y = -0.065 + nmMouthOpenCur
-      }
-    }
-
-    // ── Blendshape NMMs (Req 3 — SignON D5.2 Annex II FACS AUs) ─────
-    const morph = avatarBones.faceMorphMesh
-    if (morph && morph.morphTargetInfluences && morph.morphTargetDictionary) {
-      const d = morph.morphTargetDictionary
-
-      function setMorph (names, value) {
-        for (let i = 0; i < names.length; i++) {
-          if (d[names[i]] !== undefined) {
-            morph.morphTargetInfluences[d[names[i]]] = Math.max(0, Math.min(1, value))
-            return
-          }
-        }
-      }
-
-      // AU1+AU2 (raised brows — yes/no question)
-      setMorph(['browInnerUp',   'Eyebrow_Arch_Left'],   nmBrowLiftCur * 12)
-      setMorph(['browOuterUpLeft','Eyebrow_Arch_Right'], nmBrowLiftCur * 12)
-      // AU4 (furrowed brows — wh-question)
-      setMorph(['browDownLeft',  'Eyebrow_Frown_Left'],  nmBrowFurrowCur * 5)
-      setMorph(['browDownRight', 'Eyebrow_Frown_Right'], nmBrowFurrowCur * 5)
-      // AU27 (jaw open — emphasis / puffed cheeks)
-      setMorph(['jawOpen',       'Mouth_Stretch'],       Math.abs(nmMouthOpenCur * 40))
-
-      // ── Automatic eye blinks (lifelike idle — AU45) ────────────
-      eyeBlinkTimer -= dt
-      if (eyeBlinkTimer <= 0 && eyeBlinkPhase === 0) {
-        eyeBlinkPhase = 1
-        eyeBlinkTimer = 0.06  // 60ms close
-      }
-      if (eyeBlinkPhase > 0) {
-        const bv = eyeBlinkPhase === 1
-          ? (1.0 - eyeBlinkTimer / 0.06)
-          : (eyeBlinkTimer / 0.06)
-        setMorph(['eyeBlinkLeft',  'Eye_Blink_Left'],  Math.min(1, Math.max(0, bv)))
-        setMorph(['eyeBlinkRight', 'Eye_Blink_Right'], Math.min(1, Math.max(0, bv)))
-        if (eyeBlinkTimer <= 0) {
-          if (eyeBlinkPhase === 1) { eyeBlinkPhase = 2; eyeBlinkTimer = 0.08 }
-          else                     { eyeBlinkPhase = 0; eyeBlinkTimer = 3.0 + Math.random() * 4.0 }
-        }
-      }
-    }
-
-    // Head shake — grammatical negation
-    if (nmHeadShake && env > 0.05 && avatarBones.head) {
-      avatarBones.head.rotation.y = Math.sin(nmmOscTime * 5.5 * Math.PI * 2) * 0.10 * env
-    }
-
-    // Head nod — affirmation
-    if (nmHeadNod && env > 0.05 && avatarBones.head) {
-      avatarBones.head.rotation.x = Math.sin(nmmOscTime * 3.0 * Math.PI * 2) * 0.07 * env + targetHeadX
-    }
-  }
-
-  // ── SET NMMs ─────────────────────────────────────────────────────────
-  // Req 4: full SASL grammar markers (van Zijl 2006, de Villiers 2014)
-  function setNMMs (nmms, durationSecs) {
-    if (!nmms || nmms.length === 0) return
-    nmmActive          = nmms
-    nmmDuration        = durationSecs || 1.5
-    nmmElapsed         = 0
-    nmmOscTime         = 0
+  // ── NMM CONTROL — set non-manual markers for current sign ──
+  // Called by the sign pipeline when a sign has NMM data.
+  // nmms: array of lowercase NMM descriptor strings (e.g. ['wh-question', 'head-shake'])
+  // duration: how long the NMMs should stay active (seconds)
+  // Sources: van Zijl ASSETS 2006 — NMMs are grammatically obligatory in SASL
+  //          de Villiers PhD 2014 — 5 sign parameters, NMMs = prosody analogue
+  function setNMMs(nmms, duration) {
+    // Reset all NMM targets before applying new ones
     nmBrowLiftTarget   = 0
     nmBrowFurrowTarget = 0
     nmMouthOpenTarget  = 0
     nmHeadShake        = false
     nmHeadNod          = false
 
-    for (let i = 0; i < nmms.length; i++) {
-      const n = nmms[i].toLowerCase()
+    if (!nmms || !Array.isArray(nmms)) return
 
-      // Yes/no question — raised eyebrows
-      if (n.includes('raised eyebrows') || n.includes('eyebrows up')) {
-        nmBrowLiftTarget = 0.026
+    for (let idx = 0; idx < nmms.length; idx++) {
+      var n = (nmms[idx] || '').toLowerCase()
+
+      // Yes/No question — raised eyebrows
+      if (n.includes('yn') || n.includes('yes-no') || n.includes('raised-brow')) {
+        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.020)
       }
       // Wh-question — furrowed brows
-      if (n.includes('furrowed') || n.includes('wh-question') || n.includes('wh question')) {
-        nmBrowFurrowTarget = 0.22
-        nmBrowLiftTarget   = -0.005
+      if (n.includes('wh') || n.includes('furrowed') || n.includes('squint')) {
+        nmBrowFurrowTarget = Math.max(nmBrowFurrowTarget, 0.14)
       }
-      // Negation
-      if (n.includes('head shake') || n.includes('negation') || n.includes('negative')) {
+      // Negation — head shake + brow furrow
+      if (n.includes('negat') || n.includes('head-shake') || n.includes('not') || n.includes('none') || n.includes('never')) {
         nmHeadShake = true
-      }
-      // Affirmation
-      if (n.includes('head nod') || n.includes('affirmation') || n.includes('nodding')) {
-        nmHeadNod = true
-      }
-      // Mouth shape
-      if (n.includes('mouth open') || n.includes('puffed') || n.includes('cha')) {
-        nmMouthOpenTarget = -0.010
-      }
-      // Head tilt forward
-      if (n.includes('head tilt forward') || n.includes('lean forward')) {
-        targetHeadX = Math.max(targetHeadX, 0.08)
-      }
-      // SASL: Topicalization (de Villiers 2014)
-      if (n.includes('topic') || n.includes('topicalization') || n.includes('about')) {
-        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.018)
-        targetHeadX      = Math.max(targetHeadX, 0.05)
-      }
-      // SASL: Rhetorical question
-      if (n.includes('rhetorical')) {
-        nmBrowFurrowTarget = 0.16
-      }
-      // SASL: Intensifier / emphasis (van Zijl 2006)
-      if (n.includes('intensifier') || n.includes('very') || n.includes('extreme') || n.includes('strong')) {
-        targetHeadX      = Math.max(targetHeadX, 0.09)
-        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.015)
-      }
-      // SASL: Conditional / if-clause
-      if (n.includes('conditional') || n.includes('if-clause')) {
-        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.022)
-      }
-      // SASL: Negative incorporation (van Zijl 2006 — NOT, NONE, NEVER, REFUSE)
-      if (n.includes('not') || n.includes('none') || n.includes('never') || n.includes('refuse')) {
-        nmHeadShake        = true
         nmBrowFurrowTarget = Math.max(nmBrowFurrowTarget, 0.12)
       }
-      // SASL: Surprise / exclamation
+      // Affirmation — head nod
+      if (n.includes('affirm') || n.includes('head-nod') || n.includes('yes')) {
+        nmHeadNod = true
+      }
+      // Topicalization — raised brows + slight head tilt forward
+      if (n.includes('topic') || n.includes('topicalization') || n.includes('about')) {
+        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.018)
+        targetHeadX = Math.max(targetHeadX, 0.05)
+      }
+      // Rhetorical question — furrowed brows without mouth open
+      if (n.includes('rhetorical')) {
+        nmBrowFurrowTarget = Math.max(nmBrowFurrowTarget, 0.16)
+      }
+      // Intensifier / emphasis — lean forward, bigger brow
+      if (n.includes('intensifier') || n.includes('very') || n.includes('strong') || n.includes('extreme')) {
+        targetHeadX = Math.max(targetHeadX, 0.09)
+        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.015)
+      }
+      // Conditional / if-clause — raised brows held
+      if (n.includes('conditional') || n.includes('if-clause') || n.includes('if')) {
+        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.022)
+      }
+      // Surprise / exclamation — raised brows + mouth open
       if (n.includes('surprise') || n.includes('exclamation') || n.includes('wow')) {
-        nmBrowLiftTarget  = Math.max(nmBrowLiftTarget, 0.030)
-        nmMouthOpenTarget = Math.min(nmMouthOpenTarget, -0.014)
+        nmBrowLiftTarget = Math.max(nmBrowLiftTarget, 0.030)
+        nmMouthOpenTarget = -0.014
+      }
+      // Mouth open
+      if (n.includes('mouth-open') || n.includes('open-mouth')) {
+        nmMouthOpenTarget = -0.014
       }
     }
   }
 
-  // ── SIGNING SPACE (Req 5 — van Zijl 2006 §3) ────────────────────────
-  // Establishes spatial loci for entities; generates pointing signs.
-  const SigningSpace = (function () {
-    const loci = {}
+  // ── APPLY NMMs — update brow/mouth/head each frame ────────
+  // Smoothly interpolates NMM state toward targets (box geometry + blendshapes).
+  function applyNMMs(dt) {
+    var smoothRate = 4.0 * dt
 
-    function establish (entity, xPos) {
-      loci[entity.toUpperCase()] = { x: xPos, y: 0, z: 0 }
-    }
+    // Lerp current NMM values toward targets
+    nmBrowLiftCur   += (nmBrowLiftTarget   - nmBrowLiftCur)   * smoothRate
+    nmBrowFurrowCur += (nmBrowFurrowTarget - nmBrowFurrowCur) * smoothRate
+    nmMouthOpenCur  += (nmMouthOpenTarget  - nmMouthOpenCur)  * smoothRate
 
-    function getPointingSign (entity) {
-      const loc = loci[entity.toUpperCase()]
-      if (!loc) return null
-      const lib  = window.AMANDLA_SIGNS
-      const shZ  = -(loc.x * 0.5)
-      const Rarm = { sh:{x:-0.35,y:0,z:shZ}, el:{x:0.6,y:0,z:0}, wr:{x:0,y:0,z:0} }
-      const Larm = { sh:{x:0.05,y:0,z:0.24}, el:{x:0.08,y:0,z:0}, wr:{x:0,y:0,z:0} }
-      return {
-        name: 'POINT-' + entity,
-        R: { ...Rarm, hand: lib && lib.HS ? lib.HS.point : null },
-        L: { ...Larm, hand: lib && lib.HS ? lib.HS.rest  : null },
-        _Rq: lib && lib.armToQuat ? { end: lib.armToQuat(Rarm), start: lib.armToQuat(Rarm) } : null,
-        _Lq: lib && lib.armToQuat ? { end: lib.armToQuat(Larm), start: lib.armToQuat(Larm) } : null,
-        isFingerspell: false, osc: null,
+    // ── Box-geometry fallback (procedural skeleton) ──────────
+    if (avatarBones.face) {
+      if (avatarBones.face.browL) {
+        avatarBones.face.browL.position.y = nmBrowLiftCur * 12 - nmBrowFurrowCur * 5
+      }
+      if (avatarBones.face.browR) {
+        avatarBones.face.browR.position.y = nmBrowLiftCur * 12 - nmBrowFurrowCur * 5
+      }
+      if (avatarBones.face.mouth) {
+        avatarBones.face.mouth.position.y = nmMouthOpenCur * 40
       }
     }
 
-    function clear () { Object.keys(loci).forEach(function (k) { delete loci[k] }) }
+    // ── Blendshape NMMs (GLB avatar with morph targets) ─────
+    if (avatarBones.faceMorphMesh && avatarBones.faceMorphMesh.morphTargetDictionary) {
+      var mesh = avatarBones.faceMorphMesh
+      var dict = mesh.morphTargetDictionary
 
-    return { establish, getPointingSign, clear }
-  })()
-
-  // ── SIGN-KIT CONVERTER (Req 6) ───────────────────────────────────────
-  // Converts Sign-Kit ISL Toolkit animation phases → AMANDLA v2 sign object.
-  function convertSignKitSign (name, phases, handshapeR, handshapeL) {
-    const lib    = window.AMANDLA_SIGNS
-    const phase  = (phases && phases.length > 1) ? phases[1] : (phases && phases[0]) || []
-
-    const R = { sh:{x:0,y:0,z:0}, el:{x:0,y:0,z:0}, wr:{x:0,y:0,z:0} }
-    const L = { sh:{x:0,y:0,z:0}, el:{x:0,y:0,z:0}, wr:{x:0,y:0,z:0} }
-
-    phase.forEach(function (entry) {
-      const [bone, , axis, value] = entry
-      if (bone === 'mixamorigRightArm') {
-        if (axis === 'x') R.sh.x = -value
-        if (axis === 'z') R.sh.z = -value
-      } else if (bone === 'mixamorigRightForeArm') {
-        if (axis === 'y') R.el.x = value
-        if (axis === 'z') R.el.z = value
-      } else if (bone === 'mixamorigLeftArm') {
-        if (axis === 'x') L.sh.x = -value
-        if (axis === 'z') L.sh.z = -value
-      } else if (bone === 'mixamorigLeftForeArm') {
-        if (axis === 'y') L.el.x = -value
-        if (axis === 'z') L.el.z = value
+      // Helper: try multiple blendshape names (ARKit → CC4 → generic)
+      function setMorph(names, value) {
+        var clamped = Math.max(0, Math.min(1, value))
+        for (var i = 0; i < names.length; i++) {
+          if (dict[names[i]] !== undefined) {
+            mesh.morphTargetInfluences[dict[names[i]]] = clamped
+            return
+          }
+        }
       }
-    })
 
-    const hsR = handshapeR || (lib && lib.HS ? lib.HS.flat : null)
-    const hsL = handshapeL || (lib && lib.HS ? lib.HS.flat : null)
+      // Brow lift (yes/no question, topic, conditional)
+      setMorph(['browInnerUp', 'Eyebrow_Arch_Left'],    nmBrowLiftCur * 12)
+      setMorph(['browOuterUpLeft', 'Eyebrow_Arch_Right'], nmBrowLiftCur * 12)
 
-    return {
-      name:          name,
-      R:             { sh:R.sh, el:R.el, wr:R.wr, hand:hsR },
-      L:             { sh:L.sh, el:L.el, wr:L.wr, hand:hsL },
-      _Rq:           lib && lib.armToQuat ? { end: lib.armToQuat(R), start: lib.armToQuat(R) } : null,
-      _Lq:           lib && lib.armToQuat ? { end: lib.armToQuat(L), start: lib.armToQuat(L) } : null,
-      osc:           null,
-      isFingerspell: false,
+      // Brow furrow (wh-question, rhetorical, negation)
+      setMorph(['browDownLeft',  'Eyebrow_Frown_Left'],  nmBrowFurrowCur * 5)
+      setMorph(['browDownRight', 'Eyebrow_Frown_Right'], nmBrowFurrowCur * 5)
+
+      // Mouth open (exclamation, emphasis)
+      setMorph(['jawOpen', 'Mouth_Stretch'], Math.abs(nmMouthOpenCur * 40))
+    }
+
+    // ── Head shake (negation) — sinusoidal Y rotation ────────
+    if (nmHeadShake && avatarBones.head) {
+      nmShakePhase += dt * 8.0
+      var shakeEnvelope = Math.min(nmShakePhase * 0.5, 1.0) // ramp up
+      avatarBones.head.rotation.y += Math.sin(nmShakePhase) * 0.12 * shakeEnvelope
+    }
+
+    // ── Head nod (affirmation) — sinusoidal X rotation ───────
+    if (nmHeadNod && avatarBones.head) {
+      nmShakePhase += dt * 6.0
+      var nodEnvelope = Math.min(nmShakePhase * 0.5, 1.0)
+      avatarBones.head.rotation.x += Math.sin(nmShakePhase) * 0.08 * nodEnvelope
+    }
+
+    // Reset shake phase when neither shake nor nod is active
+    if (!nmHeadShake && !nmHeadNod) {
+      nmShakePhase = 0
     }
   }
 
-  // Register Sign-Kit signs when AMANDLA_SIGNS ready
-  function registerConvertedSigns () {
-    const lib = window.AMANDLA_SIGNS
-    if (!lib || !lib.armToQuat) { setTimeout(registerConvertedSigns, 150); return }
-    if (!lib.SIGN_LIBRARY) return
-
-    // HOME sign (Sign-Kit ISL Toolkit — both arms raised, forearms rotated inward)
-    lib.SIGN_LIBRARY['HOME'] = convertSignKitSign('HOME', [
-      [
-        ['mixamorigRightArm',     'rotation', 'x', -Math.PI / 6],
-        ['mixamorigRightForeArm', 'rotation', 'y',  Math.PI / 2.5],
-        ['mixamorigRightForeArm', 'rotation', 'z',  Math.PI / 7],
-        ['mixamorigLeftArm',      'rotation', 'x', -Math.PI / 6],
-        ['mixamorigLeftForeArm',  'rotation', 'y', -Math.PI / 2.5],
-        ['mixamorigLeftForeArm',  'rotation', 'z', -Math.PI / 7],
-      ]
-    ], lib.HS.flat, lib.HS.flat)
-  }
-  registerConvertedSigns()
-
-  // ── LIFELIKE IDLE (Req 7 — SignON D5.2 §4.1, VLibras 2025) ─────────
-  function applyLifelikeIdle (dt) {
-    // 1. Chest breathing (ribcage expansion — physiologically correct)
-    if (avatarBones.torso) {
-      const breathIn = Math.sin(oscTime * 0.25 * Math.PI * 2)
+  // ── LIFELIKE IDLE — chest breathing, eye blink, eye saccades ──
+  // Sources: SignON D5.2 Section 4.1 (avatar quality realism),
+  //          VLibras 2025 (lack of fluidity = rejection reason),
+  //          Czech MoCap 2020 (physiological idle observation)
+  function applyLifelikeIdle(dt) {
+    // 1. Chest breathing via torso scale (physiologically correct — ribs expand on inhale)
+    if (avatarBones.torso && useGLBRig) {
+      var breathIn = Math.sin(oscTime * 0.25 * Math.PI * 2)
       avatarBones.torso.scale.set(
-        1.0 + breathIn * 0.015,
-        1.0 + breathIn * 0.005,
-        1.0 + breathIn * 0.020
+        1.0 + breathIn * 0.015,  // ribs expand sideways
+        1.0 + breathIn * 0.005,  // chest lifts slightly
+        1.0 + breathIn * 0.020   // chest pushes forward
       )
     }
 
-    // 2. Subtle arm breathing (halved from original — not a shrug)
-    if (avatarBones.R && avatarBones.L && animState === 'idle') {
-      const sway = Math.sin(oscTime * 0.40) * 0.008
-      avatarBones.R.shoulder.rotation.z = lerpVal(avatarBones.R.shoulder.rotation.z, -0.24 + sway, 0.05)
-      avatarBones.L.shoulder.rotation.z = lerpVal(avatarBones.L.shoulder.rotation.z,  0.24 - sway, 0.05)
+    // 2. Subtle arm sway (halved from original — breathing, not shrugging)
+    if (avatarBones.R && avatarBones.L) {
+      var sway    = Math.sin(oscTime * 0.40) * 0.012
+      var breathY = Math.sin(oscTime * 0.26 * Math.PI * 2) * 0.006
+      avatarBones.R.shoulder.rotation.z = lerpVal(avatarBones.R.shoulder.rotation.z, -0.24 + sway, 0.06)
+      avatarBones.L.shoulder.rotation.z = lerpVal(avatarBones.L.shoulder.rotation.z,  0.24 - sway, 0.06)
+      avatarBones.R.shoulder.rotation.x = lerpVal(avatarBones.R.shoulder.rotation.x, 0.05 + breathY, 0.05)
+      avatarBones.L.shoulder.rotation.x = lerpVal(avatarBones.L.shoulder.rotation.x, 0.05 + breathY, 0.05)
     }
 
-    // 3. Eye saccades — humans never stare perfectly still
+    // 3. Automatic eye blinks — every 3-7 seconds, 60ms close + 80ms open
+    eyeBlinkTimer -= dt
+    if (eyeBlinkTimer <= 0 && eyeBlinkPhase === 0) {
+      eyeBlinkPhase = 1
+      eyeBlinkDuration = 0.06  // 60ms close
+      eyeBlinkTimer = 0        // will reset after full blink cycle
+    }
+    if (eyeBlinkPhase > 0 && avatarBones.faceMorphMesh && avatarBones.faceMorphMesh.morphTargetDictionary) {
+      var dict = avatarBones.faceMorphMesh.morphTargetDictionary
+      var blinkNames = ['eyeBlinkLeft', 'eyeBlinkRight', 'Eye_Blink_Left', 'Eye_Blink_Right']
+      var blinkValue = (eyeBlinkPhase === 1)
+        ? (1.0 - eyeBlinkDuration / 0.06)    // closing: 0→1
+        : (eyeBlinkDuration / 0.08)           // opening: 1→0
+      for (var bi = 0; bi < blinkNames.length; bi++) {
+        if (dict[blinkNames[bi]] !== undefined) {
+          avatarBones.faceMorphMesh.morphTargetInfluences[dict[blinkNames[bi]]] = Math.max(0, Math.min(1, blinkValue))
+        }
+      }
+      eyeBlinkDuration -= dt
+      if (eyeBlinkDuration <= 0) {
+        if (eyeBlinkPhase === 1) {
+          eyeBlinkPhase = 2
+          eyeBlinkDuration = 0.08  // 80ms open
+        } else {
+          eyeBlinkPhase = 0
+          eyeBlinkTimer = 3.0 + Math.random() * 4.0  // next blink in 3-7s
+        }
+      }
+    }
+
+    // 4. Eye saccades — humans never stare perfectly still (micro movements every 1-3s)
     eyeGazeTimer -= dt
     if (eyeGazeTimer <= 0) {
       eyeGazeTargetX = (Math.random() - 0.5) * 0.04
       eyeGazeTargetY = (Math.random() - 0.5) * 0.015
-      eyeGazeTimer   = 1.5 + Math.random() * 2.5
-    }
-    // Apply eye rotation if bones available
-    const leftEyeBone  = avatarBones.R ? null : null  // resolved via scene traversal if needed
-    const rightEyeBone = null
-    if (scene) {
-      const lEye = scene.getObjectByName ? scene.getObjectByName('mixamorigLeftEye')  : null
-      const rEye = scene.getObjectByName ? scene.getObjectByName('mixamorigRightEye') : null
-      if (lEye) {
-        lEye.rotation.y += (eyeGazeTargetX - lEye.rotation.y) * 0.08
-        lEye.rotation.x += (eyeGazeTargetY - lEye.rotation.x) * 0.08
-      }
-      if (rEye) {
-        rEye.rotation.y = lEye ? lEye.rotation.y : 0
-        rEye.rotation.x = lEye ? lEye.rotation.x : 0
-      }
+      eyeGazeTimer = 1.5 + Math.random() * 2.5
     }
   }
 
-  // ── FOREARM TWIST BONES (Req 8 — candy-wrapper fix) ─────────────────
-  function updateTwistBones () {
-    if (!usingGLTFAvatar) return
-    if (window.AvatarDriver) {
-      window.AvatarDriver.updateTwistBones(scene, avatarBones)
-      return
-    }
-    // Inline fallback
-    for (const side of ['R', 'L']) {
-      const arm = avatarBones[side]
-      if (!arm || !arm.wrist) continue
-      if (!arm._twistBone && scene) {
-        const tname = 'mixamorig' + (side === 'R' ? 'Right' : 'Left') + 'ForeArmTwist'
-        scene.traverse(function (n) { if (n.name === tname) arm._twistBone = n })
-      }
-      if (arm._twistBone) arm._twistBone.rotation.y = arm.wrist.rotation.y * 0.5
-    }
-  }
-
-  // ── HELPERS ──────────────────────────────────────────────────────────
-  function lerpVal (cur, target, t) {
-    return cur + (target - cur) * Math.min(t * 1.6, 1.0)
-  }
-
-  function computeHeadTarget (signObj) {
+  // ── HEAD TILT ─────────────────────────────────────────────
+  function computeHeadTarget(signObj) {
     if (!signObj || !signObj.R || !signObj.R.sh) { targetHeadZ = 0; targetHeadX = 0; return }
     const rUp = signObj.R.sh.x < -0.3
     const lUp = signObj.L && signObj.L.sh && signObj.L.sh.x < -0.3
@@ -898,15 +701,17 @@
     else                  { targetHeadZ =  0;    targetHeadX = 0 }
   }
 
-  // ── SIGN QUEUE ────────────────────────────────────────────────────────
-  function resolveSign (item) {
+  // ── SIGN QUEUE ────────────────────────────────────────────
+  function resolveSign(item) {
     if (!item) return null
-    if (typeof item === 'object' && item._Rq) return item
-    const lib  = window.AMANDLA_SIGNS
+    if (typeof item === 'object' && item._Rq) return item  // already v2 sign
+    const lib = window.AMANDLA_SIGNS
     if (!lib) return null
+    // Try library lookup first
     const name = typeof item === 'string' ? item : item.name || ''
-    if (lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[name])              return lib.SIGN_LIBRARY[name]
+    if (lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[name])       return lib.SIGN_LIBRARY[name]
     if (lib.SIGN_LIBRARY && lib.SIGN_LIBRARY[name.toUpperCase()]) return lib.SIGN_LIBRARY[name.toUpperCase()]
+    // Fall back to fingerspell (returns v2-compatible signs with _Rq/_Lq)
     if (lib.fingerspell) {
       const fs = lib.fingerspell(name)
       if (fs && fs.length > 0) return fs[0]
@@ -914,8 +719,9 @@
     return null
   }
 
-  function queueSign (signObj) {
+  function queueSign(signObj) {
     if (typeof signObj === 'string') {
+      // May be a multi-letter word — use sentenceToSigns for proper lookup + fingerspell
       const lib = window.AMANDLA_SIGNS
       if (lib && lib.sentenceToSigns) {
         lib.sentenceToSigns(signObj).forEach(function (s) { signQueue.push(s) })
@@ -925,16 +731,14 @@
     const s = resolveSign(signObj)
     if (s) signQueue.push(s)
   }
-
-  function queueSentence (text) {
+  function queueSentence(text) {
     const lib = window.AMANDLA_SIGNS
     if (!lib) return
     const signs = lib.sentenceToSigns(text)
     signs.forEach(function (s) { signQueue.push(s) })
     updateLabel(signs.length > 0 ? signs[0].name : '')
   }
-
-  function playSignNow (signNameOrObj) {
+  function playSignNow(signNameOrObj) {
     signQueue = []
     const lib = window.AMANDLA_SIGNS
     if (lib && typeof signNameOrObj === 'string') {
@@ -949,12 +753,14 @@
     if (s) { signQueue.push(s); updateLabel(s.name) }
   }
 
-  function updateLabel (text) {
+  function updateLabel(text) {
     const el = document.getElementById('avatar-sign-label')
     if (el) el.textContent = text || ''
   }
 
-  function buildNMMMarkers (nmm) {
+  // Map a sign's structured NMM object (from real-data keyframes) to the
+  // string markers understood by setNMMs()
+  function buildNMMMarkers(nmm) {
     const out = []
     if (nmm.browLift   > 0)  out.push('raised eyebrows')
     if (nmm.browFurrow > 0)  out.push('furrowed brows')
@@ -964,7 +770,8 @@
     return out
   }
 
-  function startNextTransition (fromOverride) {
+  // ── START NEXT TRANSITION ─────────────────────────────────
+  function startNextTransition(fromOverride) {
     const TE = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.TransitionEngine
     if (!TE || signQueue.length === 0) return
     const from = fromOverride || currentSign || idleSign
@@ -982,10 +789,16 @@
       const signDur = currentSign.duration ? currentSign.duration / 1000 : SIGN_HOLD
       if (markers.length > 0) setNMMs(markers, signDur)
     }
+
+    // UX-2: Notify progress listener each time a sign begins
+    currentSignIndex++
+    if (signProgressCallback) {
+      try { signProgressCallback(currentSignIndex, totalSignCount) } catch (_) { /* ignore */ }
+    }
   }
 
-  // ── ANIMATION LOOP ────────────────────────────────────────────────────
-  function animate () {
+  // ── ANIMATION LOOP ────────────────────────────────────────
+  function animate() {
     animFrameId = requestAnimationFrame(animate)
     if (document.hidden || !renderer) return
 
@@ -996,28 +809,20 @@
 
     const TE = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.TransitionEngine
 
-    // ── Sign state machine ───────────────────────────────────────
+    // ── Sign state machine ─────────────────────────────────
     if (animState === 'transitioning' && TE) {
       const pose = TE.tick(dt)
       if (pose) applyPoseDirect(pose)
       if (TE.isDone()) {
-        finalPose    = pose
-        const isFS   = currentSign && currentSign.isFingerspell
-        holdTotal    = currentSign && currentSign.duration
-          ? (currentSign.duration / 1000)
-          : (isFS ? SIGN_FS_HOLD : SIGN_HOLD)
-        holdTimer    = holdTotal
-        holdStartOsc = oscTime
-        animState    = 'holding'
+        finalPose = pose
+        const isFS = currentSign && currentSign.isFingerspell
+        holdTimer = isFS ? SIGN_FS_HOLD : SIGN_HOLD
+        animState = 'holding'
       }
 
     } else if (animState === 'holding') {
       if (finalPose) applyPoseDirect(finalPose)
       if (currentSign) applyOscillation(currentSign, oscTime)
-      if (currentSign && currentSign.motion) {
-        const holdProgress = holdTotal > 0 ? Math.min(1.0 - holdTimer / holdTotal, 1.0) : 0
-        applyMotion(currentSign, holdProgress)
-      }
       holdTimer -= dt
       if (holdTimer <= 0) {
         if (signQueue.length > 0) {
@@ -1029,12 +834,14 @@
       }
 
     } else if (animState === 'gap') {
+      // Hold last pose during gap (no oscillation)
       if (finalPose) applyPoseDirect(finalPose)
       gapTimer -= dt
       if (gapTimer <= 0) {
+        // Transition back to idle
         if (TE && idleSign && currentSign) {
           TE.begin(currentSign, idleSign, null)
-          animState   = 'transitioning'
+          animState = 'transitioning'
           currentSign = idleSign
         } else {
           animState = 'idle'
@@ -1042,65 +849,66 @@
         updateLabel('')
         targetHeadZ = 0
         targetHeadX = 0
+        // Reset NMMs when returning to idle — facial expressions should not persist
+        setNMMs(null)
       }
 
-    } else {
-      // Req 7: lifelike idle (replaces simple shoulder sway)
+    } else { // idle
       applyLifelikeIdle(dt)
       if (signQueue.length > 0 && idleSign && TE) {
         startNextTransition(idleSign)
       }
     }
 
-    // ── Forearm twist (Req 8) ────────────────────────────────────
-    updateTwistBones()
+    // ── Apply NMMs every frame (smoothly interpolated) ─────
+    applyNMMs(dt)
 
-    // ── Head tilt — always smooth ─────────────────────────────────
+    // ── Head tilt — always smooth ──────────────────────────
     if (avatarBones.head) {
       avatarBones.head.rotation.z = lerpVal(avatarBones.head.rotation.z, targetHeadZ, 0.06)
-      if (!nmHeadNod || nmmActive.length === 0) {
-        avatarBones.head.rotation.x = lerpVal(avatarBones.head.rotation.x, targetHeadX, 0.06)
-      }
-      if (!nmHeadShake || nmmActive.length === 0) {
-        avatarBones.head.rotation.y = Math.sin(oscTime * 0.19 * Math.PI * 2) * 0.012
-      }
+      avatarBones.head.rotation.x = lerpVal(avatarBones.head.rotation.x, targetHeadX, 0.06)
+      avatarBones.head.rotation.y = Math.sin(oscTime * 0.19 * Math.PI * 2) * 0.012
     }
-
-    // ── NMMs ──────────────────────────────────────────────────────
-    applyNMMs(dt)
 
     renderer.render(scene, camera)
   }
 
-  // ── CLEANUP ───────────────────────────────────────────────────────────
-  function destroyAvatar () {
+  // ── CLEANUP ───────────────────────────────────────────────
+  function destroyAvatar() {
     if (animFrameId) cancelAnimationFrame(animFrameId)
     if (renderer) renderer.dispose()
     initialized = false
   }
 
-  // ── PUBLIC API (Req 12) ───────────────────────────────────────────────
+  // ── PUBLIC API ────────────────────────────────────────────
   window.AmandlaAvatar = {
     initAvatar:    initAvatar,
     queueSign:     queueSign,
     queueSentence: queueSentence,
     playSignNow:   playSignNow,
-    setNMMs:       setNMMs,
     destroyAvatar: destroyAvatar,
-    signingSpace:  SigningSpace,          // Req 5
-    isGLTF:        function () { return usingGLTFAvatar },
-    convertSignKitSign: convertSignKitSign,  // Req 6
+    // NMM system — set non-manual markers (SASL grammar: brow, mouth, head shake/nod)
+    // nmms: array of descriptor strings, e.g. ['wh-question', 'head-shake']
+    // duration: seconds to hold the NMMs (optional, NMMs persist until next setNMMs call)
+    setNMMs:       setNMMs,
+    // R1: Check whether the GLB human avatar is active (true) or procedural fallback (false)
+    isGLBAvatar: function () { return useGLBRig },
+    // R1: Set a custom avatar URL (takes effect on next initAvatar() call)
+    setAvatarUrl: function (url) {
+      window.AMANDLA_CONFIG = window.AMANDLA_CONFIG || {}
+      window.AMANDLA_CONFIG.avatarUrl = url
+    },
+    // UX-2: Register a callback fired each time a sign begins animating.
+    // Callback signature: function(currentIndex, totalCount)
+    onSignProgress: function (cb) { signProgressCallback = cb }
   }
 
   window.avatarInit = function () { initAvatar('avatar-canvas') }
-
-  window.avatarPlaySigns = function (signs, text, nmms) {
+  window.avatarPlaySigns = function (signs, text) {
     if (!initialized) initAvatar('avatar-canvas')
-    if (Array.isArray(nmms) && nmms.length > 0) {
-      const n = Array.isArray(signs) ? signs.length : 1
-      const phraseDur = n * (SIGN_HOLD + SIGN_GAP) + SIGN_GAP
-      setNMMs(nmms, phraseDur)
-    }
+    // UX-2: Reset progress counters for the new batch
+    currentSignIndex = 0
+    totalSignCount = Array.isArray(signs) ? signs.length : 0
     if (Array.isArray(signs)) signs.forEach(function (s) { queueSign(s) })
     updateLabel(text || (signs && signs[0]) || '')
   }

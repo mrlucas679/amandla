@@ -25,14 +25,19 @@ jobs:
       # E402 = import not at top (pre-existing lazy imports in main.py)
       # F601 = duplicate dict keys (pre-existing in word-map lookups)
       # W292 = no newline at end of file (pre-existing in service files)
+      # E701/E702 = multiple statements on one line (established style in backend/ws and scripts)
+      # E722 = bare except (pre-existing in scripts)
       - name: Lint backend
-        run: ruff check backend/ --select E,F,W --ignore E501,E402,F601,W292
+        run: ruff check backend/ --select E,F,W --ignore E501,E402,F601,W292,E701,E702
 
       - name: Lint sasl_transformer
         run: ruff check sasl_transformer/ --select E,F,W --ignore E501,E402,W292
 
       - name: Lint scripts and converter
-        run: ruff check scripts/ convert_signs.py --select E,F,W --ignore E501,W292
+        run: ruff check scripts/ convert_signs.py --select E,F,W --ignore E501,W292,E701,E702,E722
+
+      - name: Lint tests
+        run: ruff check tests/ --select E,F,W --ignore E501,E402,W292,E701,E702
 
   # ── 2. Python: tests ───────────────────────────────────────────────
   python-tests:
@@ -96,8 +101,8 @@ jobs:
           python -c "from sasl_transformer.grammar_rules import SASL_SYSTEM_PROMPT, ARTICLES_TO_DROP; print('grammar_rules OK')"
           python -c "from sasl_transformer.sign_library import SignLibrary; print('sign_library OK')"
           python -c "from convert_signs import extract_all_frames, select_keyframes, build_keyframe_entry; print('convert_signs OK')"
-          python -c "import ast; ast.parse(open('scripts/record_signs.py').read()); print('record_signs.py syntax OK')"
-          python -c "import ast; ast.parse(open('scripts/merge_sign_data.py').read()); print('merge_sign_data.py syntax OK')"
+          python -c "import ast; ast.parse(open('scripts/record_signs.py', encoding='utf-8').read()); print('record_signs.py syntax OK')"
+          python -c "import ast; ast.parse(open('scripts/merge_sign_data.py', encoding='utf-8').read()); print('merge_sign_data.py syntax OK')"
 
   # ── 4. JavaScript: syntax check ────────────────────────────────────
   js-syntax:
@@ -158,8 +163,9 @@ jobs:
           console.log('OK: all ' + required.length + ' exports present');
 
           const count = Object.keys(lib.SIGN_LIBRARY).length;
-          if (count < 200) {
-            console.error('Only ' + count + ' signs — expected >= 200');
+          // main consolidated the library to 130 curated signs
+          if (count < 100) {
+            console.error('Only ' + count + ' signs — expected >= 100');
             process.exit(1);
           }
           console.log('OK: sign count = ' + count);

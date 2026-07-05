@@ -168,7 +168,7 @@ def build_overrides_block(sign_data):
         lines.append(f"    duration: {dur},")
         lines.append(f"    frames: {frames_js},")
         lines.append("    nmm: null,")
-        lines.append("  }},")  # noqa: the double-brace is intentional JS literal
+        lines.append("  },")
 
     lines += [
         '};',
@@ -184,13 +184,23 @@ def build_overrides_block(sign_data):
         '    if (!SIGN_LIBRARY[name]) return;',
         '    var override = SIGN_OVERRIDES[name];',
         '    SIGN_LIBRARY[name].duration = override.duration;',
-        '    SIGN_LIBRARY[name].frames   = override.frames;',
+        '    SIGN_LIBRARY[name].frames   = override.frames.slice().sort(function(a, b) { return a.t - b.t; });',
         '    SIGN_LIBRARY[name].nmm      = override.nmm;',
         '    // Pre-bake quaternions for the keyframe engine',
-        '    if (typeof prebakeFrameQuats === "function") {',
-        '      prebakeFrameQuats(SIGN_LIBRARY[name].frames);',
-        '    } else if (window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.prebakeFrameQuats) {',
-        '      window.AMANDLA_SIGNS.prebakeFrameQuats(SIGN_LIBRARY[name].frames);',
+        '    var prebake = (typeof prebakeFrameQuats === "function")',
+        '      ? prebakeFrameQuats',
+        '      : (window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.prebakeFrameQuats);',
+        '    if (prebake) prebake(SIGN_LIBRARY[name].frames);',
+        '    // Retarget the top-level poses so the TransitionEngine blends',
+        '    // into the real first keyframe and out of the real last keyframe',
+        '    // (stale synthetic _Rq/_Lq would cause visible pose jumps).',
+        '    var fr = SIGN_LIBRARY[name].frames;',
+        '    if (fr.length >= 2 && fr[0]._Rq) {',
+        '      var first = fr[0], last = fr[fr.length - 1];',
+        '      SIGN_LIBRARY[name].R   = last.R;',
+        '      SIGN_LIBRARY[name].L   = last.L;',
+        '      SIGN_LIBRARY[name]._Rq = { start: first._Rq, end: last._Rq };',
+        '      SIGN_LIBRARY[name]._Lq = { start: first._Lq, end: last._Lq };',
         '    }',
         '    applied++;',
         '  });',
@@ -204,12 +214,12 @@ def build_overrides_block(sign_data):
 
 def write_generated_library(source_js_path, overrides_block, output_path):
     """
-    Write the generated library: re-export everything from source_js,
-    then append the overrides block.
+    Write the generated overrides file (header + SIGN_OVERRIDES block).
 
-    For browser usage the generated file simply includes the source via a
-    <script> tag comment at the top (the HTML must load source_js first,
-    then this file). For Node.js / module usage a require() is emitted.
+    The output does NOT bundle or require() the source library — it only
+    patches SIGN_LIBRARY at load time. The consumer must load the source
+    library first (HTML: <script> tag order; Node: require both files),
+    as documented in the generated header.
     """
     source_name = Path(source_js_path).name
 
@@ -246,11 +256,16 @@ def write_generated_library(source_js_path, overrides_block, output_path):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def print_coverage_report(all_sign_names, real_data, source_js_path=None):
-    """Print a table showing which signs have real data vs remain synthetic."""
+    """Print a table showing which signs have real data vs remain synthetic.
+
+    all_sign_names is the fallback library name set used when the source JS
+    is missing/unreadable, so totals are still reported.
+    """
+    lib_names = set()
     if source_js_path:
         lib_names = read_sign_names_from_js(source_js_path)
-    else:
-        lib_names = set()
+    if not lib_names:
+        lib_names = set(all_sign_names or [])
 
     total_lib   = len(lib_names) if lib_names else '?'
     total_real  = len(real_data)
@@ -299,6 +314,11 @@ def find_html_files(src_dir, current_lib='signs_library.js'):
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    # Windows consoles default to cp1252 which cannot print the box-drawing
+    # characters used in the report output.
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
     parser = argparse.ArgumentParser(
         description='AMANDLA Signs Library Merge Tool'
     )

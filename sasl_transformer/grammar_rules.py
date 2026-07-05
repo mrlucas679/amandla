@@ -1,9 +1,9 @@
 """
-SASL Grammar Rules and Claude System Prompt.
+SASL Grammar Rules and Ollama System Prompt.
 
-This module contains the carefully crafted system prompt that teaches Claude
-how to convert English sentences into South African Sign Language (SASL) gloss
-notation. The rules are based on documented SASL grammar research.
+This module contains the carefully crafted system prompt that teaches the local
+Ollama model how to convert English sentences into South African Sign Language
+(SASL) gloss notation. The rules are based on documented SASL grammar research.
 
 Sources:
     - RealSASL.com grammar guide

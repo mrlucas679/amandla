@@ -283,7 +283,17 @@ const AssistEngine = (() => {
       _renderSuggestions(_getSuggestions(display));
     };
 
-    _recognition.onerror = () => {};
+    _recognition.onerror = (event) => {
+      // 'no-speech' is non-fatal — restart recognition so the user can try again
+      if (event.error === 'no-speech') {
+        console.warn('[AssistEngine] No speech detected — restarting recognition');
+        try { _recognition.start(); } catch(e) { /* already started */ }
+        return;
+      }
+      // All other errors (network, not-allowed, aborted, etc.) are fatal for this attempt
+      console.error('[AssistEngine] Speech recognition error:', event.error);
+      _stopSpeechRecognition();
+    };
     _recognition.start();
   }
 
@@ -391,11 +401,9 @@ if (typeof document !== 'undefined') {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPORTS
+// EXPORTS — renderer runs with nodeIntegration: false, so only
+// window globals are reachable (no Node-style exports).
 // ═══════════════════════════════════════════════════════════════════
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ModeController, AssistEngine };
-}
 if (typeof window !== 'undefined') {
   window.ModeController = ModeController;
   window.AssistEngine   = window.AssistEngine || AssistEngine;

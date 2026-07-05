@@ -35,6 +35,7 @@ SMPL-X body joint indices we care about (axis-angle triplets):
     Joint 19 = right wrist
 """
 
+import sys
 import pickle
 import numpy as np
 import json
@@ -318,9 +319,12 @@ def map_to_threejs(smplx_joints):
     }
 
 
-def build_keyframe_entry(selected_frames, all_frames, fps=SOURCE_FPS):
+def build_keyframe_entry(selected_frames, all_frames, fps=SOURCE_FPS, source_name='smplx'):
     """
     Build a keyframe entry compatible with signWithFrames() in signs_library.js.
+
+    Args:
+        source_name: originating .pkl filename, recorded in the output metadata.
 
     Returns:
         {
@@ -342,7 +346,7 @@ def build_keyframe_entry(selected_frames, all_frames, fps=SOURCE_FPS):
     return {
         'frames':   keyframes,
         'duration': duration_ms,
-        'source':   all_frames[0]['joints'].get('source_file', 'smplx'),
+        'source':   source_name,
         'n_raw_frames': n_total,
     }
 
@@ -423,7 +427,7 @@ def convert_dataset(input_dir, output_path, n_keyframes=10, legacy=False):
                                     'frame': peak['frame_index']}
         else:
             selected = select_keyframes(raw_frames, n_keyframes)
-            entry = build_keyframe_entry(selected, raw_frames)
+            entry = build_keyframe_entry(selected, raw_frames, source_name=pkl_path.name)
             result[amandla_name] = entry
 
             n_raw = entry['n_raw_frames']
@@ -494,6 +498,10 @@ def inspect_pkl(pkl_path):
 
 
 if __name__ == '__main__':
+    # Windows consoles default to cp1252 which cannot print ✓/─ characters
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
     parser = argparse.ArgumentParser(
         description='Convert SignAvatars .pkl to AMANDLA Three.js keyframes'
     )

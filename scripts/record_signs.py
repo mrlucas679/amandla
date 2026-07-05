@@ -465,6 +465,10 @@ class SignRecorder:
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    # Windows consoles default to cp1252 which cannot print ✓/─ characters
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
     parser = argparse.ArgumentParser(description='AMANDLA MediaPipe Sign Recorder')
     parser.add_argument('--output-dir', default='data/recorded_signs',
                         help='Directory for output JSON files (default: data/recorded_signs)')

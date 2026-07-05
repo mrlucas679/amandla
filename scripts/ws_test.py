@@ -1,11 +1,20 @@
 import asyncio
 import json
 import websockets
+import urllib.request
 
 URI_BASE = 'ws://127.0.0.1:8000/ws'
 
+
+def _fetch_session_secret():
+    """Fetch the session secret from the backend /auth/session-secret endpoint."""
+    with urllib.request.urlopen('http://127.0.0.1:8000/auth/session-secret') as resp:
+        return json.loads(resp.read().decode())['session_secret']
+
+
 async def deaf_client():
-    uri = f"{URI_BASE}/demo/deaf"
+    token = _fetch_session_secret()
+    uri = f"{URI_BASE}/demo/deaf?token={token}"
     async with websockets.connect(uri) as ws:
         print('[Test] Deaf connected')
         try:
@@ -17,7 +26,8 @@ async def deaf_client():
 async def hearing_client():
     # wait a short moment to allow deaf to connect
     await asyncio.sleep(0.5)
-    uri = f"{URI_BASE}/demo/hearing"
+    token = _fetch_session_secret()
+    uri = f"{URI_BASE}/demo/hearing?token={token}"
     async with websockets.connect(uri) as ws:
         print('[Test] Hearing connected')
         payload = { 'type': 'text', 'text': 'Hello, how are you?', 'sender': 'hearing' }
