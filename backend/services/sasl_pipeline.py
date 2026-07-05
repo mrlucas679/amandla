@@ -6,9 +6,10 @@ it to proper SASL grammar (SOV word order, no articles, FINISH/WILL
 aspect markers, time-first, question-words last) before it reaches
 the deaf user's screen.
 
-Fallback chain:
-  1. SASL transformer via Ollama LLM — most accurate, full grammar
-  2. Rule-based SASL transformer — applies all 13 SASL grammar rules offline
+Tier chain (D4 in MASTER_PLAN.md — rules are the source of truth):
+  1. Rule-based SASL transformer — deterministic, offline, library-validated
+  2. Ollama LLM assist — consulted only when rule coverage is low; its output
+     is used only if it measurably improves sign coverage
   3. Raw sign word list — last resort, no grammar ordering
 
 FEAT-5: Multilingual support — if the input language is not English,
@@ -29,6 +30,10 @@ _sasl_transformer = None
 
 # Empty result constant — returned when input is blank or all tiers fail
 _EMPTY_RESULT = {"signs": [], "text": "", "original_english": ""}
+
+# D4 (MASTER_PLAN): the LLM assist is consulted only when the deterministic
+# rules leave sign coverage below this fraction of tokens.
+LLM_ASSIST_COVERAGE_THRESHOLD = 0.70
 
 # ── FEAT-5: Multilingual constants ─────────────────────────────────────────
 
@@ -203,41 +208,64 @@ async def text_to_sasl_signs(text: str, language: str | None = None) -> dict:
     # Import once — used by both tier 1 and tier 2
     from sasl_transformer.models import TranslationRequest
 
-    # 1. Try SASL transformer (proper grammar ordering via Ollama)
-    try:
-        tier_start = _time.monotonic()
-        response = await _sasl_transformer.translate(TranslationRequest(english_text=text))
-        sign_names = [tok.gloss for tok in response.tokens]
-        elapsed_ms = (_time.monotonic() - tier_start) * 1000
-        if sign_names:
-            logger.info("[SASL] Tier 1 (LLM) %.0fms: '%s' → '%s'", elapsed_ms, text[:50], response.gloss_text)
-            return _build_result(
-                sign_names, response.gloss_text, text,
-                non_manual_markers=response.non_manual_markers or [],
-                sign_coverage=response.sign_coverage,
-                fingerspelled=response.fingerspelled_words,
-            )
-    except Exception as exc:
-        logger.warning("[SASL] Transformer failed, falling back: %s", exc)
+    # ── D4 (MASTER_PLAN): deterministic rules run FIRST. ──────────────────
+    # The LLM is an optional assist consulted only when rules leave too many
+    # words unsigned, and its output is used only if it measurably improves
+    # sign coverage. A hallucination-capable model never gets the first (or
+    # last) word in the live communication path.
 
-    # 2. Grammar-aware rule-based fallback (no network needed — applies all 13 SASL rules)
+    # 1. Rule-based SASL transformer (offline, deterministic, library-enriched)
+    rules = None
     try:
         tier_start = _time.monotonic()
         rule_response = _sasl_transformer.translate_with_rules(
             text, TranslationRequest(english_text=text)
         )
-        rule_signs = [tok.gloss for tok in rule_response.tokens]
         elapsed_ms = (_time.monotonic() - tier_start) * 1000
-        if rule_signs:
-            logger.info("[SASL] Tier 2 (rules) %.0fms: '%s' → '%s'", elapsed_ms, text[:50], rule_response.gloss_text)
-            return _build_result(
-                rule_signs, rule_response.gloss_text, text,
-                non_manual_markers=rule_response.non_manual_markers or [],
-                sign_coverage=rule_response.sign_coverage,
-                fingerspelled=rule_response.fingerspelled_words,
+        if rule_response.tokens:
+            logger.info(
+                "[SASL] Tier 1 (rules) %.0fms coverage=%.2f: '%s' → '%s'",
+                elapsed_ms, rule_response.sign_coverage, text[:50], rule_response.gloss_text,
             )
+            rules = rule_response
     except Exception as rule_err:
-        logger.warning("[SASL] Rule-based fallback failed: %s", rule_err)
+        logger.warning("[SASL] Rule-based transformer failed: %s", rule_err)
+
+    # 2. LLM assist — only when rules are missing or coverage is low.
+    if rules is None or rules.sign_coverage < LLM_ASSIST_COVERAGE_THRESHOLD:
+        try:
+            tier_start = _time.monotonic()
+            llm_response = await _sasl_transformer.translate(TranslationRequest(english_text=text))
+            elapsed_ms = (_time.monotonic() - tier_start) * 1000
+            rules_coverage = rules.sign_coverage if rules is not None else 0.0
+            if llm_response.tokens and (rules is None or llm_response.sign_coverage > rules_coverage):
+                logger.info(
+                    "[SASL] Tier 2 (LLM assist) %.0fms coverage=%.2f beats rules=%.2f: '%s' → '%s'",
+                    elapsed_ms, llm_response.sign_coverage, rules_coverage,
+                    text[:50], llm_response.gloss_text,
+                )
+                return _build_result(
+                    [tok.gloss for tok in llm_response.tokens],
+                    llm_response.gloss_text, text,
+                    non_manual_markers=llm_response.non_manual_markers or [],
+                    sign_coverage=llm_response.sign_coverage,
+                    fingerspelled=llm_response.fingerspelled_words,
+                )
+            logger.info(
+                "[SASL] LLM assist did not improve coverage (%.2f <= %.2f) — keeping rules",
+                llm_response.sign_coverage if llm_response.tokens else 0.0, rules_coverage,
+            )
+        except Exception as exc:
+            logger.warning("[SASL] LLM assist unavailable: %s", exc)
+
+    if rules is not None:
+        return _build_result(
+            [tok.gloss for tok in rules.tokens],
+            rules.gloss_text, text,
+            non_manual_markers=rules.non_manual_markers or [],
+            sign_coverage=rules.sign_coverage,
+            fingerspelled=rules.fingerspelled_words,
+        )
 
     # 3. Last resort: raw word list (no grammar, but better than nothing)
     try:
