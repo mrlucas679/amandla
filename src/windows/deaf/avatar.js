@@ -3,15 +3,28 @@
 // TransitionEngine — SLERP quaternions, coarticulation, joint limits
 // State machine: TRANSITIONING → HOLDING → GAP → IDLE
 
-(function () {
+// ES module imports — avatar.js is loaded as type="module" in index.html.
+// Three.js is provided via the importmap; GLTFLoader is attached to THREE
+// so the IIFE below can use `THREE.GLTFLoader` without restructuring.
+import * as THREE from 'three'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+THREE.GLTFLoader = GLTFLoader
+window.THREE = THREE   // expose for avatar_driver.js (loaded as plain defer script)
+
+;(function () {
   'use strict'
 
   // ── CONSTANTS ─────────────────────────────────────────────
   // Timing calibrated to fluent SASL conversational pace (Czech MoCap, LREC 2020:
   // avg sign duration 0.38s continuous signing; VLibras 2025: tighter gaps = more natural)
-  const SIGN_HOLD    = 0.32   // seconds to hold a sign at full pose (was 0.38 — dictionary pace)
-  const SIGN_FS_HOLD = 0.19   // hold for fingerspelling (~5 chars/sec readable pace)
-  const SIGN_GAP     = 0.10   // pause after last sign before returning to idle (tighter coarticulation)
+  // Base values — setSigningSpeed() adjusts the mutable copies below relative to these.
+  const BASE_SIGN_HOLD    = 0.32
+  const BASE_SIGN_FS_HOLD = 0.19
+  const BASE_SIGN_GAP     = 0.10
+
+  let SIGN_HOLD    = BASE_SIGN_HOLD    // seconds to hold a sign at full pose
+  let SIGN_FS_HOLD = BASE_SIGN_FS_HOLD // hold for fingerspelling (~5 chars/sec readable pace)
+  let SIGN_GAP     = BASE_SIGN_GAP     // pause after last sign before returning to idle
 
   // ── STATE ─────────────────────────────────────────────────
   let scene, camera, renderer, animFrameId
@@ -52,6 +65,14 @@
   let nmHeadShake        = false  // negation — head shake
   let nmHeadNod          = false  // affirmation — head nod
   let nmShakePhase       = 0     // oscillation phase for shake/nod
+
+  // ── APPEARANCE STATE ──────────────────────────────────────
+  // Material references set by buildAvatarSkeleton() so setAppearance() can
+  // update colours without re-building the skeleton.
+  let _skinMat  = null
+  let _shirtMat = null
+  // GLB model reference set on successful load for GLB appearance updates.
+  let _glbModel = null
 
   // ── LIFELIKE IDLE STATE ────────────────────────────────────
   // Sources: SignON D5.2 (avatar quality), VLibras 2025 (realism)
@@ -176,6 +197,9 @@
       teal:   new THREE.MeshPhongMaterial({ color: 0x2EA880, shininess: 30 }),
       purple: new THREE.MeshPhongMaterial({ color: 0x8B6FD4, shininess: 30 }),
     }
+    // Save refs so setAppearance() can update colours later
+    _skinMat  = mat.skin
+    _shirtMat = mat.shirt
 
     // R1: Wrap procedural skeleton in a group so we can hide it if GLB loads
     proceduralGroup = new THREE.Group()
@@ -316,6 +340,7 @@
 
         // Success: add GLB to scene and hide procedural skeleton
         scene.add(model)
+        _glbModel = model  // save ref for setAppearance() colour updates
         if (proceduralGroup) {
           proceduralGroup.visible = false
         }
@@ -854,6 +879,78 @@
     renderer.render(scene, camera)
   }
 
+  // ── SIGNING SPEED ─────────────────────────────────────────
+  // mult > 1 = faster (e.g. 2 = double speed). Clamped 0.25–3.0.
+  function setSigningSpeed(mult) {
+    if (typeof mult !== 'number' || mult <= 0) return
+    var clamped = Math.max(0.25, Math.min(3.0, mult))
+    SIGN_HOLD    = BASE_SIGN_HOLD    / clamped
+    SIGN_FS_HOLD = BASE_SIGN_FS_HOLD / clamped
+    SIGN_GAP     = BASE_SIGN_GAP     / clamped
+  }
+
+  // ── APPEARANCE ────────────────────────────────────────────
+  // opts: { skin: '#hex', shirt: '#hex', background: '#hex' }
+  // All fields are optional — only provided fields are updated.
+  function setAppearance(opts) {
+    if (!opts) return
+
+    if (opts.skin) {
+      // Update procedural skeleton skin material
+      if (_skinMat) _skinMat.color.set(opts.skin)
+      // Update GLB mesh skin materials (only meshes without a baked texture)
+      if (_glbModel) {
+        _glbModel.traverse(function (node) {
+          if (!node.isMesh || !node.material) return
+          var mName = (node.material.name || node.name || '').toLowerCase()
+          var isSkin = mName.includes('skin') || mName.includes('body')
+            || mName.includes('head') || mName.includes('face')
+          if (isSkin && !node.material.map) {
+            node.material.color.set(opts.skin)
+          }
+        })
+      }
+    }
+
+    if (opts.shirt) {
+      // Update procedural skeleton shirt material
+      if (_shirtMat) _shirtMat.color.set(opts.shirt)
+      // Update GLB clothing materials
+      if (_glbModel) {
+        _glbModel.traverse(function (node) {
+          if (!node.isMesh || !node.material) return
+          var mName = (node.material.name || node.name || '').toLowerCase()
+          var isCloth = mName.includes('cloth') || mName.includes('shirt')
+            || mName.includes('top') || mName.includes('jacket')
+            || mName.includes('outfit')
+          if (isCloth) {
+            node.material.color.set(opts.shirt)
+          }
+        })
+      }
+    }
+
+    if (opts.background && scene) {
+      scene.background = new THREE.Color(opts.background)
+    }
+  }
+
+  // ── MOOD ──────────────────────────────────────────────────
+  // Drives the NMM system to show emotional context via brows and head movement.
+  // mood: 'neutral' | 'happy' | 'sad' | 'fear' | 'angry' | 'urgent'
+  function avatarSetMood(mood) {
+    var moodMap = {
+      neutral: [],
+      happy:   ['raised-brow', 'head-nod'],
+      sad:     ['furrowed'],
+      fear:    ['raised-brow', 'exclamation'],
+      angry:   ['furrowed', 'head-shake'],
+      urgent:  ['raised-brow', 'exclamation', 'intensifier'],
+    }
+    var nmms = moodMap[mood] || []
+    setNMMs(nmms, 5.0)
+  }
+
   // ── CLEANUP ───────────────────────────────────────────────
   function destroyAvatar() {
     if (animFrameId) cancelAnimationFrame(animFrameId)
@@ -871,7 +968,13 @@
     // NMM system — set non-manual markers (SASL grammar: brow, mouth, head shake/nod)
     // nmms: array of descriptor strings, e.g. ['wh-question', 'head-shake']
     // duration: seconds to hold the NMMs (optional, NMMs persist until next setNMMs call)
-    setNMMs:       setNMMs,
+    setNMMs:        setNMMs,
+    // Speed control — mult > 1 = faster (1.0 = default pace, 2.0 = double speed)
+    setSigningSpeed: setSigningSpeed,
+    // Appearance — opts: { skin: '#hex', shirt: '#hex', background: '#hex' }
+    setAppearance:  setAppearance,
+    // Mood — drives NMMs for emotional context: neutral|happy|sad|fear|angry|urgent
+    setMood:        avatarSetMood,
     // R1: Check whether the GLB human avatar is active (true) or procedural fallback (false)
     isGLBAvatar: function () { return useGLBRig },
     // R1: Set a custom avatar URL (takes effect on next initAvatar() call)
@@ -884,6 +987,9 @@
     onSignProgress: function (cb) { signProgressCallback = cb }
   }
 
+  // Also expose avatarSetMood globally so deaf.js can call it directly
+  window.avatarSetMood = avatarSetMood
+
   window.avatarInit = function () { initAvatar('avatar-canvas') }
   window.avatarPlaySigns = function (signs, text) {
     if (!initialized) initAvatar('avatar-canvas')
@@ -893,5 +999,11 @@
     if (Array.isArray(signs)) signs.forEach(function (s) { queueSign(s) })
     updateLabel(text || (signs && signs[0]) || '')
   }
+
+  // Signal to deaf.js (and any other defer scripts) that this module has
+  // finished setting up window.AmandlaAvatar and window.avatarPlaySigns.
+  // deaf.js listens for this event so it can call initAvatar() safely
+  // regardless of which script (module vs defer) executed first.
+  window.dispatchEvent(new CustomEvent('amandla:avatarReady'))
 
 })();

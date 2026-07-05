@@ -2,9 +2,10 @@
 Rights service for AMANDLA.
 Generates SA disability rights complaint letters and incident analyses.
 
-Uses local Ollama model as the primary AI engine.
-Falls back to heuristic analysis and a template letter when Ollama is unavailable.
-No cloud API keys needed — everything runs locally.
+AI engine priority:
+  1. Anthropic Claude API — when ANTHROPIC_API_KEY is set in .env (best quality)
+  2. Local Ollama model   — when no API key is present (fully offline)
+  3. Heuristic / template — when both AI engines are unavailable
 """
 import os
 import re
@@ -18,17 +19,15 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def _get_ollama_config() -> Tuple[str, str]:
-    """Return (base_url, model_name) from environment variables.
-
-    Result is cached after first call so os.getenv() is only called once.
-    dotenv is loaded by backend.main at startup before this is ever called.
-
-    Returns:
-        Tuple of (base_url, model_name) — both are guaranteed non-empty strings.
-    """
+    """Return (base_url, model_name) from environment variables."""
     base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     model: str = os.getenv("OLLAMA_MODEL", "amandla")
     return base_url, model
+
+
+def _anthropic_api_key() -> Optional[str]:
+    """Return the Anthropic API key, or None if not configured."""
+    return os.getenv("ANTHROPIC_API_KEY") or None
 
 
 # ── System prompt for SA disability rights analysis ────────
@@ -48,28 +47,43 @@ Key laws:
 
 Always cite exact section numbers."""
 
+# Claude model to use when API key is available
+_CLAUDE_MODEL = "claude-sonnet-4-6"
+
+
+async def _call_claude(prompt: str, max_tokens: int = 1500) -> Optional[str]:
+    """Send a prompt to the Anthropic Claude API and return the response text.
+
+    Only called when ANTHROPIC_API_KEY is set. Returns None on any failure so
+    the caller falls through to Ollama.
+    """
+    api_key = _anthropic_api_key()
+    if not api_key:
+        return None
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        message = await client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=max_tokens,
+            system=_RIGHTS_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = message.content[0].text.strip() if message.content else ""
+        return text or None
+    except Exception as e:
+        logger.warning(f"[Rights] Claude API request failed: {e}")
+        return None
+
 
 async def _call_ollama(
     prompt: str,
     max_tokens: int = 1500,
     system: Optional[str] = None,
 ) -> Optional[str]:
-    """Send a prompt to the local Ollama model and return the response text.
-
-    Args:
-        prompt: The user prompt string to send.
-        max_tokens: Maximum number of tokens in the response.
-        system: Optional system prompt that overrides the Modelfile default.
-            Pass _RIGHTS_SYSTEM here so the Modelfile's landmark-recognition
-            system prompt does not interfere with rights analysis calls.
-
-    Returns:
-        The response text string, or None if Ollama is unreachable.
-    """
+    """Send a prompt to the local Ollama model and return the response text."""
     try:
         base_url, model_name = _get_ollama_config()
-        # Build request body. Always include the rights system prompt so the
-        # Modelfile's landmark-recognition default never leaks into rights calls.
         request_body: dict = {
             "model": model_name,
             "prompt": prompt,
@@ -91,12 +105,27 @@ async def _call_ollama(
             logger.warning(f"[Rights] Ollama returned status {response.status_code}")
             return None
         text = response.json().get("response", "").strip()
-        if text:
-            return text
-        return None
+        return text or None
     except Exception as e:
         logger.warning(f"[Rights] Ollama request failed: {e}")
         return None
+
+
+async def _call_ai(prompt: str, max_tokens: int = 1500) -> Tuple[Optional[str], str]:
+    """Try Claude first, fall back to Ollama. Returns (text, engine_used)."""
+    if _anthropic_api_key():
+        text = await _call_claude(prompt, max_tokens)
+        if text:
+            logger.info("[Rights] Using Claude API")
+            return text, f"claude/{_CLAUDE_MODEL}"
+
+    text = await _call_ollama(prompt, max_tokens, system=_RIGHTS_SYSTEM)
+    if text:
+        _, model_name = _get_ollama_config()
+        logger.info("[Rights] Using Ollama")
+        return text, f"ollama/{model_name}"
+
+    return None, "none"
 
 
 async def analyse_incident(description: str, incident_type: str = "workplace") -> dict:
@@ -125,18 +154,18 @@ Severity guide: serious = job loss / physical harm / denied emergency care; mode
 Always include Constitution s.9(3)."""
 
     try:
-        raw_response = await _call_ollama(prompt, max_tokens=500, system=_RIGHTS_SYSTEM)
+        raw_response, engine = await _call_ai(prompt, max_tokens=500)
         if raw_response:
-            # Strip markdown code fences if Ollama wraps its output
+            # Strip markdown code fences
             cleaned = re.sub(r"^```[a-z]*\n?", "", raw_response)
             cleaned = re.sub(r"\n?```$", "", cleaned).strip()
             result = json.loads(cleaned)
-            logger.info(f"[Rights] Ollama analysis — severity: {result.get('severity')}")
+            logger.info(f"[Rights] {engine} analysis — severity: {result.get('severity')}")
             return result
     except (json.JSONDecodeError, KeyError) as parse_error:
-        logger.warning(f"[Rights] Ollama response not valid JSON: {parse_error}")
+        logger.warning(f"[Rights] AI response not valid JSON: {parse_error}")
     except Exception as e:
-        logger.warning(f"[Rights] Ollama analyse_incident failed: {e}")
+        logger.warning(f"[Rights] analyse_incident failed: {e}")
 
     # Fallback: keyword-based heuristic (always works offline)
     return _heuristic_analysis(description, incident_type)
@@ -196,19 +225,17 @@ Requirements:
 Write ONLY the letter — no commentary."""
 
     try:
-        raw_letter = await _call_ollama(prompt, max_tokens=1500, system=_RIGHTS_SYSTEM)
+        raw_letter, engine = await _call_ai(prompt, max_tokens=1500)
         if raw_letter and len(raw_letter) > 100:
-            # Extract which laws were cited in the letter
             laws_cited = _extract_laws_from_text(raw_letter)
-            _, model_name = _get_ollama_config()
-            logger.info(f"[Rights] Ollama letter generated. Laws cited: {laws_cited}")
+            logger.info(f"[Rights] {engine} letter generated. Laws cited: {laws_cited}")
             return {
                 "letter": raw_letter,
                 "laws_cited": laws_cited,
-                "model": f"ollama/{model_name}",
+                "model": engine,
             }
     except Exception as e:
-        logger.warning(f"[Rights] Ollama generate_rights_letter failed: {e}")
+        logger.warning(f"[Rights] generate_rights_letter failed: {e}")
 
     # Fallback: template letter (always works offline)
     letter = _template_letter(incident_description, user_name, employer_name, incident_date)

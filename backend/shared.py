@@ -15,16 +15,29 @@ import re
 import secrets
 import time as _time
 import unicodedata
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 logger = logging.getLogger(__name__)
 
 # ── Session authentication token ──────────────────────────────────────────────
-# Generated once at startup. Electron main process reads this via /auth/session-secret
-# and passes it to each window via IPC. Every WebSocket connection must include
-# ?token=<this value> or it is rejected immediately. Uses constant-time
-# comparison to prevent timing side-channels.
-SESSION_SECRET: str = secrets.token_urlsafe(32)
+# Persisted to data/session.secret so uvicorn --reload doesn't change the secret
+# between the worker that served /auth/session-secret and the worker that handles
+# the WebSocket connection. Electron fetches the secret once at startup via IPC.
+_SECRET_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "session.secret")
+
+def _load_or_create_secret() -> str:
+    try:
+        with open(_SECRET_FILE, "r") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        pass
+    secret = secrets.token_urlsafe(32)
+    os.makedirs(os.path.dirname(_SECRET_FILE), exist_ok=True)
+    with open(_SECRET_FILE, "w") as f:
+        f.write(secret)
+    return secret
+
+SESSION_SECRET: str = _load_or_create_secret()
 
 # ── Upload / message size limits ──────────────────────────────────────────────
 MAX_AUDIO_BYTES: int = 10 * 1024 * 1024       # 10 MB upload cap for audio files
@@ -47,10 +60,41 @@ SESSION_EXPIRY_S: int = int(os.getenv("SESSION_EXPIRY_S", "3600"))  # 1 hour def
 sign_buffers: Dict[str, list] = {}          # sessionId → [sign_names]
 sign_tasks: Dict[str, Any] = {}             # sessionId → asyncio.Task
 
-# ── Per-session HARPS sign recognisers ────────────────────────────────────
-# Each deaf WebSocket session gets its own HARPSSignRecognizer instance
-# so landmark frames are buffered independently per session.
-harps_recognizers: Dict[str, Any] = {}      # sessionId → HARPSSignRecognizer
+# ── Per-IP WebSocket connection limiting (FIX-5) ─────────────────────────────
+# Tracks active WebSocket connections per client IP to prevent DoS via
+# connection flooding. An attacker opening thousands of connections per second
+# would exhaust memory and block legitimate users.
+
+# Maximum concurrent WebSocket connections allowed from a single IP address.
+MAX_WS_CONNECTIONS_PER_IP: int = int(os.getenv("MAX_WS_CONNECTIONS_PER_IP", "5"))
+
+# Active connection count per IP: { ip_address: count }
+_ws_connections_per_ip: Dict[str, int] = {}
+
+
+def acquire_ws_connection(client_ip: str) -> bool:
+    """Check and register a new WebSocket connection from client_ip.
+
+    Returns True if the connection is allowed (count incremented),
+    False if the per-IP limit has been reached.
+
+    Thread-safe for single-threaded asyncio event loop use.
+    """
+    current = _ws_connections_per_ip.get(client_ip, 0)
+    if current >= MAX_WS_CONNECTIONS_PER_IP:
+        return False
+    _ws_connections_per_ip[client_ip] = current + 1
+    return True
+
+
+def release_ws_connection(client_ip: str) -> None:
+    """Decrement the connection count for client_ip on disconnect."""
+    current = _ws_connections_per_ip.get(client_ip, 0)
+    if current <= 1:
+        _ws_connections_per_ip.pop(client_ip, None)
+    else:
+        _ws_connections_per_ip[client_ip] = current - 1
+
 
 # ── Per-session rate limiting for heavy AI operations ─────────────────────────
 # Tracks the last call timestamp per session + message type.

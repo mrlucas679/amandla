@@ -4,9 +4,9 @@
   "description": "AMANDLA — Communication bridge for disabled South Africans",
   "main": "src/main.js",
   "scripts": {
-    "start": "concurrently \"npm run backend\" \"wait-on http-get://localhost:8000/health && electron .\"",
+    "start": "concurrently \"npm run backend\" \"wait-on http-get://localhost:8002/health && electron .\"",
     "electron": "electron .",
-    "backend": "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload",
+    "backend": "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8002 --reload",
     "dev": "electron . --inspect",
     "build": "electron-builder",
     "build:backend": "python scripts/build_backend.py",
@@ -31,12 +31,16 @@
       {
         "from": "dist/amandla-backend",
         "to": "backend",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "data",
         "to": "data",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": ".env.example",
@@ -53,12 +57,16 @@
       "category": "public.app-category.healthcare"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "assets/icons/icon.png",
       "category": "Accessibility"
     }
   },
   "dependencies": {
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "three": "^0.180.0"
   }
 }

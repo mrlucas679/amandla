@@ -3,6 +3,7 @@
 .env
 .env.*
 !.env.example
+data/session.secret
 
 # Python
 __pycache__/
@@ -49,3 +50,8 @@ desktop.ini
 tmp/
 temp/
 *.tmp
+
+# Avatar model files — large binaries, download from Avaturn
+src/windows/deaf/avatars/*.glb
+src/windows/deaf/*.glb
+src/windows/deaf/model*.glb

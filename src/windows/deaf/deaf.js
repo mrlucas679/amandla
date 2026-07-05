@@ -40,6 +40,23 @@ replayBtn.addEventListener('click', function () {
   }
 })
 
+// ── FEAT-6: SIGNING SPEED CONTROL ────────────────────────
+const speedSlider = document.getElementById('speed-slider')
+const speedValueEl = document.getElementById('speed-value')
+
+const SPEED_LABELS = { 25: 'Very slow', 50: 'Slow', 75: 'Moderate', 100: 'Normal', 125: 'Fast', 150: 'Faster', 175: 'Very fast', 200: 'Max' }
+
+if (speedSlider) {
+  speedSlider.addEventListener('input', function () {
+    const pct = parseInt(speedSlider.value, 10)
+    const mult = pct / 100
+    if (speedValueEl) speedValueEl.textContent = SPEED_LABELS[pct] || (mult.toFixed(2) + 'x')
+    if (window.AmandlaAvatar && window.AmandlaAvatar.setSigningSpeed) {
+      window.AmandlaAvatar.setSigningSpeed(mult)
+    }
+  })
+}
+
 // ── STARTUP ───────────────────────────────────────────────
 startBtn.addEventListener('click', function () {
   overlay.style.display = 'none'
@@ -52,24 +69,33 @@ startBtn.addEventListener('click', function () {
 })
 
 // ── AVATAR INIT ───────────────────────────────────────────
+// avatar.js is loaded as type="module" whose imports resolve asynchronously,
+// so it may finish after this defer script runs. We handle both orderings:
+//   • If avatar.js already ran  → tryInitAvatar() succeeds immediately.
+//   • If avatar.js runs later   → the amandla:avatarReady event triggers it.
 
-/** Initialise the Three.js avatar once the library and module are loaded. */
+let _avatarInitDone = false
+
 function tryInitAvatar() {
-  if (typeof THREE !== 'undefined' && window.AmandlaAvatar) {
-    window.AmandlaAvatar.initAvatar('avatar-canvas')
-    // UX-2: Wire sign progress callback to show "Signing 2 of 5"
-    window.AmandlaAvatar.onSignProgress(function (current, total) {
-      if (total > 1) {
-        signProgressEl.textContent = 'Signing ' + current + ' of ' + total
-        signProgressEl.classList.add('visible')
-      }
-      // Hide when the last sign starts (will clear after hold+gap)
-      if (current >= total) {
-        setTimeout(function () { signProgressEl.classList.remove('visible') }, 1200)
-      }
-    })
-  }
+  if (_avatarInitDone) return
+  if (typeof THREE === 'undefined' || !window.AmandlaAvatar) return
+  _avatarInitDone = true
+  window.AmandlaAvatar.initAvatar('avatar-canvas')
+  // UX-2: Wire sign progress callback to show "Signing 2 of 5"
+  window.AmandlaAvatar.onSignProgress(function (current, total) {
+    if (total > 1) {
+      signProgressEl.textContent = 'Signing ' + current + ' of ' + total
+      signProgressEl.classList.add('visible')
+    }
+    if (current >= total) {
+      setTimeout(function () { signProgressEl.classList.remove('visible') }, 1200)
+    }
+  })
 }
+
+// Primary trigger: avatar.js fires this event when its module finishes executing
+window.addEventListener('amandla:avatarReady', tryInitAvatar)
+// Fallback: in case the module loaded before this defer script ran
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', tryInitAvatar)
 } else {
@@ -138,6 +164,10 @@ window.amandla.onMessage(function (msg) {
     if (msg.language) setDetectedLanguage(msg.language)
 
     // Drive the avatar with the sign sequence using the documented public API
+    // Speak the hearing person's original English aloud — useful for partially-hearing users.
+    // Uses the language detected by Whisper so the TTS accent matches the speaker.
+    if (msg.original_english) speakText(msg.original_english)
+
     if (Array.isArray(msg.signs) && msg.signs.length > 0) {
       // UX-3: Store for replay
       lastSigns = msg.signs.slice()
@@ -166,7 +196,15 @@ window.amandla.onMessage(function (msg) {
   }
 
   if (msg.type === 'emergency') {
+    if (window.avatarSetMood) window.avatarSetMood('fear')
     showEmergency()
+    return
+  }
+
+  // ── BACKEND → DEAF: Recognition echo from HARPS/Ollama after landmarks are processed.
+  // Show visual confidence feedback so the deaf user knows their sign was detected.
+  if (msg.type === 'sign' && msg.text) {
+    showDetectedSign(msg.text, msg.confidence != null ? msg.confidence : 0.5)
     return
   }
 })
@@ -493,7 +531,7 @@ function initMediaPipe() {
   }
   mpHands = new Hands({
     locateFile: function (file) {
-      return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/' + file
+      return '../../../vendor/mediapipe-hands/' + file
     }
   })
   mpHands.setOptions({
@@ -576,6 +614,197 @@ if (cameraToggle) {
   cameraToggle.addEventListener('click', function () {
     if (cameraActive) stopCamera()
     else startCamera()
+  })
+}
+
+// ── FEAT-10: AVATAR APPEARANCE CUSTOMISATION ─────────────
+// Persists choices to localStorage so they survive session restarts.
+var appearanceBtn     = document.getElementById('appearance-btn')
+var appearanceOverlay = document.getElementById('appearance-overlay')
+var appearanceClose   = document.getElementById('appearance-close')
+
+// Default appearance values (must match the "active" swatches in index.html)
+var _appearance = {
+  skinTone:   0xA8734A,
+  shirtColor: 0x1A1A2E,
+  bgColor:    0x0d0d0d,
+}
+
+/** Load saved appearance from localStorage and apply it. */
+function loadAppearance() {
+  try {
+    var saved = localStorage.getItem('amandla_appearance')
+    if (saved) {
+      var parsed = JSON.parse(saved)
+      if (parsed.skinTone   !== undefined) _appearance.skinTone   = parsed.skinTone
+      if (parsed.shirtColor !== undefined) _appearance.shirtColor = parsed.shirtColor
+      if (parsed.bgColor    !== undefined) _appearance.bgColor    = parsed.bgColor
+    }
+  } catch (e) { /* ignore parse errors */ }
+  applyAndMarkSwatches(_appearance)
+}
+
+/** Apply appearance to avatar and mark the correct swatches as active. */
+function applyAndMarkSwatches(opts) {
+  if (window.AmandlaAvatar && window.AmandlaAvatar.setAppearance) {
+    window.AmandlaAvatar.setAppearance(opts)
+  }
+  // Update active class on swatch buttons
+  document.querySelectorAll('.swatch[data-type="skin"]').forEach(function (btn) {
+    btn.classList.toggle('active', parseInt(btn.dataset.hex, 16) === opts.skinTone)
+  })
+  document.querySelectorAll('.swatch[data-type="shirt"]').forEach(function (btn) {
+    btn.classList.toggle('active', parseInt(btn.dataset.hex, 16) === opts.shirtColor)
+  })
+  document.querySelectorAll('.swatch[data-type="bg"]').forEach(function (btn) {
+    btn.classList.toggle('active', parseInt(btn.dataset.hex, 16) === opts.bgColor)
+  })
+}
+
+// Handle swatch clicks
+document.querySelectorAll('.swatch').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var hex  = parseInt(btn.dataset.hex, 16)
+    var type = btn.dataset.type
+    if (type === 'skin')  _appearance.skinTone   = hex
+    if (type === 'shirt') _appearance.shirtColor = hex
+    if (type === 'bg')    _appearance.bgColor    = hex
+    applyAndMarkSwatches(_appearance)
+    try { localStorage.setItem('amandla_appearance', JSON.stringify(_appearance)) } catch (e) {}
+  })
+})
+
+if (appearanceBtn) {
+  appearanceBtn.addEventListener('click', function () {
+    appearanceOverlay.style.display = 'flex'
+  })
+}
+if (appearanceClose) {
+  appearanceClose.addEventListener('click', function () {
+    appearanceOverlay.style.display = 'none'
+  })
+}
+if (appearanceOverlay) {
+  appearanceOverlay.addEventListener('click', function (e) {
+    if (e.target === appearanceOverlay) appearanceOverlay.style.display = 'none'
+  })
+}
+
+// Apply saved appearance after avatar has had time to initialise
+setTimeout(loadAppearance, 500)
+
+// ── RIGHTS BUTTON (deaf side) ────────────────────────────
+// Deaf users are the primary audience for disability rights information.
+var rightsDeafBtn = document.getElementById('rights-btn-deaf')
+if (rightsDeafBtn) {
+  rightsDeafBtn.addEventListener('click', function () {
+    if (window.amandla && window.amandla.openRights) {
+      window.amandla.openRights()
+    }
+  })
+}
+
+// ── CONVERSATION HISTORY (deaf side) ─────────────────────
+var historyBtn      = document.getElementById('history-btn')
+var historyOverlay  = document.getElementById('history-overlay')
+var historyClose    = document.getElementById('history-close')
+var historyList     = document.getElementById('history-list')
+var historySearch   = document.getElementById('history-search')
+var historyCount    = document.getElementById('history-search-count')
+
+/** Render a list of history messages into the overlay list. */
+function renderDeafHistory(messages) {
+  historyList.innerHTML = ''
+  if (!messages || messages.length === 0) {
+    var emptyEl = document.createElement('p')
+    emptyEl.className = 'history-empty'
+    emptyEl.textContent = 'No conversation history yet.'
+    historyList.appendChild(emptyEl)
+    return
+  }
+
+  messages.forEach(function (msg) {
+    var isOut = msg.direction === 'deaf_to_hearing'
+    var item = document.createElement('div')
+    item.className = 'history-msg ' + (isOut ? 'dir-out' : 'dir-in')
+
+    var dirEl = document.createElement('div')
+    dirEl.className = 'history-dir'
+    dirEl.textContent = isOut ? 'YOU → HEARING' : 'HEARING → YOU'
+    item.appendChild(dirEl)
+
+    var textEl = document.createElement('div')
+    textEl.className = 'history-text'
+    textEl.textContent = msg.original_text || msg.translated_text || '(empty)'
+    item.appendChild(textEl)
+
+    if (msg.sasl_gloss) {
+      var glossMeta = document.createElement('div')
+      glossMeta.className = 'history-meta'
+      glossMeta.textContent = 'SASL: ' + msg.sasl_gloss
+      item.appendChild(glossMeta)
+    }
+
+    var metaEl = document.createElement('div')
+    metaEl.className = 'history-meta'
+    var timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''
+    metaEl.textContent = timeStr + (msg.source ? ' via ' + msg.source : '')
+    item.appendChild(metaEl)
+
+    historyList.appendChild(item)
+  })
+  historyList.scrollTop = historyList.scrollHeight
+}
+
+/** Load history from backend and open the overlay. */
+async function openDeafHistory() {
+  if (!historyOverlay) return
+  historyOverlay.style.display = 'flex'
+  if (historySearch) historySearch.value = ''
+  historyList.innerHTML = '<p class="history-empty">Loading history…</p>'
+
+  try {
+    var data = await window.amandla.requestHistory()
+    var messages = (data && data.messages) || []
+    renderDeafHistory(messages)
+    if (historySearch && messages.length > 0) historySearch.focus()
+  } catch (err) {
+    const failEl = document.createElement('p')
+    failEl.className = 'history-empty'
+    failEl.textContent = 'Failed to load — ' + (err.message || 'try again')
+    historyList.innerHTML = ''
+    historyList.appendChild(failEl)
+  }
+}
+
+if (historyBtn) historyBtn.addEventListener('click', openDeafHistory)
+
+if (historyClose) {
+  historyClose.addEventListener('click', function () {
+    historyOverlay.style.display = 'none'
+  })
+}
+
+if (historyOverlay) {
+  historyOverlay.addEventListener('click', function (e) {
+    if (e.target === historyOverlay) historyOverlay.style.display = 'none'
+  })
+}
+
+// Live search filter within the already-loaded history items
+if (historySearch) {
+  historySearch.addEventListener('input', function () {
+    var q = historySearch.value.toLowerCase()
+    var items = historyList.querySelectorAll('.history-msg')
+    var visible = 0
+    items.forEach(function (item) {
+      var match = q === '' || item.textContent.toLowerCase().includes(q)
+      item.style.display = match ? '' : 'none'
+      if (match) visible++
+    })
+    if (historyCount) {
+      historyCount.textContent = q ? visible + ' result' + (visible !== 1 ? 's' : '') : ''
+    }
   })
 }
 

@@ -87,7 +87,7 @@ function connect(sessionId, role, secret) {
   // Pass the session secret as a WebSocket subprotocol so it never appears
   // in server access logs, reverse proxy logs, or browser history (ARCH-7).
   // The server echoes back the subprotocol in its accept response.
-  const url = `ws://localhost:8000/ws/${sessionId}/${role}`
+  const url = `ws://localhost:8002/ws/${sessionId}/${role}`
   console.log(`[Preload] Connecting to ${url}`)
   ws = new WebSocket(url, [`amandla-${currentSecret || ''}`])
   // Tag the socket so we can detect duplicates above
@@ -210,6 +210,9 @@ contextBridge.exposeInMainWorld('amandla', {
   // Ask main process to open RIGHTS window
   openRights: () => ipcRenderer.invoke('open-rights'),
 
+  // Ask main process to open INTERPRETER window (FEAT-5)
+  openInterpreter: () => ipcRenderer.invoke('open-interpreter'),
+
   // Ask main process for session ID at any time
   getSessionId: () => ipcRenderer.invoke('get-session-id'),
 
@@ -219,9 +222,12 @@ contextBridge.exposeInMainWorld('amandla', {
    *
    * @param {Blob} audioBlob - The recorded audio blob.
    * @param {string} mimeType - MIME type of the audio (e.g. "audio/webm").
+   * @param {string|null} [language] - Optional language code override (e.g. "nso").
+   *   When set, the backend uses this for the SASL pipeline instead of Whisper's
+   *   auto-detected language — required for the 5 SA languages Whisper cannot detect.
    * @returns {Promise<Object>} - Resolves with { text, language, confidence }.
    */
-  uploadSpeech: (audioBlob, mimeType) => {
+  uploadSpeech: (audioBlob, mimeType, language) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error('Not connected to backend'))
     }
@@ -229,13 +235,15 @@ contextBridge.exposeInMainWorld('amandla', {
       const reader = new FileReader()
       reader.onload = () => {
         const base64 = reader.result.split(',')[1] // strip data:...;base64, prefix
-        _sendRequest({
+        const req = {
           type: 'speech_upload',
           audio_b64: base64,
           mime_type: mimeType || 'audio/webm',
           sender: currentRole,
           timestamp: Date.now()
-        }).then(resolve).catch(reject)
+        }
+        if (language) req.language = language
+        _sendRequest(req).then(resolve).catch(reject)
       }
       reader.onerror = () => reject(new Error('Failed to read audio'))
       reader.readAsDataURL(audioBlob)
@@ -310,6 +318,18 @@ contextBridge.exposeInMainWorld('amandla', {
    */
   exportConversation: (format, content, defaultName) =>
     ipcRenderer.invoke('export-conversation', { format, content, defaultName }),
+
+  /**
+   * Correct garbled speech/text for hearing users with speech impediments.
+   * The corrected text is returned ONLY to this window — not sent to the deaf side.
+   *
+   * @param {string} text - The garbled or incomplete input text.
+   * @returns {Promise<{original: string, corrected: string, fallback?: boolean}>}
+   */
+  correctSpeech: (text) => _sendRequest({
+    type: 'speech_correct',
+    text: text,
+  }),
 })
 
 // ── IPC: receive session ID, secret, and role from the main process ──────────

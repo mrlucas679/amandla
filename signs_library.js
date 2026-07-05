@@ -72,24 +72,43 @@
 // Each = { i, m, r, p, t } finger curl values
 // [mcp, pip, dip] — 0 = straight, ~1.5 = fully curled
 // ═══════════════════════════════════════════════════════════════════
+// spread = MCP abduction array [index, middle, ring, pinky] in radians.
+// Positive = abduction (finger spreads away from midline). Section 02 research.
 const HS = {
-  open5:  { i:[0.08,0.05,0.03], m:[0.08,0.05,0.03], r:[0.08,0.05,0.03], p:[0.08,0.05,0.03], t:[0.05,0.05] },
-  flat:   { i:[0.10,0.06,0.04], m:[0.10,0.06,0.04], r:[0.10,0.06,0.04], p:[0.10,0.06,0.04], t:[0.28,0.40] },
-  fist_A: { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[-0.15,0.10] },
-  fist_S: { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.55] },
-  point1: { i:[0.15,0.08,0.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.25] },
-  vhand:  { i:[0.15,0.08,0.05], m:[0.15,0.08,0.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.50,0.35] },
-  whand:  { i:[0.08,0.05,0.03], m:[0.08,0.05,0.03], r:[0.08,0.05,0.03], p:[1.15,1.55,1.05], t:[0.50,0.75] },
-  yhand:  { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[0.08,0.05,0.03], t:[-0.10,0.05] },
-  lhand:  { i:[0.15,0.08,0.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[-0.20,0.05] },
-  chand:  { i:[0.70,0.90,0.60], m:[0.70,0.90,0.60], r:[0.70,0.90,0.60], p:[0.70,0.90,0.60], t:[0.15,0.20] },
-  xhand:  { i:[0.55,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.25] },
-  claw:   { i:[0.70,0.90,0.60], m:[0.70,0.90,0.60], r:[0.70,0.90,0.60], p:[0.70,0.90,0.60], t:[0.30,0.30] },
-  thand:  { i:[0.55,0.90,0.60], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.55,0.55] },
-  fhand:  { i:[0.55,0.90,0.60], m:[0.08,0.05,0.03], r:[0.08,0.05,0.03], p:[0.08,0.05,0.03], t:[0.55,0.55] },
-  ghand:  { i:[0.15,0.08,0.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[-0.10,0.10] },
-  uhand:  { i:[0.15,0.08,0.05], m:[0.15,0.08,0.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.50,0.55] },
-  rest:   { i:[0.20,0.15,0.10], m:[0.20,0.15,0.10], r:[0.20,0.15,0.10], p:[0.20,0.15,0.10], t:[0.20,0.12] },
+  // ── Original handshapes (spread added per biomechanics research) ──
+  open5:  { i:[0.08,0.05,0.03], m:[0.08,0.05,0.03], r:[0.08,0.05,0.03], p:[0.08,0.05,0.03], t:[0.05,0.05],  spread:[ 0.22, 0.08,-0.08,-0.22] },
+  flat:   { i:[0.10,0.06,0.04], m:[0.10,0.06,0.04], r:[0.10,0.06,0.04], p:[0.10,0.06,0.04], t:[0.28,0.40],  spread:[ 0.10, 0.03,-0.03,-0.10] },
+  fist_A: { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[-0.15,0.10], spread:[ 0.00, 0.00, 0.00, 0.00] },
+  fist_S: { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.55],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  point1: { i:[0.15,0.08,0.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.25],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  vhand:  { i:[0.15,0.08,0.05], m:[0.15,0.08,0.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.50,0.35],  spread:[ 0.20,-0.20, 0.00, 0.00] },
+  whand:  { i:[0.08,0.05,0.03], m:[0.08,0.05,0.03], r:[0.08,0.05,0.03], p:[1.15,1.55,1.05], t:[0.50,0.75],  spread:[ 0.15, 0.00,-0.15, 0.00] },
+  yhand:  { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[0.08,0.05,0.03], t:[-0.10,0.05], spread:[ 0.00, 0.00, 0.00,-0.18] },
+  lhand:  { i:[0.15,0.08,0.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[-0.20,0.05], spread:[ 0.30, 0.00, 0.00, 0.00] },
+  chand:  { i:[0.70,0.90,0.60], m:[0.70,0.90,0.60], r:[0.70,0.90,0.60], p:[0.70,0.90,0.60], t:[0.15,0.20],  spread:[ 0.10, 0.03,-0.03,-0.10] },
+  xhand:  { i:[0.55,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.25],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  claw:   { i:[0.70,0.90,0.60], m:[0.70,0.90,0.60], r:[0.70,0.90,0.60], p:[0.70,0.90,0.60], t:[0.30,0.30],  spread:[ 0.15, 0.05,-0.05,-0.15] },
+  thand:  { i:[0.55,0.90,0.60], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.55,0.55],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  fhand:  { i:[0.55,0.90,0.60], m:[0.08,0.05,0.03], r:[0.08,0.05,0.03], p:[0.08,0.05,0.03], t:[0.55,0.55],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  ghand:  { i:[0.15,0.08,0.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[-0.10,0.10], spread:[ 0.00, 0.00, 0.00, 0.00] },
+  uhand:  { i:[0.15,0.08,0.05], m:[0.15,0.08,0.05], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.50,0.55],  spread:[ 0.12,-0.12, 0.00, 0.00] },
+  rest:   { i:[0.20,0.15,0.10], m:[0.20,0.15,0.10], r:[0.20,0.15,0.10], p:[0.20,0.15,0.10], t:[0.20,0.12],  spread:[ 0.05, 0.02,-0.02,-0.05] },
+
+  // ── Biomechanics-research handshapes (Section 02 — Handshape Table) ──
+  // B: all fingers flat/straight, thumb folded across palm (Section 02 Table row "B")
+  bhand:  { i:[0.05,0.02,0.01], m:[0.05,0.02,0.01], r:[0.05,0.02,0.01], p:[0.05,0.02,0.01], t:[0.38,0.60],  spread:[ 0.08, 0.03,-0.03,-0.08] },
+  // D: index extended, remaining fingers curve to touch thumb (Section 02 Table row "D")
+  dhand:  { i:[0.10,0.05,0.03], m:[1.15,1.35,0.90], r:[1.15,1.35,0.90], p:[1.15,1.35,0.90], t:[-0.05,0.20], spread:[ 0.00, 0.00, 0.00, 0.00] },
+  // E: all fingers tightly bent at all joints, thumb tucked under (Section 02 Table row "E")
+  ehand:  { i:[1.20,1.45,0.90], m:[1.20,1.45,0.90], r:[1.20,1.45,0.90], p:[1.20,1.45,0.90], t:[0.65,0.80],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  // I: only pinky extended, others in fist (Section 02 Table row "I")
+  ihand:  { i:[1.15,1.55,1.05], m:[1.15,1.55,1.05], r:[1.15,1.55,1.05], p:[0.08,0.05,0.03], t:[0.45,0.25],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  // M: middle finger extended, index/ring/pinky curled — SICK and MEDICINE (Section 11)
+  mhand:  { i:[1.15,1.55,1.05], m:[0.08,0.05,0.03], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.25],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  // N: index+middle bent and folded over thumb, ring+pinky closed — NURSE (Section 11)
+  nhand:  { i:[0.65,0.90,0.60], m:[0.65,0.90,0.60], r:[1.15,1.55,1.05], p:[1.15,1.55,1.05], t:[0.45,0.40],  spread:[ 0.00, 0.00, 0.00, 0.00] },
+  // O: all fingers curved meeting thumb tip, full cup (Section 02 Table row "O")
+  ohand:  { i:[0.85,1.00,0.65], m:[0.85,1.00,0.65], r:[0.85,1.00,0.65], p:[0.85,1.00,0.65], t:[0.15,0.20],  spread:[ 0.00, 0.00, 0.00, 0.00] },
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -254,6 +273,38 @@ function applyJointLimits(euler, limits) {
   };
 }
 
+/**
+ * Two-joint IK — law of cosines (Section 07.4).
+ * Given upper-arm length, forearm length, and straight-line distance to target,
+ * returns the required shoulder elevation and elbow bend angles (radians).
+ * Useful for computing arm pose to precisely touch a location sign target
+ * (e.g. temple for KNOW, chin for WHO, wrist for DOCTOR).
+ *
+ * @param {number} upperLen   - Upper arm length in model units (e.g. 0.28)
+ * @param {number} lowerLen   - Forearm length in model units (e.g. 0.26)
+ * @param {number} targetDist - Distance from shoulder joint to target point
+ * @returns {{ shoulderAngle: number, elbowAngle: number }}
+ *   shoulderAngle: angle at shoulder (elevation from body axis)
+ *   elbowAngle:    bend angle at elbow (0 = fully extended, π = fully flexed)
+ */
+function twoJointIK(upperLen, lowerLen, targetDist) {
+  // Clamp to reachable range (avoid NaN from acos outside [-1,1])
+  const reach = upperLen + lowerLen;
+  const d = Math.min(Math.max(targetDist, Math.abs(upperLen - lowerLen) + 1e-4), reach - 1e-4);
+
+  // Law of cosines: angle at elbow
+  const cosElbow = (upperLen * upperLen + lowerLen * lowerLen - d * d)
+                 / (2 * upperLen * lowerLen);
+  const elbowAngle = Math.acos(Math.max(-1, Math.min(1, cosElbow)));
+
+  // Angle at shoulder (between upper arm and line to target)
+  const cosShoulder = (upperLen * upperLen + d * d - lowerLen * lowerLen)
+                    / (2 * upperLen * d);
+  const shoulderAngle = Math.acos(Math.max(-1, Math.min(1, cosShoulder)));
+
+  return { shoulderAngle, elbowAngle };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SECTION 5 — EASING FUNCTIONS
 // Controls the speed profile of transitions.
@@ -262,6 +313,10 @@ function applyJointLimits(euler, limits) {
 // linear: constant speed — only for oscillations, never transitions.
 // ═══════════════════════════════════════════════════════════════════
 const Easing = {
+  // Minimum-jerk trajectory (Section 07.6): most natural human movement profile.
+  // Quintic smoothstep: zero velocity AND zero acceleration at both endpoints.
+  minimumJerk:    t => 10*t*t*t - 15*t*t*t*t + 6*t*t*t*t*t,
+  // Kept for compatibility and fingerspelling
   easeInOutCubic: t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2,
   easeOutQuad:    t => 1 - (1-t)*(1-t),
   easeInQuad:     t => t * t,
@@ -351,6 +406,9 @@ function lerpFingerCurl(a, b, t, limits) {
     const lim = limits ? JOINT_LIMITS[limitKey] : null;
     let v = a[i] + (b[i] - a[i]) * t;
     if (lim) v = clamp(v, lim.minX, lim.maxX);
+    // DIP–PIP tendon coupling (Section 02): DIP cannot flex beyond 0.67 × PIP.
+    // In real anatomy the flexor digitorum profundus links these two joints.
+    if (i === 2 && result.length >= 2) v = Math.min(v, result[1] * 0.67);
     result.push(v);
   }
   return result;
@@ -398,7 +456,11 @@ function slerpArmPose(qA, qB, t, side) {
 //   If provided, the avatar moves FROM startPose TO endPose
 //   during the sign's own duration (separate from inter-sign transitions).
 // ═══════════════════════════════════════════════════════════════════
-function sign(name, shape, desc, conf, Rsh, Rel, Rwr, Rhand, Lsh, Lel, Lwr, Lhand, osc, startOverride) {
+// nmm = Non-Manual Marker metadata (Section 06 research).
+// { brow: 'neutral'|'raised'|'furrowed',
+//   mouth: 'neutral'|'mm'|'pah'|'oo',
+//   head:  'neutral'|'nod'|'shake'|'tilt' }
+function sign(name, shape, desc, conf, Rsh, Rel, Rwr, Rhand, Lsh, Lel, Lwr, Lhand, osc, startOverride, nmm) {
   const endPoseRaw = {
     R: { sh:Rsh, el:Rel, wr:Rwr, hand:Rhand },
     L: { sh:Lsh, el:Lel, wr:Lwr, hand:Lhand },
@@ -414,10 +476,18 @@ function sign(name, shape, desc, conf, Rsh, Rel, Rwr, Rhand, Lsh, Lel, Lwr, Lhan
     R: endPoseRaw.R,
     L: endPoseRaw.L,
     // Quaternion versions — pre-baked for the engine
-    _Rq: { end: armToQuat(endPoseRaw.R), start: armToQuat(startPoseRaw.R) },
+    _Rq: {
+      end:        armToQuat(endPoseRaw.R),
+      start:      armToQuat(startPoseRaw.R),
+      // startEuler: raw euler angles of the start pose — used by avatar.js
+      // _buildStartTemplate() to register a _START gestureTemplate for motion signs.
+      startEuler: startOverride ? startPoseRaw.R : null,
+    },
     _Lq: { end: armToQuat(endPoseRaw.L), start: armToQuat(startPoseRaw.L) },
     osc,
     isFingerspell: false,
+    // Non-manual marker metadata (Section 06) — used by avatar NMM layer
+    nmm: nmm || { brow: 'neutral', mouth: 'neutral', head: 'neutral' },
   };
 }
 
@@ -456,10 +526,12 @@ const TransitionEngine = {
     this._duration   = hint.duration;
     this._blendStart = hint.blendStart;
 
-    // Use snappier easing for fingerspelling, smoother for full signs
-    this._easing = (fromSign && fromSign.isFingerspell)
+    // Per-sign easing override via nmm.ease field, then fingerspell heuristic,
+    // then minimumJerk default (Section 07.6).
+    const perSignEase = (toSign && toSign.nmm && toSign.nmm.ease) ? toSign.nmm.ease : null;
+    this._easing = perSignEase || ((fromSign && fromSign.isFingerspell)
       ? Easing.easeOutQuad
-      : Easing.easeInOutCubic;
+      : Easing.minimumJerk);
   },
 
   /**
@@ -555,62 +627,62 @@ const SIGN_LIBRARY = {
   'HELLO': sign('HELLO','Hand waves away from head','Move hand away from head — universal greeting',5,
     {x:-1.35,y:0,z:-0.18},{x:0.05,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'z', amp:0.35, freq:1.8}),
+    {j:'R_wr', ax:'z', amp:0.35, freq:1.8}, null, { brow:'neutral', mouth:'mm', head:'nod' }),
 
   'GOODBYE': sign('GOODBYE','Wave hand side to side','Open hand waves from side to side — farewell',5,
     {x:-1.30,y:0,z:-0.15},{x:0.05,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'z', amp:0.45, freq:2.2}),
+    {j:'R_wr', ax:'z', amp:0.45, freq:2.2}, null, { brow:'neutral', mouth:'neutral', head:'nod' }),
 
   'HOW ARE YOU': sign('HOW ARE YOU','Flat hands sweep out then thumbs up','Hands sweep outward then change to thumbs up',4,
     {x:-0.55,y:0,z:-0.30},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.lhand,
     {x:-0.55,y:0,z:0.30},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.lhand,
-    {j:'both_sh', ax:'z', amp:0.25, freq:1.4}),
+    {j:'both_sh', ax:'z', amp:0.25, freq:1.4}, null, { brow:'raised', mouth:'neutral', head:'tilt' }),
 
   "I'M FINE": sign("I'M FINE",'Hand moves up from flat-hand','Hand rises upward — I am fine',4,
     {x:-0.80,y:0,z:-0.20},{x:-0.30,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.10, freq:1.2}),
+    {j:'R_sh', ax:'x', amp:0.10, freq:1.2}, null, { brow:'neutral', mouth:'mm', head:'nod' }),
 
   'PLEASE': sign('PLEASE','B-hand circles on chest','Flat open hand circles on chest — polite request',4,
     {x:-0.28,y:0,z:-0.68},{x:-0.20,y:0,z:0},{x:0.18,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'y', amp:0.26, freq:1.6}),
+    {j:'R_sh', ax:'y', amp:0.26, freq:1.6}, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
 
   'THANK YOU': sign('THANK YOU','Flat hand chin outward','Open hand at chin, sweeps forward and down',5,
     {x:-1.25,y:0,z:-0.08},{x:0.05,y:0,z:0},{x:-0.12,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.10, freq:1.4}),
+    {j:'R_sh', ax:'x', amp:0.10, freq:1.4}, null, { brow:'neutral', mouth:'mm', head:'nod' }),
 
   'SORRY': sign('SORRY','A-hand slides on cheek','Slide A-hand forwards and backwards on lower cheek',5,
     {x:-1.20,y:0,z:-0.15},{x:-0.10,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.08, freq:2.0}),
+    {j:'R_sh', ax:'x', amp:0.08, freq:2.0}, null, { brow:'furrowed', mouth:'neutral', head:'nod' }),
 
   'YES': sign('YES','S-hand fist nods','Tight closed fist — wrist nods up and down',5,
     {x:-0.45,y:0,z:-0.10},{x:-0.95,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'x', amp:0.38, freq:3.8}),
+    {j:'R_wr', ax:'x', amp:0.38, freq:3.8}, null, { brow:'neutral', mouth:'mm', head:'nod', phases:{ prep:150, nucleus:500 } }),
 
   'NO': sign('NO','H-hand wags side to side','Index and middle fingers extended, wag side to side',5,
     {x:-0.50,y:0,z:-0.14},{x:-0.88,y:0,z:0},{x:0,y:0.3,z:0}, HS.vhand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.44, freq:3.5}),
+    {j:'R_wr', ax:'y', amp:0.44, freq:3.5}, null, { brow:'neutral', mouth:'neutral', head:'shake', phases:{ prep:150, nucleus:500 } }),
 
   'HELP': sign('HELP','A-hand on flat palm · both raise','Fist (thumb extended) resting on open palm — rise together',5,
     {x:-1.28,y:0,z:-0.30},{x:-0.50,y:0,z:0},{x:0.12,y:0,z:0}, HS.fist_A,
     {x:-1.20,y:0,z:0.28},{x:-0.25,y:0,z:0},{x:-0.65,y:0.3,z:0}, HS.flat,
-    {j:'both_sh', ax:'x', amp:0.16, freq:2.3}),
+    {j:'both_sh', ax:'x', amp:0.16, freq:2.3}, null, { brow:'raised', mouth:'neutral', head:'tilt' }),
 
   'WAIT': sign('WAIT','Both 5-hands palms out','Both open hands, palms forward, fingers wiggle',5,
     {x:-0.70,y:0,z:-0.24},{x:-1.28,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     {x:-0.70,y:0,z:0.24},{x:-1.28,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
-    {j:'both_el', ax:'z', amp:0.14, freq:2.8}),
+    {j:'both_el', ax:'z', amp:0.14, freq:2.8}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'STOP': sign('STOP','Both flat-hands push forward','Move both flat-hands forward simultaneously',5,
     {x:-0.60,y:0,z:-0.18},{x:-1.10,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     {x:-0.60,y:0,z:0.18},{x:-1.10,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    null),
+    null, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'REPEAT': sign('REPEAT','A-hand circles over flat palm','Dominant fist circles above non-dominant open hand',3,
     {x:-0.48,y:0,z:-0.22},{x:-0.78,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
@@ -620,24 +692,24 @@ const SIGN_LIBRARY = {
   'UNDERSTAND': sign('UNDERSTAND','Index at temple flicks up','Index finger at temple, flicks upward',5,
     {x:-1.50,y:0,z:-0.06},{x:-0.18,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'x', amp:0.20, freq:2.8}),
+    {j:'R_wr', ax:'x', amp:0.20, freq:2.8}, null, { brow:'raised', mouth:'neutral', head:'nod' }),
 
   'WATER': sign('WATER','W-hand taps chin','Index+middle+ring up (W-shape), taps chin twice',4,
     {x:-1.38,y:0,z:-0.08},{x:-0.22,y:0,z:0},{x:0,y:0,z:0}, HS.whand,
     IL.sh,IL.el,IL.wr, NL,
     {j:'R_sh', ax:'x', amp:0.09, freq:2.5}),
 
-  'PAIN': sign('PAIN','Both index fingers jab inward','Index fingers pointing inward, jabbing toward each other',4,
+  'PAIN': sign('PAIN','Both index fingers jab inward','Index fingers pointing inward, jabbing toward each other (Section 11)',4,
     {x:-0.32,y:0,z:-0.56},{x:-0.85,y:0,z:0.24},{x:0,y:0,z:0}, HS.point1,
     {x:-0.32,y:0,z:0.56},{x:-0.85,y:0,z:-0.24},{x:0,y:0,z:0}, HS.point1,
-    {j:'both_el', ax:'x', amp:0.13, freq:4.2}),
+    {j:'both_el', ax:'x', amp:0.13, freq:4.2}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   // ── MEDICAL & EMERGENCY ─────────────────────────────────────────
 
-  'DOCTOR': sign('DOCTOR','Stethoscope on chest','Mimic putting stethoscope on chest',5,
+  'DOCTOR': sign('DOCTOR','D-hand taps inside wrist of weak hand','D or H shape taps on inside wrist — doctor (Section 11)',5,
     {x:-0.90,y:0,z:-0.55},{x:-0.40,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
     {x:-0.90,y:0,z:0.55},{x:-0.40,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
-    {j:'both_sh', ax:'z', amp:0.10, freq:1.5}),
+    {j:'R_sh', ax:'x', amp:0.12, freq:2.5}, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
 
   'NURSE': sign('NURSE','U-hands over shoulders outward','Show badges on nurse uniform',4,
     {x:-1.00,y:0,z:-0.45},{x:-0.30,y:0,z:0},{x:0,y:0,z:0}, HS.uhand,
@@ -647,156 +719,181 @@ const SIGN_LIBRARY = {
   'HOSPITAL': sign('HOSPITAL','U-hand on upper arm moves forward','Index finger of U-hand touches upper arm then moves forward',5,
     {x:-1.10,y:0,z:-0.45},{x:-0.35,y:0,z:0},{x:0,y:0,z:0}, HS.uhand,
     {x:-0.40,y:0,z:0.30},{x:-0.50,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    {j:'R_sh', ax:'x', amp:0.08, freq:1.5}),
+    {j:'R_sh', ax:'x', amp:0.08, freq:1.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
-  'SICK': sign('SICK','Both middle fingers touch forehead and tummy','Touch forehead and tummy simultaneously with middle fingers',5,
-    {x:-1.45,y:0,z:-0.10},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.fhand,
-    {x:-0.22,y:0,z:0.38},{x:-0.25,y:0,z:0},{x:0,y:0,z:0}, HS.fhand,
-    null),
+  'SICK': sign('SICK','Both middle fingers touch forehead and tummy','Touch forehead and tummy simultaneously with middle fingers (Section 11)',5,
+    {x:-1.45,y:0,z:-0.10},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.mhand,
+    {x:-0.22,y:0,z:0.38},{x:-0.25,y:0,z:0},{x:0,y:0,z:0}, HS.mhand,
+    null, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'AMBULANCE': sign('AMBULANCE','Claw-hands twist at sides of head','Twist claw-hands at sides of head — ambulance lights',4,
     {x:-1.30,y:0,z:-0.35},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     {x:-1.30,y:0,z:0.35},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
-    {j:'both_wr', ax:'y', amp:0.6, freq:3.0}),
+    {j:'both_wr', ax:'y', amp:0.6, freq:3.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral', phases:{ prep:250, nucleus:800 } }),
 
   'FIRE': sign('FIRE','Open-5-hands flicker upward','Open hands move up and down alternately, flutter fingers — flames',5,
     {x:-0.80,y:0,z:-0.20},{x:-0.50,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     {x:-0.80,y:0,z:0.20},{x:-0.50,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
-    {j:'both_sh', ax:'x', amp:0.25, freq:2.5}),
+    {j:'both_sh', ax:'x', amp:0.25, freq:2.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'DANGEROUS': sign('DANGEROUS','Index fingers flick up sharply','No.1 fingers pointing forward then flick up quickly',5,
     {x:-0.55,y:0,z:-0.18},{x:-0.85,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
     {x:-0.55,y:0,z:0.18},{x:-0.85,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
-    {j:'both_el', ax:'x', amp:0.4, freq:2.0}),
+    {j:'both_el', ax:'x', amp:0.4, freq:2.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'CAREFUL': sign('CAREFUL','Open-5-hands rotate forward alternately','Rotate open-5-hands forward alternately',5,
     {x:-0.70,y:0,z:-0.25},{x:-0.85,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     {x:-0.70,y:0,z:0.25},{x:-0.85,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
-    {j:'both_sh', ax:'y', amp:0.3, freq:2.0}),
+    {j:'both_sh', ax:'y', amp:0.3, freq:2.0}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'SAFE': sign('SAFE','Cup-hand slides over flat-hand','Slide cup-hand towards you over flat-hand',4,
     {x:-0.55,y:0,z:-0.35},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
     {x:-0.45,y:0,z:0.35},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    {j:'R_sh', ax:'z', amp:0.08, freq:1.5}),
+    {j:'R_sh', ax:'z', amp:0.08, freq:1.5}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
-  'MEDICINE': sign('MEDICINE','M-hand taps palm','M-handshape taps on open palm — medication',4,
-    {x:-0.65,y:0,z:-0.30},{x:-0.75,y:0,z:0},{x:0,y:0,z:0}, HS.whand,
+  'MEDICINE': sign('MEDICINE','Middle finger circles on flat palm','Middle finger extended, circles on palm of weak hand — medication (Section 11)',4,
+    {x:-0.65,y:0,z:-0.30},{x:-0.75,y:0,z:0},{x:0,y:0,z:0}, HS.mhand,
     {x:-0.45,y:0,z:0.35},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    {j:'R_sh', ax:'x', amp:0.12, freq:2.2}),
+    {j:'R_sh', ax:'y', amp:0.20, freq:2.0}, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
 
-  'HURT': sign('HURT','Hands flick open repeatedly','Flick hands open and closed — throbbing pain motion',5,
+  'HURT': sign('HURT','Hands flick open repeatedly','Flick hands open and closed — throbbing pain motion (Section 11)',5,
     {x:-0.65,y:0,z:-0.30},{x:-0.70,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
     {x:-0.65,y:0,z:0.30},{x:-0.70,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
-    {j:'both_el', ax:'z', amp:0.35, freq:3.5}),
+    {j:'both_el', ax:'z', amp:0.35, freq:3.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
-  'EMERGENCY': sign('EMERGENCY','Claw-hands at sides of head','Claw-hands twist at sides of head — emergency alert',5,
+  'EMERGENCY': sign('EMERGENCY','Claw-hands at sides of head','Claw-hands twist at sides of head — emergency alert (Section 11)',5,
     {x:-1.25,y:0,z:-0.38},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     {x:-1.25,y:0,z:0.38},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
-    {j:'both_wr', ax:'y', amp:0.7, freq:4.0}),
+    {j:'both_wr', ax:'y', amp:0.7, freq:4.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral', phases:{ prep:220, nucleus:900 } }),
+
+  // ── DISABILITY / COMMUNICATION ──────────────────────────────────
+
+  'DEAF': sign('DEAF','Index from ear to corner of mouth','Index touches near ear then moves to corner of mouth — deaf',5,
+    {x:-1.38,y:0,z:-0.06},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
+    IL.sh,IL.el,IL.wr, NL,
+    {j:'R_sh', ax:'x', amp:0.12, freq:1.0},
+    { R:{ sh:{x:-1.38,y:0,z:-0.06}, el:{x:-0.15,y:0,z:0}, wr:{x:0,y:0,z:0}, hand:HS.point1 }, L:{sh:IL.sh,el:IL.el,wr:IL.wr,hand:NL} },
+    { brow:'neutral', mouth:'neutral', head:'neutral' }),
+
+  'HEARING': sign('HEARING','Index taps near ear','Index finger taps near ear — hearing person',4,
+    {x:-1.38,y:0,z:-0.06},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
+    IL.sh,IL.el,IL.wr, NL,
+    {j:'R_sh', ax:'x', amp:0.08, freq:2.5}, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
+
+  'BLIND': sign('BLIND','V-hand at eyes moves down','V-hand in front of eyes then drops down — blind/cannot see',4,
+    {x:-1.42,y:0,z:-0.08},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
+    IL.sh,IL.el,IL.wr, NL,
+    {j:'R_sh', ax:'x', amp:0.25, freq:1.0}, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
+
+  'DISABILITY': sign('DISABILITY','D-hand sweeps forward from shoulder','D-hand at shoulder sweeps forward — disability/disabled',3,
+    {x:-0.90,y:0,z:-0.25},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.dhand,
+    IL.sh,IL.el,IL.wr, NL,
+    {j:'R_sh', ax:'y', amp:0.15, freq:1.2}, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
 
   // ── EMOTIONS & FEELINGS ─────────────────────────────────────────
 
   'HAPPY': sign('HAPPY','Y-hand twists at mouth','Twist Y-hand wrist to and fro in front of mouth',5,
     {x:-1.28,y:0,z:-0.12},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.yhand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.45, freq:2.5}),
+    {j:'R_wr', ax:'y', amp:0.45, freq:2.5}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'SAD': sign('SAD','C-fingers move down mouth','C-shape fingers move downward at mouth',5,
     {x:-1.22,y:0,z:-0.10},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.06, freq:1.0}),
+    {j:'R_sh', ax:'x', amp:0.06, freq:1.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'ANGRY': sign('ANGRY','Claw-hand rises hip to shoulder','Move claw-hand up diagonally from hip to shoulder',4,
     {x:-0.20,y:0,z:-0.40},{x:-0.30,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.5, freq:1.8}),
+    {j:'R_sh', ax:'x', amp:0.5, freq:1.8}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'SCARED': sign('SCARED','Claw-hands twist at mouth','Claw-hands in front of mouth, wrists twist quickly',4,
     {x:-1.15,y:0,z:-0.20},{x:-0.25,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     {x:-1.15,y:0,z:0.20},{x:-0.25,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
-    {j:'both_wr', ax:'y', amp:0.5, freq:4.5}),
+    {j:'both_wr', ax:'y', amp:0.5, freq:4.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'LOVE': sign('LOVE','S-hands cross over chest','Cross S-hands over chest and rock side to side',5,
     {x:-0.95,y:0,z:-0.40},{x:-0.20,y:0,z:0.35},{x:0,y:0,z:0}, HS.fist_S,
     {x:-0.95,y:0,z:0.40},{x:-0.20,y:0,z:-0.35},{x:0,y:0,z:0}, HS.fist_S,
-    {j:'both_sh', ax:'z', amp:0.10, freq:1.2}),
+    {j:'both_sh', ax:'z', amp:0.10, freq:1.2}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'I LOVE YOU': sign('I LOVE YOU','Y-hand with index extended','Extend thumb, index and pinky — combines I, L, Y',5,
     {x:-0.90,y:0,z:-0.20},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.yhand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.20, freq:1.5}),
+    {j:'R_wr', ax:'y', amp:0.20, freq:1.5}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'EXCITED': sign('EXCITED','Claw-hands alternate on chest','Move claw-hands up and down alternately on sides of chest',4,
     {x:-0.80,y:0,z:-0.40},{x:-0.30,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     {x:-0.80,y:0,z:0.40},{x:-0.30,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
-    {j:'both_sh', ax:'x', amp:0.25, freq:2.8}),
+    {j:'both_sh', ax:'x', amp:0.25, freq:2.8}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'TIRED': sign('TIRED','T-hands drop down sides','Move T-hands downward simultaneously on both sides of body',4,
     {x:-0.55,y:0,z:-0.35},{x:-0.40,y:0,z:0},{x:0,y:0,z:0}, HS.thand,
     {x:-0.55,y:0,z:0.35},{x:-0.40,y:0,z:0},{x:0,y:0,z:0}, HS.thand,
-    {j:'both_sh', ax:'x', amp:0.15, freq:1.0}),
+    {j:'both_sh', ax:'x', amp:0.15, freq:1.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'HUNGRY': sign('HUNGRY','Flat-hand rubs tummy','Rub tummy with flat-hand',5,
     {x:-0.22,y:0,z:-0.45},{x:-0.30,y:0,z:0},{x:0.10,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'y', amp:0.25, freq:2.0}),
+    {j:'R_sh', ax:'y', amp:0.25, freq:2.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'THIRSTY': sign('THIRSTY','Thumb moves down throat','Move thumb and bent index finger down throat',5,
     {x:-1.30,y:0,z:-0.08},{x:-0.18,y:0,z:0},{x:0,y:0,z:0}, HS.ghand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.08, freq:1.8}),
+    {j:'R_sh', ax:'x', amp:0.08, freq:1.8}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'WORRIED': sign('WORRIED','Claw-hand circles on chest','Circle claw-hand on chest',4,
     {x:-0.85,y:0,z:-0.45},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'y', amp:0.30, freq:1.8}),
+    {j:'R_sh', ax:'y', amp:0.30, freq:1.8}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'PROUD': sign('PROUD','Thumbs hook under armpits','Hook thumbs under armpits — push chest out proud',3,
     {x:-0.75,y:0,z:-0.80},{x:0.05,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
     {x:-0.75,y:0,z:0.80},{x:0.05,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
-    null),
+    null, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'CONFUSED': sign('CONFUSED','Claw-hand circles at head','Claw-hand makes circles at side of head',4,
     {x:-1.38,y:0,z:-0.15},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'y', amp:0.35, freq:2.2}),
+    {j:'R_sh', ax:'y', amp:0.35, freq:2.2}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   // ── QUESTION WORDS ───────────────────────────────────────────────
 
+  // WH-question NMM: furrowed brows + head tilt (Section 06 Table)
   'WHO': sign('WHO','B-hand taps chin','B-hand taps on chin twice',5,
     {x:-1.18,y:0,z:-0.10},{x:-0.12,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.08, freq:2.2}),
+    {j:'R_sh', ax:'x', amp:0.08, freq:2.2}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   'WHAT': sign('WHAT','Index finger waves at shoulder','Slightly wave index finger at side of shoulder',5,
     {x:-0.90,y:0,z:-0.20},{x:-0.35,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.30, freq:2.0}),
+    {j:'R_wr', ax:'y', amp:0.30, freq:2.0}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   'WHERE': sign('WHERE','Open-5-hands move in and out','Move open-5-hands in and out questioning',5,
     {x:-0.70,y:0,z:-0.28},{x:-0.80,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     {x:-0.70,y:0,z:0.28},{x:-0.80,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
-    {j:'both_sh', ax:'z', amp:0.20, freq:1.8}),
+    {j:'both_sh', ax:'z', amp:0.20, freq:1.8}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   'WHEN': sign('WHEN','Claw fingers gallop over jaw','Claw-hand fingers gallop over jaw line',4,
     {x:-1.15,y:0,z:-0.12},{x:-0.15,y:0,z:0},{x:0,y:0,z:0}, HS.claw,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'z', amp:0.20, freq:2.8}),
+    {j:'R_wr', ax:'z', amp:0.20, freq:2.8}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   'WHY': sign('WHY','Index crosses chest','Cross index finger over chest questioningly',5,
     {x:-0.95,y:0,z:-0.55},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
     IL.sh,IL.el,IL.wr, NL,
-    null),
+    null, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   'HOW': sign('HOW','Open-5-hand flips over','Flip open-5-hand from palm down to palm up',5,
     {x:-0.60,y:0,z:-0.25},{x:-0.75,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.8, freq:1.5}),
+    {j:'R_wr', ax:'y', amp:0.8, freq:1.5}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   'WHICH': sign('WHICH','Y-hand twists side to side','Twist Y-hand slightly from side to side',4,
     {x:-0.75,y:0,z:-0.20},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.yhand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.30, freq:1.8}),
+    {j:'R_wr', ax:'y', amp:0.30, freq:1.8}, null, { brow:'furrowed', mouth:'neutral', head:'tilt' }),
 
   // ── PRONOUNS ─────────────────────────────────────────────────────
 
@@ -819,14 +916,15 @@ const SIGN_LIBRARY = {
     {j:'R_sh', ax:'z', amp:0.35, freq:1.5}),
 
   // ── VERBS & INSTRUCTIONS — motion signs with startOverride ──────
-  // COME: hand starts extended forward, moves toward body
+  // COME: hand starts extended forward, arcs through mid-space toward body
   'COME': sign('COME','Cup-hand draws toward body','Move cup-hand towards your body — beckoning',5,
     {x:-0.65,y:0,z:-0.18},{x:-0.80,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
     IL.sh,IL.el,IL.wr, NL,
     {j:'R_el', ax:'x', amp:0.25, freq:2.0},
     // startOverride: arm more extended at sign onset
     { R: { sh:{x:-0.50,y:0,z:-0.14}, el:{x:-1.05,y:0,z:0}, wr:{x:0,y:0,z:0}, hand:HS.chand },
-      L: { sh:IL.sh, el:IL.el, wr:IL.wr, hand:NL } }),
+      L: { sh:IL.sh, el:IL.el, wr:IL.wr, hand:NL } },
+    { brow:'neutral', mouth:'neutral', head:'neutral', phases:{ arc:true } }),
 
   // GO: hand starts neutral, flicks upward and forward
   'GO': sign('GO','Flat-hand flicks up and forward','Hold flat-hand in front then flick it up',5,
@@ -856,13 +954,14 @@ const SIGN_LIBRARY = {
     IL.sh,IL.el,IL.wr, NL,
     {j:'R_wr', ax:'y', amp:0.5, freq:1.5}),
 
-  // GIVE: starts with hand held toward body, extends outward
+  // GIVE: starts with hand held toward body, arcs outward through signing space
   'GIVE': sign('GIVE','Closed hands extend forward and open','Mimic handing something over',5,
     {x:-0.65,y:0,z:-0.18},{x:-0.85,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
     IL.sh,IL.el,IL.wr, NL,
     {j:'R_sh', ax:'x', amp:0.18, freq:1.5},
     { R: { sh:{x:-0.45,y:0,z:-0.35}, el:{x:-0.50,y:0,z:0}, wr:{x:0,y:0,z:0}, hand:HS.fist_A },
-      L: { sh:IL.sh, el:IL.el, wr:IL.wr, hand:NL } }),
+      L: { sh:IL.sh, el:IL.el, wr:IL.wr, hand:NL } },
+    { brow:'neutral', mouth:'neutral', head:'neutral', phases:{ arc:true } }),
 
   'EAT': sign('EAT','Closed-5-hand to mouth','Mimic putting food in mouth',5,
     {x:-1.38,y:0,z:-0.08},{x:-0.18,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
@@ -944,34 +1043,34 @@ const SIGN_LIBRARY = {
   'LAUGH': sign('LAUGH','L-hand moves at mouth','Show big smile — move L-hand up and down at mouth',4,
     {x:-1.20,y:0,z:-0.12},{x:-0.18,y:0,z:0},{x:0,y:0,z:0}, HS.lhand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.20, freq:3.0}),
+    {j:'R_sh', ax:'x', amp:0.20, freq:3.0}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'CRY': sign('CRY','Index fingers trail down cheeks','Move index fingers down cheeks',4,
     {x:-1.30,y:0,z:-0.18},{x:-0.18,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
     {x:-1.30,y:0,z:0.18},{x:-0.18,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
-    {j:'both_sh', ax:'x', amp:0.06, freq:1.5}),
+    {j:'both_sh', ax:'x', amp:0.06, freq:1.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'HUG': sign('HUG','S-hands cross over chest twist','Cross S-hands over chest and twist body side to side',5,
     {x:-0.95,y:0,z:-0.40},{x:-0.20,y:0,z:0.35},{x:0,y:0,z:0}, HS.fist_S,
     {x:-0.95,y:0,z:0.40},{x:-0.20,y:0,z:-0.35},{x:0,y:0,z:0}, HS.fist_S,
-    {j:'both_sh', ax:'z', amp:0.08, freq:1.5}),
+    {j:'both_sh', ax:'z', amp:0.08, freq:1.5}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   // ── DESCRIPTIONS ─────────────────────────────────────────────────
 
   'GOOD': sign('GOOD','Flat-hand from chin sweeps down','Put flat-hand on chin then sweep downward and forward',5,
     {x:-1.18,y:0,z:-0.10},{x:-0.12,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.10, freq:1.5}),
+    {j:'R_sh', ax:'x', amp:0.10, freq:1.5}, null, { brow:'neutral', mouth:'mm', head:'nod' }),
 
   'BAD': sign('BAD','Flat-hand from mouth flips down','Flat-hand at mouth flips downward',5,
     {x:-1.15,y:0,z:-0.10},{x:-0.12,y:0,z:0},{x:0.30,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.5, freq:1.5}),
+    {j:'R_wr', ax:'y', amp:0.5, freq:1.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'BIG': sign('BIG','Both hands spread apart','Show something big — spread both hands apart widely',5,
     {x:-0.65,y:0,z:-0.55},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
     {x:-0.65,y:0,z:0.55},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.open5,
-    {j:'both_sh', ax:'z', amp:0.20, freq:1.3}),
+    {j:'both_sh', ax:'z', amp:0.20, freq:1.3}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'SMALL': sign('SMALL','Cup-hands close together','Bring cup-hands close together — showing small size',5,
     {x:-0.65,y:0,z:-0.28},{x:-0.70,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
@@ -981,12 +1080,12 @@ const SIGN_LIBRARY = {
   'HOT': sign('HOT','Flick index off forehead','Mimic wiping sweat off forehead — it is hot',4,
     {x:-1.45,y:0,z:-0.08},{x:-0.12,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_wr', ax:'y', amp:0.35, freq:2.0}),
+    {j:'R_wr', ax:'y', amp:0.35, freq:2.0}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'COLD': sign('COLD','A-hands shake at chest','Mimic shivering — shake A-hands in and out at chest',5,
     {x:-0.75,y:0,z:-0.38},{x:-0.35,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
     {x:-0.75,y:0,z:0.38},{x:-0.35,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
-    {j:'both_sh', ax:'z', amp:0.15, freq:5.0}),
+    {j:'both_sh', ax:'z', amp:0.15, freq:5.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'QUIET': sign('QUIET','Index on lips — shh','Put index finger on lips — quiet please',5,
     {x:-1.32,y:0,z:-0.08},{x:-0.12,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
@@ -1043,14 +1142,14 @@ const SIGN_LIBRARY = {
   'EXPENSIVE': sign('EXPENSIVE','Flat-hand moves into neck','Flat-hand moves up into neck — too expensive',4,
     {x:-0.80,y:0,z:-0.20},{x:-0.40,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:0.20, freq:1.5}),
+    {j:'R_sh', ax:'x', amp:0.20, freq:1.5}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   // ── FAMILY ───────────────────────────────────────────────────────
 
   'FAMILY': sign('FAMILY','Closed-5 circles above other closed-5','Circle closed-5-hand above other closed-5',5,
     {x:-0.75,y:0,z:-0.28},{x:-0.70,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
     {x:-0.65,y:0,z:0.28},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.chand,
-    {j:'R_sh', ax:'y', amp:0.5, freq:1.8}),
+    {j:'R_sh', ax:'y', amp:0.5, freq:1.8}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'MOM': sign('MOM','B-hand slides across chest','Show mother — B-hand slides across chest',5,
     {x:-0.90,y:0,z:-0.50},{x:-0.20,y:0,z:0},{x:0.15,y:0,z:0}, HS.flat,
@@ -1070,7 +1169,7 @@ const SIGN_LIBRARY = {
   'FRIEND': sign('FRIEND','B-hands clasp and shake','Mimic friend handshake — clasp B-hands and shake',5,
     {x:-0.68,y:0,z:-0.28},{x:-0.70,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     {x:-0.68,y:0,z:0.28},{x:-0.70,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    {j:'both_sh', ax:'x', amp:0.20, freq:2.5}),
+    {j:'both_sh', ax:'x', amp:0.20, freq:2.5}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'CHILD': sign('CHILD','Flat-hand shows height of child','Show the size of the child',4,
     {x:-0.42,y:0,z:-0.28},{x:-0.50,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
@@ -1137,7 +1236,7 @@ const SIGN_LIBRARY = {
   'RIGHTS': sign('RIGHTS','R-hand on flat palm','Show the letter R resting on flat palm',4,
     {x:-0.62,y:0,z:-0.28},{x:-0.72,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
     {x:-0.48,y:0,z:0.35},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
-    null),
+    null, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'LAW': sign('LAW','L-hand taps flat palm','L-hand taps onto flat palm',4,
     {x:-0.62,y:0,z:-0.28},{x:-0.72,y:0,z:0},{x:0,y:0,z:0}, HS.lhand,
@@ -1191,37 +1290,51 @@ const SIGN_LIBRARY = {
     {x:-0.50,y:0,z:0.28},{x:-0.65,y:0,z:0},{x:0,y:0,z:0}, HS.flat,
     {j:'both_sh', ax:'x', amp:0.15, freq:1.2}),
 
+  // ── WORLD / TIME (circular-path signs — Section 08) ───────────────
+
+  'WORLD': { ...sign('WORLD','W-hand circles around weak hand','Dominant W-hand makes horizontal circle around weak S-hand — world / global',4,
+    {x:-0.50,y:0,z:-0.30},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.whand,
+    {x:-0.50,y:0,z:0.30},{x:-0.55,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
+    null, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
+    circ: { j:'R_sh', ax1:'x', ax2:'z', amp:0.25, freq:1.5 } },
+
+  'YEAR': { ...sign('YEAR','A-hands orbit each other','Dominant A-hand makes vertical circle around weak A-hand — year / annual',4,
+    {x:-0.50,y:0,z:-0.28},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
+    {x:-0.50,y:0,z:0.28},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
+    null, null, { brow:'neutral', mouth:'neutral', head:'neutral' }),
+    circ: { j:'R_el', ax1:'x', ax2:'y', amp:0.28, freq:1.2 } },
+
   // ── GRAMMAR MARKERS (SASL aspect / modal / negation) ──────────────
 
   'FINISH': sign('FINISH','Both flat-hands sweep outward','Both flat-hands brush out from body — done / already / past',5,
     {x:-0.55,y:0,z:-0.42},{x:-0.20,y:0,z:0},{x:0.12,y:0,z:0}, HS.flat,
     {x:-0.55,y:0,z:0.42},{x:-0.20,y:0,z:0},{x:0.12,y:0,z:0}, HS.flat,
-    {j:'both_sh', ax:'z', amp:0.15, freq:1.6}),
+    {j:'both_sh', ax:'z', amp:0.15, freq:1.6}, null, { brow:'neutral', mouth:'pah', head:'neutral' }),
 
   'WILL': sign('WILL','Flat-hand sweeps forward from face','Open hand at cheek sweeps forward — future / will',4,
     {x:-1.18,y:0,z:-0.10},{x:-0.05,y:0,z:0},{x:0,y:-0.15,z:0}, HS.flat,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:-0.10, freq:1.2}),
+    {j:'R_sh', ax:'x', amp:-0.10, freq:1.2}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'NOT': sign('NOT','A-hand sweeps from chin outward','A-hand at chin sweeps forward and down — negation',5,
     {x:-1.20,y:0,z:-0.12},{x:-0.08,y:0,z:0},{x:0,y:0,z:0}, HS.fist_A,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_sh', ax:'x', amp:-0.12, freq:2.2}),
+    {j:'R_sh', ax:'x', amp:-0.12, freq:2.2}, null, { brow:'furrowed', mouth:'neutral', head:'shake' }),
 
   'CAN': sign('CAN','Both S-hands push down','Both S-hands push firmly downward — ability / can',4,
     {x:-0.52,y:0,z:-0.35},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
     {x:-0.52,y:0,z:0.35},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.fist_S,
-    {j:'both_sh', ax:'x', amp:0.15, freq:2.0}),
+    {j:'both_sh', ax:'x', amp:0.15, freq:2.0}, null, { brow:'raised', mouth:'mm', head:'neutral' }),
 
   'MUST': sign('MUST','X-hand bends downward','Right X-hand rotates firmly downward — obligation / must',4,
     {x:-0.45,y:0,z:-0.22},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.xhand,
     IL.sh,IL.el,IL.wr, NL,
-    {j:'R_el', ax:'x', amp:0.18, freq:2.0}),
+    {j:'R_el', ax:'x', amp:0.18, freq:2.0}, null, { brow:'furrowed', mouth:'neutral', head:'neutral' }),
 
   'VERY': sign('VERY','Both V-hands spread apart','V-hands separate from each other — intensifier',4,
     {x:-0.52,y:0,z:-0.35},{x:-0.28,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
     {x:-0.52,y:0,z:0.35},{x:-0.28,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
-    {j:'both_sh', ax:'z', amp:0.22, freq:1.5}),
+    {j:'both_sh', ax:'z', amp:0.22, freq:1.5}, null, { brow:'raised', mouth:'neutral', head:'neutral' }),
 
   'ALSO': sign('ALSO','Both index fingers point and align','Both index fingers tap together — also / too / and',4,
     {x:-0.52,y:0,z:-0.22},{x:-0.20,y:0,z:0},{x:0,y:0,z:0}, HS.point1,
@@ -1275,19 +1388,29 @@ const WORD_MAP = {
   'sorry': 'SORRY', 'apologies': 'SORRY', 'my bad': 'SORRY',
 
   // Medical
-  'doctor': 'DOCTOR', 'dr': 'DOCTOR', 'physician': 'DOCTOR',
+  'doctor': 'DOCTOR', 'dr': 'DOCTOR', 'physician': 'DOCTOR', 'stethoscope': 'DOCTOR',
   'nurse': 'NURSE', 'nursing': 'NURSE',
   'hospital': 'HOSPITAL', 'clinic': 'HOSPITAL', 'emergency room': 'HOSPITAL',
   'sick': 'SICK', 'ill': 'SICK', 'unwell': 'SICK', 'nauseous': 'SICK',
+  'fever': 'SICK', 'temperature': 'SICK', 'cough': 'SICK', 'coughing': 'SICK',
+  'allergy': 'SICK', 'allergic': 'SICK',
   'pain': 'PAIN', 'painful': 'PAIN', 'sore': 'PAIN', 'hurt': 'HURT', 'hurts': 'HURT', 'ache': 'PAIN',
+  'headache': 'PAIN', 'stomachache': 'PAIN', 'stomach ache': 'PAIN',
   'ambulance': 'AMBULANCE',
   'medicine': 'MEDICINE', 'medication': 'MEDICINE', 'pills': 'MEDICINE', 'tablet': 'MEDICINE',
+  'injection': 'MEDICINE', 'shot': 'MEDICINE', 'jab': 'MEDICINE', 'needle': 'MEDICINE',
   'fire': 'FIRE', 'burning': 'FIRE',
   'dangerous': 'DANGEROUS', 'danger': 'DANGEROUS', 'hazard': 'DANGEROUS',
   'careful': 'CAREFUL', 'caution': 'CAREFUL', 'watch out': 'CAREFUL',
   'safe': 'SAFE', 'safety': 'SAFE',
   'emergency': 'EMERGENCY',
   'help': 'HELP', 'assist': 'HELP', 'assistance': 'HELP',
+  // Disability / communication (new signs)
+  'deaf': 'DEAF', 'deafness': 'DEAF',
+  'blind': 'BLIND', 'blindness': 'BLIND', 'visually impaired': 'BLIND',
+  'disability': 'DISABILITY', 'disabled': 'DISABILITY', 'wheelchair': 'DISABILITY',
+  'hearing person': 'HEARING',
+  'sign language': 'SIGN', 'interpreter': 'SIGN', 'sasl': 'SIGN',
 
   // Emotions
   'happy': 'HAPPY', 'joyful': 'HAPPY', 'glad': 'HAPPY', 'joy': 'HAPPY', 'cheerful': 'HAPPY',
@@ -1396,6 +1519,9 @@ const WORD_MAP = {
   'share': 'SHARE', 'sharing': 'SHARE',
 
   // Time
+  'world': 'WORLD', 'global': 'WORLD', 'earth': 'WORLD', 'international': 'WORLD', 'worldwide': 'WORLD', 'globe': 'WORLD',
+  'year': 'YEAR', 'years': 'YEAR', 'annual': 'YEAR', 'annually': 'YEAR', 'yearly': 'YEAR',
+
   'today': 'TODAY', 'now': 'NOW', 'currently': 'NOW',
   'yesterday': 'YESTERDAY', 'last night': 'YESTERDAY', 'the other day': 'YESTERDAY',
   'tomorrow': 'TOMORROW', 'next day': 'TOMORROW',
@@ -1439,8 +1565,16 @@ const FILLER_SET = new Set([
 
 function sentenceToSigns(text) {
   if (!text) return [];
-  const result = [];
   const lower = text.toLowerCase().trim();
+
+  // FEAT-2: Check offline phrase map first (zero latency, works offline)
+  if (OFFLINE_PHRASES[lower]) {
+    return OFFLINE_PHRASES[lower]
+      .map(name => SIGN_LIBRARY[name])
+      .filter(Boolean);
+  }
+
+  const result = [];
   const words = lower
     .replace(/[^a-z0-9'\s]/g, ' ')
     .split(/\s+/)
@@ -1509,14 +1643,14 @@ function getAllSignNames() { return Object.keys(SIGN_LIBRARY); }
 
 function getSignsByCategory(category) {
   const categories = {
-    MEDICAL:      ['DOCTOR','NURSE','HOSPITAL','SICK','PAIN','AMBULANCE','MEDICINE','HURT','EMERGENCY','CAREFUL','DANGEROUS','SAFE','FIRE'],
+    MEDICAL:      ['DOCTOR','NURSE','HOSPITAL','SICK','PAIN','AMBULANCE','MEDICINE','HURT','EMERGENCY','CAREFUL','DANGEROUS','SAFE','FIRE','DEAF','HEARING','BLIND','DISABILITY'],
     GREETINGS:    ['HELLO','GOODBYE','HOW ARE YOU',"I'M FINE",'PLEASE','THANK YOU','SORRY','YES','NO'],
     EMOTIONS:     ['HAPPY','SAD','ANGRY','SCARED','LOVE','I LOVE YOU','EXCITED','TIRED','HUNGRY','THIRSTY','WORRIED','PROUD','CONFUSED'],
     QUESTIONS:    ['WHO','WHAT','WHERE','WHEN','WHY','HOW','WHICH'],
     ACTIONS:      ['HELP','WAIT','STOP','REPEAT','UNDERSTAND','COME','GO','LISTEN','LOOK','KNOW','WANT','GIVE','EAT','DRINK','SLEEP','SIT','STAND','WALK','RUN','WORK','WASH','WRITE','READ','SIGN','TELL','LAUGH','CRY','HUG','OPEN','CLOSE'],
     DESCRIPTIONS: ['GOOD','BAD','BIG','SMALL','HOT','COLD','QUIET','FAST','SLOW','WATER','NEW','OLD','VERY'],
-    GRAMMAR:      ['FINISH','WILL','NOT','CAN','MUST','ALSO','YESTERDAY','TOMORROW','TODAY','NOW','LATER'],
-    PLACES:       ['SCHOOL','HOME','HOSPITAL','CHURCH','POLICE'],
+    GRAMMAR:      ['FINISH','WILL','NOT','CAN','MUST','ALSO','YESTERDAY','TOMORROW','TODAY','NOW','LATER','YEAR'],
+    PLACES:       ['SCHOOL','HOME','HOSPITAL','CHURCH','POLICE','WORLD'],
     FAMILY:       ['FAMILY','MOM','DAD','BABY','FRIEND','CHILD','PERSON'],
     RIGHTS:       ['RIGHTS','LAW','EQUAL','SHARE','FREE'],
     TRANSPORT:    ['CAR','TAXI','BUS'],
@@ -1538,11 +1672,17 @@ function getSignsByCategory(category) {
  * the JavaScript frontend uses exactly the same mappings, preventing the
  * divergence described in ARCH-1/ARCH-2.
  */
+// FEAT-2: Offline phrase map — keyed by lowercase English phrase, value is
+// an array of SASL sign names. Pre-seeded here as a fallback; the backend
+// endpoint merges the authoritative version at startup.
+const OFFLINE_PHRASES = {}
+
 async function initFromBackend() {
   try {
-    const [wordMapRes, fillerRes] = await Promise.all([
-      fetch('http://localhost:8000/api/sasl/word-map'),
-      fetch('http://localhost:8000/api/sasl/filler-words'),
+    const [wordMapRes, fillerRes, offlineRes] = await Promise.all([
+      fetch('http://localhost:8002/api/sasl/word-map'),
+      fetch('http://localhost:8002/api/sasl/filler-words'),
+      fetch('http://localhost:8002/api/sasl/offline-phrases'),
     ]);
 
     if (wordMapRes.ok) {
@@ -1560,6 +1700,14 @@ async function initFromBackend() {
       if (Array.isArray(filler_words)) {
         FILLER_SET.clear();
         filler_words.forEach(w => FILLER_SET.add(w));
+      }
+    }
+
+    if (offlineRes.ok) {
+      const { offline_phrases } = await offlineRes.json();
+      // Merge offline phrases — used by sentenceToSigns() before any LLM call
+      if (offline_phrases && typeof offline_phrases === 'object') {
+        Object.assign(OFFLINE_PHRASES, offline_phrases);
       }
     }
   } catch (e) {
@@ -1646,7 +1794,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // Functions — math utils (exposed for custom use)
     eulerToQuat, quatToEuler, slerp, normaliseQuat,
     lerpHandShape, slerpArmPose, armToQuat,
-    Easing, applyJointLimits,
+    Easing, applyJointLimits, twoJointIK,
   };
 }
 
@@ -1659,6 +1807,6 @@ if (typeof window !== 'undefined') {
     TransitionEngine, getTransitionHint,
     eulerToQuat, quatToEuler, slerp, normaliseQuat,
     lerpHandShape, slerpArmPose, armToQuat,
-    Easing, applyJointLimits,
+    Easing, applyJointLimits, twoJointIK,
   };
 }

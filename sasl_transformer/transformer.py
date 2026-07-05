@@ -329,7 +329,36 @@ class SASLTransformer:
         Less accurate than the LLM, but works offline. Applies basic
         SASL grammar rules: drop articles, reorder time words, convert
         verbs to base form, SOV ordering.
+
+        Known PHRASE_MAP entries are returned directly to prevent grammar rules
+        from incorrectly decomposing multi-word idioms (e.g. "how are you").
         """
+        # Fast path: if the entire input is a known phrase, return it directly
+        # without applying any grammar transforms (which would corrupt idioms).
+        from backend.services.sign_maps import PHRASE_MAP
+        text_lower = english_text.strip().lower()
+        if text_lower in PHRASE_MAP:
+            signs = PHRASE_MAP[text_lower]
+            tokens = [
+                GlossToken(
+                    gloss=s,
+                    original_english=text_lower,
+                    sign_type=SignType.SIGN,
+                    in_library=False,
+                    position=i,
+                    notes="phrase map",
+                )
+                for i, s in enumerate(signs)
+            ]
+            return TranslationResponse(
+                original_english=english_text,
+                gloss_text=" ".join(signs),
+                tokens=tokens,
+                non_manual_markers=[],
+                unknown_words=[],
+                translation_notes="Direct phrase map match — grammar rules skipped.",
+            )
+
         words = english_text.lower().split()
 
         # Phase 0: Detect perfect aspect (have/has + past participle) before the

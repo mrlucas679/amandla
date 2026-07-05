@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AMANDLA — Interpreter View</title>
+  <link rel="stylesheet" href="../../styles/design-system.css" />
+  <link rel="stylesheet" href="interpreter.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header id="top-bar">
+      <div id="top-left">
+        <span class="app-name">AMANDLA</span>
+        <span class="role-badge">Interpreter View</span>
+      </div>
+      <div id="top-right">
+        <span id="conn-status" class="status-text">connecting…</span>
+        <span id="status-dot" class="dot disconnected"></span>
+      </div>
+    </header>
+
+    <!-- Turn indicator -->
+    <div id="turn-indicator" class="turn-indicator hidden"></div>
+
+    <!-- Live transcript -->
+    <main id="transcript-panel">
+      <div id="transcript-list">
+        <p id="transcript-empty" class="empty-hint">
+          Conversation will appear here as messages are exchanged.
+        </p>
+      </div>
+    </main>
+
+    <!-- Info bar -->
+    <footer id="info-bar">
+      <span class="info-text">Read-only — interpreters observe but cannot send messages.</span>
+      <span id="msg-count" class="msg-count"></span>
+    </footer>
+
+  </div>
+
+  <script defer src="interpreter.js"></script>
+</body>
+</html>

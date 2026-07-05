@@ -31,6 +31,68 @@ PHRASE_MAP = {
     "can not":      ["CAN NOT"],
     "can't":        ["CAN NOT"],
     "cannot":       ["CAN NOT"],
+    # Disability / communication (Section 11 research)
+    "hearing person": ["HEARING"],
+    "sign language":  ["SIGN"],
+    "stomach ache":   ["PAIN"],
+    # South African dialect phrases (QUAL-5)
+    "baie dankie":    ["THANK YOU"],
+    "ag shame":       ["SORRY"],
+    "just now":       ["WAIT"],
+    "now now":        ["NOW"],
+    "no ways":        ["NO"],
+    "no way":         ["NO"],
+    "for sure":       ["YES"],
+    "eish no":        ["BAD", "NO"],
+    # SA informal greetings
+    "how's it":       ["HOW ARE YOU"],
+    "howzit":         ["HOW ARE YOU"],
+    "is it":          ["YES"],
+    "sharp sharp":    ["GOOD"],
+
+    # Extended greetings / social
+    "how are you doing":   ["HOW ARE YOU"],
+    "how is it going":     ["HOW ARE YOU"],
+    "how do you do":       ["HOW ARE YOU"],
+    "nice to meet you":    ["GOOD", "MEET", "YOU"],
+    "see you later":       ["SEE", "LATER"],
+    "good afternoon":      ["GOOD", "NOW"],
+    "good evening":        ["GOOD", "NIGHT"],
+    "excuse me":           ["SORRY"],
+    "i am sorry":          ["SORRY"],
+
+    # Common needs / requests
+    "i need help":         ["I", "HELP", "WANT"],
+    "i don't understand":  ["I", "UNDERSTAND", "NOT"],
+    "i do not understand": ["I", "UNDERSTAND", "NOT"],
+    "i don't know":        ["I", "KNOW", "NOT"],
+    "i do not know":       ["I", "KNOW", "NOT"],
+    "can you help me":     ["YOU", "CAN", "HELP"],
+    "i want to go":        ["I", "GO", "WANT"],
+    "i need to go":        ["I", "GO", "MUST"],
+    "i am sick":           ["I", "SICK"],
+    "i am hungry":         ["I", "HUNGRY"],
+    "i am thirsty":        ["I", "THIRSTY"],
+    "i am tired":          ["I", "TIRED"],
+    "i am scared":         ["I", "SCARED"],
+    "i am happy":          ["I", "HAPPY"],
+    "i am sad":            ["I", "SAD"],
+    "i am fine":           ["I'M FINE"],
+    "i am okay":           ["I'M FINE"],
+
+    # Medical emergencies
+    "i am in pain":        ["I", "PAIN"],
+    "call an ambulance":   ["AMBULANCE", "CALL"],
+    "i need a doctor":     ["DOCTOR", "I", "WANT"],
+    "i need medicine":     ["MEDICINE", "I", "WANT"],
+    "call the police":     ["POLICE", "CALL"],
+    "i need water":        ["WATER", "I", "WANT"],
+    "i cannot breathe":    ["I", "SICK", "CAN NOT"],
+
+    # Rights / legal
+    "i have rights":       ["I", "RIGHTS", "HAVE"],
+    "i need an interpreter": ["INTERPRETER", "I", "WANT"],
+    "sign language interpreter": ["SIGN", "INTERPRETER"],
 }
 
 # ── Word-level mappings ──────────────────────────────────────────────
@@ -69,15 +131,27 @@ WORD_MAP = {
     # ── Medical ─────────────────────────────────────────────
     "water": "WATER",
     "pain": "PAIN", "painful": "PAIN", "sore": "PAIN", "ache": "PAIN", "aching": "PAIN",
+    "headache": "PAIN", "stomachache": "PAIN",
     "hurt": "HURT", "hurts": "HURT", "hurting": "HURT", "injured": "HURT",
     "emergency": "EMERGENCY",
     "doctor": "DOCTOR", "dr": "DOCTOR", "physician": "DOCTOR", "doc": "DOCTOR",
+    "stethoscope": "DOCTOR",
     "nurse": "NURSE", "nurses": "NURSE",
     "hospital": "HOSPITAL", "clinic": "HOSPITAL", "hospitals": "HOSPITAL",
     "sick": "SICK", "ill": "SICK", "unwell": "SICK", "nauseous": "SICK", "nausea": "SICK",
+    "fever": "SICK", "temperature": "SICK", "cough": "SICK", "coughing": "SICK",
+    "allergy": "SICK", "allergic": "SICK", "rash": "SICK",
     "medicine": "MEDICINE", "medication": "MEDICINE", "pills": "MEDICINE",
     "tablet": "MEDICINE", "tablets": "MEDICINE", "drug": "MEDICINE", "drugs": "MEDICINE",
+    "injection": "MEDICINE", "shot": "MEDICINE", "jab": "MEDICINE", "needle": "MEDICINE",
+    "prescription": "MEDICINE", "dosage": "MEDICINE", "dose": "MEDICINE",
     "ambulance": "AMBULANCE",
+    # ── Disability / communication (Section 11 research) ────
+    "deaf": "DEAF", "deafness": "DEAF",
+    "blind": "BLIND", "blindness": "BLIND", "visually impaired": "BLIND",
+    "disability": "DISABILITY", "disabled": "DISABILITY", "wheelchair": "DISABILITY",
+    "hearing person": "HEARING",
+    "sign language": "SIGN", "interpreter": "SIGN", "sasl": "SIGN",
     "fire": "FIRE", "burning": "FIRE", "flames": "FIRE",
     "dangerous": "DANGEROUS", "danger": "DANGEROUS", "hazard": "DANGEROUS",
     "careful": "CAREFUL", "caution": "CAREFUL", "watch out": "CAREFUL",
@@ -225,7 +299,12 @@ WORD_MAP = {
     "law": "LAW", "legal": "LAW", "legislation": "LAW",
     "equal": "EQUAL", "equality": "EQUAL", "fair": "EQUAL",
 
+    # ── World / Global ──────────────────────────────────────
+    "world": "WORLD", "global": "WORLD", "earth": "WORLD", "international": "WORLD",
+    "worldwide": "WORLD", "globe": "WORLD",
+
     # ── Time ────────────────────────────────────────────────
+    "year": "YEAR", "years": "YEAR", "annual": "YEAR", "annually": "YEAR", "yearly": "YEAR",
     "today": "TODAY", "now": "NOW", "currently": "NOW", "soon": "NOW",
     "morning": "MORNING",
     # Note: "afternoon" has no dedicated sign in the current library and is
@@ -233,6 +312,44 @@ WORD_MAP = {
     "evening": "NIGHT", "night": "NIGHT", "tonight": "NIGHT",
     "yesterday": "YESTERDAY",
     "tomorrow": "TOMORROW",
+
+    # ── South African English & Afrikaans dialect terms (QUAL-5) ────────
+    # Common SA informal and Afrikaans words that hearing users may type.
+    # Maps to the closest available SASL sign.
+    "lekker": "GOOD",            # Afrikaans: nice/great/enjoyable
+    "kiff": "GOOD",              # Cape slang: cool/great
+    "sharp": "GOOD",             # SA: great/okay/agreed
+    "eish": "BAD",               # SA expression of frustration/discomfort
+    "ag": "SORRY",               # Afrikaans exclamation of mild annoyance/sympathy
+    "joh": "SORRY",              # SA: expression of surprise/dismay
+    "shame": "SORRY",            # SA empathy expression ("oh shame" = poor thing)
+    "ag shame": "SORRY",         # Common combined form
+    "robot": "STOP",             # SA English: traffic light (robot = traffic light in SA)
+    "now now": "NOW",            # SA: very soon / immediately
+    "just now": "WAIT",          # SA: in a little while (ambiguous — mapped to WAIT)
+    "just": "WAIT",              # Often used in SA English for "just now" context
+    "ja": "YES",                 # Afrikaans: yes
+    "yebo": "YES",               # Zulu: yes
+    "nee": "NO",                 # Afrikaans: no
+    "hayi": "NO",                # Zulu: no
+    "aikona": "NO",              # SA slang: definitely no
+    "dankie": "THANK YOU",       # Afrikaans: thank you
+    "baie dankie": "THANK YOU",  # Afrikaans: many thanks (phrase — also in PHRASE_MAP)
+    "asseblief": "PLEASE",       # Afrikaans: please
+    "asb": "PLEASE",             # Afrikaans abbreviation: please
+    "bra": "FRIEND",             # SA slang: brother/friend
+    "bru": "FRIEND",             # Cape Town: brother/mate
+    "china": "FRIEND",           # SA slang: mate/friend
+    "oke": "PERSON",             # SA slang: guy/person
+    "ou": "PERSON",              # Afrikaans/SA: guy/bloke
+    "laaitie": "CHILD",          # SA slang: young person/child
+    "kak": "BAD",                # Afrikaans: bad/terrible (common SA usage)
+    "moeg": "TIRED",             # Afrikaans: tired/exhausted
+    "siff": "BAD",               # SA slang: disgusting/unpleasant
+    "sosatie": "FOOD",           # SA food: spiced meat skewer (fingerspell fallback better, but FOOD is closest)
+    "braai": "FOOD",             # SA barbecue — maps to FOOD (no dedicated sign)
+    "township": "HOME",          # Maps to HOME as closest residential sign
+    "rand": "MONEY",             # SA currency — already in WORD_MAP, explicit here
 
     # ── SASL Aspect / Tense Markers ─────────────────────────
     # FINISH marks a completed (past) action in SASL grammar.
@@ -256,6 +373,25 @@ WORD_MAP = {
     # ── Intensifiers / Adverbs with SASL signs ───────────────
     "very": "VERY", "really": "VERY", "extremely": "VERY",
     "also": "ALSO", "too": "ALSO", "as well": "ALSO",
+
+    # ── Body parts (Section 11 — SASL location reference) ────
+    # Fingerspell if no dedicated sign, but common ones map to PAIN (location-generic)
+    "head": "PAIN", "arm": "PAIN", "leg": "PAIN", "back": "PAIN",
+    "stomach": "PAIN", "chest": "PAIN", "eye": "LOOK", "eyes": "LOOK",
+    "ear": "LISTEN", "ears": "LISTEN",
+    "tooth": "PAIN", "teeth": "PAIN", "dental": "PAIN",
+    "hand": "HELP", "finger": "HELP",
+    "throat": "PAIN", "neck": "PAIN", "knee": "PAIN", "shoulder": "PAIN",
+    "heart": "PAIN", "lung": "SICK", "lungs": "SICK",
+
+    # ── Symptoms (Section 11 — medical vocabulary) ────────────
+    "bleeding": "HURT", "blood": "HURT",
+    "vomit": "SICK", "vomiting": "SICK", "throw up": "SICK",
+    "dizzy": "SICK", "dizziness": "SICK", "faint": "SICK",
+    "breathless": "SICK", "breathe": "SICK", "breathing": "SICK",
+    "swollen": "HURT", "swelling": "HURT",
+    "bruise": "HURT", "bruised": "HURT",
+    "unconscious": "SICK", "seizure": "EMERGENCY", "convulsion": "EMERGENCY",
 }
 
 # ── Filler words to skip (no sign equivalent) ────────────────────────
@@ -278,7 +414,8 @@ FILLER = {
     # Pronouns / determiners with no clear sign
     "it", "its", "itself", "this", "that", "these", "those",
     # Filler sounds and discourse particles
-    "um", "uh", "ah", "oh", "hmm", "like", "just",
+    "um", "uh", "ah", "oh", "hmm", "like",
+    # Note: "just" is intentionally NOT here — it maps to WAIT in WORD_MAP (SA usage)
     # Adverbs that have no direct SASL sign equivalent
     "quite", "almost", "enough", "only", "other", "same", "another", "such",
     "even", "still", "often", "usually",
@@ -325,7 +462,7 @@ def sentence_to_sign_names(text: str) -> list:
         w = words[i]
 
         # Try 3-word phrase
-        if i + 2 < len(words):
+        if i + 3 <= len(words):
             three = w + " " + words[i + 1] + " " + words[i + 2]
             if three in PHRASE_MAP:
                 result.extend(PHRASE_MAP[three])
