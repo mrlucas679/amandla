@@ -376,3 +376,8 @@ on ours. License check before every download.
   ported from `rescue/dev-2026-07` into the rules-first pipeline. Copula 'AM'
   glosses removed from the phrase data (copulas are not signed); the full file is
   flagged for SASL interpreter review (D15). 8 new tests.
+- 2026-07-05 — Latency harness landed (Phase 1 closing item): Tier 0 phrase and
+  Tier 1 rules measured every CI run (baseline: sub-millisecond for both, p95).
+  CI gates are order-of-magnitude guards (50ms/250ms) against anything heavy
+  sneaking into the deterministic hot path; Section 4 end-to-end budgets are
+  enforced at app level in Phase 2.
