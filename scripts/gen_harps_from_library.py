@@ -19,7 +19,6 @@ Usage:
 
 import argparse
 import json
-import os
 import sys
 import numpy as np
 from pathlib import Path
@@ -312,7 +311,7 @@ def main():
     class_names = [s["name"] for s in SIGNS]
     n_classes   = len(class_names)
 
-    print(f"HARPS Training from signs_library.js")
+    print("HARPS Training from signs_library.js")
     print(f"  {n_classes} SASL sign classes")
     print(f"  {args.n_per_class} sequences per class × {args.T} frames")
     print(f"  hidden_dim: {args.hidden_dim}, epochs: {args.epochs}")

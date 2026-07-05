@@ -7,13 +7,12 @@ partial runs can be resumed after interruption.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Dict
 from pathlib import Path
 import json
-import numpy as np
 
 from ..models      import MLPClassifier
-from ..train       import MLPTrainer, TrainConfigMLP, save_checkpoint
+from ..train       import MLPTrainer, TrainConfigMLP
 from ..utils       import FeatureScaler, compute_metrics, log_result
 from .pipelines    import Pipelines, PipelineConfig, make_feature_dict
 

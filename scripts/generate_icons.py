@@ -224,8 +224,8 @@ def main():
     except Exception as exc:
         # Pillow on Windows cannot write ICNS — create a placeholder note
         print(f"⚠ Could not generate .icns ({exc})")
-        print(f"  On macOS, run: iconutil -c icns icon.iconset")
-        print(f"  Or use the .png file for macOS builds.")
+        print("  On macOS, run: iconutil -c icns icon.iconset")
+        print("  Or use the .png file for macOS builds.")
         # Save a copy as fallback — electron-builder can use .png on macOS
         fallback_path = os.path.join(out_dir, "icon_macos.png")
         icon_512.save(fallback_path, "PNG")

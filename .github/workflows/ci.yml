@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "claude/**", "feature/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ── 1. Python: lint ────────────────────────────────────────────────
+  python-lint:
+    name: Python lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      # E402 = import not at top (pre-existing lazy imports in main.py)
+      # F601 = duplicate dict keys (pre-existing in word-map lookups)
+      # W292 = no newline at end of file (pre-existing in service files)
+      # E701/E702 = multiple statements on one line (established style in backend/ws and scripts)
+      # E722 = bare except (pre-existing in scripts)
+      - name: Lint backend
+        run: ruff check backend/ --select E,F,W --ignore E501,E402,F601,W292,E701,E702
+
+      - name: Lint sasl_transformer
+        run: ruff check sasl_transformer/ --select E,F,W --ignore E501,E402,W292
+
+      - name: Lint scripts and converter
+        run: ruff check scripts/ convert_signs.py --select E,F,W --ignore E501,W292,E701,E702,E722
+
+      - name: Lint tests
+        run: ruff check tests/ --select E,F,W --ignore E501,E402,W292,E701,E702
+
+  # ── 2. Python: tests ───────────────────────────────────────────────
+  python-tests:
+    name: Python tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            fastapi \
+            uvicorn \
+            "pydantic==2.10.0" \
+            pydantic-settings \
+            python-dotenv \
+            requests \
+            httpx \
+            pytest \
+            pytest-asyncio \
+            websockets \
+            numpy
+
+      - name: Run tests
+        env:
+          ANTHROPIC_API_KEY: test-key-ci
+          GEMINI_API_KEY: ""
+          OLLAMA_MODEL: amandla
+        run: pytest tests/ -v --tb=short
+
+  # ── 3. Python: import smoke test ───────────────────────────────────
+  python-imports:
+    name: Python import check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            "pydantic==2.10.0" \
+            pydantic-settings \
+            python-dotenv \
+            numpy
+
+      - name: Smoke-import all new modules
+        env:
+          ANTHROPIC_API_KEY: test-key-ci
+          GEMINI_API_KEY: ""
+        run: |
+          python -c "from sasl_transformer.models import GlossToken, TranslationRequest, TranslationResponse, SignType; print('models OK')"
+          python -c "from sasl_transformer.grammar_rules import SASL_SYSTEM_PROMPT, ARTICLES_TO_DROP; print('grammar_rules OK')"
+          python -c "from sasl_transformer.sign_library import SignLibrary; print('sign_library OK')"
+          python -c "from convert_signs import extract_all_frames, select_keyframes, build_keyframe_entry; print('convert_signs OK')"
+          python -c "import ast; ast.parse(open('scripts/record_signs.py', encoding='utf-8').read()); print('record_signs.py syntax OK')"
+          python -c "import ast; ast.parse(open('scripts/merge_sign_data.py', encoding='utf-8').read()); print('merge_sign_data.py syntax OK')"
+
+  # ── 4. JavaScript: syntax check ────────────────────────────────────
+  js-syntax:
+    name: JavaScript syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check signs_library.js
+        run: node --check signs_library.js
+
+      - name: Check avatar.js
+        run: node --check src/windows/deaf/avatar.js
+
+      - name: Check src/main.js
+        run: node --check src/main.js
+
+      - name: Check signs_library_v2.js (if present)
+        run: |
+          if [ -f signs_library_v2.js ]; then
+            node --check signs_library_v2.js
+          else
+            echo "signs_library_v2.js not present, skipping"
+          fi
+
+  # ── 5. Sign library structural check ──────────────────────────────
+  signs-library-check:
+    name: signs_library.js structural check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Write check script
+        run: |
+          cat > "$GITHUB_WORKSPACE/check_lib.js" << 'CHECKEOF'
+          const lib = require('./signs_library.js');
+
+          const required = [
+            'SIGN_LIBRARY', 'TransitionEngine', 'sentenceToSigns',
+            'signWithFrames', 'prebakeFrameQuats', 'findFrame', 'slerpBetweenFrames',
+            'lerpHandShape', 'slerpArmPose', 'armToQuat',
+            'Easing', 'HS',
+          ];
+          for (const key of required) {
+            if (!lib[key]) {
+              console.error('MISSING export: ' + key);
+              process.exit(1);
+            }
+          }
+          console.log('OK: all ' + required.length + ' exports present');
+
+          const count = Object.keys(lib.SIGN_LIBRARY).length;
+          // main consolidated the library to 130 curated signs
+          if (count < 100) {
+            console.error('Only ' + count + ' signs — expected >= 100');
+            process.exit(1);
+          }
+          console.log('OK: sign count = ' + count);
+
+          const TE = lib.TransitionEngine;
+          for (const fn of ['begin', 'tick', 'isDone']) {
+            if (typeof TE[fn] !== 'function') {
+              console.error('TransitionEngine missing: ' + fn);
+              process.exit(1);
+            }
+          }
+          console.log('OK: TransitionEngine methods present');
+
+          const makeFrame = function(t) {
+            const arm = {sh:{x:0,y:0,z:0}, el:{x:0,y:0,z:0}, wr:{x:0,y:0,z:0}, hand:null};
+            return {t: t, R: arm, L: arm};
+          };
+          const frames = [makeFrame(0.0), makeFrame(0.5), makeFrame(1.0)];
+          const result = lib.findFrame(frames, 0.75);
+          if (result.a.t !== 0.5 || result.b.t !== 1.0) {
+            console.error('findFrame(0.75) returned wrong bracket: a.t=' + result.a.t + ' b.t=' + result.b.t);
+            process.exit(1);
+          }
+          if (Math.abs(result.localT - 0.5) > 0.001) {
+            console.error('findFrame(0.75) localT=' + result.localT + ', expected 0.5');
+            process.exit(1);
+          }
+          console.log('OK: findFrame interpolation correct');
+          console.log('All checks passed.');
+          CHECKEOF
+
+      - name: Run structural check
+        run: node "$GITHUB_WORKSPACE/check_lib.js"

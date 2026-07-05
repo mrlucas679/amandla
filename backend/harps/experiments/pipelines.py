@@ -19,7 +19,6 @@ from typing import List, Optional, Tuple, Dict
 import numpy as np
 
 from ..transforms import (
-    Compose,
     PersonCentricNormalize,
     UniformFrameSample,
 )
@@ -236,6 +235,6 @@ def make_feature_dict(
             raise ValueError(f"Unknown feature set: {name!r}. Choose from {list(_dispatch)}")
         try:
             result[name] = fn(samples)
-        except ImportError as e:
+        except ImportError:
             result[name] = None  # iisignature unavailable
     return result

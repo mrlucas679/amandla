@@ -194,7 +194,7 @@ def _print_summary():
 
     size_mb = total_size / (1024 * 1024)
     print(f"\n{'=' * 60}")
-    print(f"BUILD COMPLETE")
+    print("BUILD COMPLETE")
     print(f"  Output:  {DIST_DIR}")
     print(f"  Files:   {file_count}")
     print(f"  Size:    {size_mb:.1f} MB")
@@ -209,7 +209,7 @@ def _print_summary():
         print(f"  ✗ Executable not found at {exe_path}")
 
     print(f"\nTo test:  cd dist/amandla-backend && ./{exe_name}")
-    print(f"Then:     curl http://localhost:8000/health")
+    print("Then:     curl http://localhost:8000/health")
 
 
 def main():
@@ -222,7 +222,7 @@ def main():
 
     # Build arguments
     args = _build_pyinstaller_args()
-    print(f"\n[1/4] Running PyInstaller...")
+    print("\n[1/4] Running PyInstaller...")
     print(f"  Entry point: {BOOT_SCRIPT}")
     print(f"  Hidden imports: {len(HIDDEN_IMPORTS)}")
     print(f"  Data files: {len(DATA_FILES)}")

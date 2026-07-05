@@ -19,6 +19,7 @@ import asyncio
 import json
 import sys
 import os
+import urllib.error
 import urllib.request
 
 # Ensure project root is on sys.path
@@ -337,6 +338,17 @@ def test_e2e_pipeline():
         urllib.request.urlopen("{}/health".format(BACKEND_URL), timeout=2)
     except Exception:
         pytest.skip("Backend not running on localhost:8000 -- start it first")
+    # A backend answered /health, but it may be a stale build without the
+    # session-token endpoint (e.g. an old process left on port 8000).
+    try:
+        fetch_session_secret()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            pytest.skip(
+                "Backend on localhost:8000 has no /auth/session-secret -- "
+                "an outdated process is occupying the port; restart the backend"
+            )
+        raise
     ok = asyncio.run(run_tests())
     assert ok, "E2E pipeline tests failed: {} failure(s)".format(FAIL_COUNT)
 

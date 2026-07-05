@@ -387,6 +387,18 @@ function slerpArmPose(qA, qB, t, side) {
   };
 }
 
+/**
+ * Interpolate between two keyframe objects using pre-baked quaternions.
+ * Mirrors slerpArmPose() but reads _Rq/_Lq from keyframe entries.
+ */
+function slerpBetweenFrames(frameA, frameB, t) {
+  const R = slerpArmPose(frameA._Rq, frameB._Rq, t, 'R');
+  R.hand = lerpHandShape(frameA.R.hand, frameB.R.hand, t);
+  const L = slerpArmPose(frameA._Lq, frameB._Lq, t, 'L');
+  L.hand = lerpHandShape(frameA.L.hand, frameB.L.hand, t);
+  return { R, L };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SECTION 8 — SIGN BUILDER
 // sign() is extended to store both startPose and endPose.
@@ -421,6 +433,94 @@ function sign(name, shape, desc, conf, Rsh, Rel, Rwr, Rhand, Lsh, Lel, Lwr, Lhan
   };
 }
 
+/**
+ * Pre-bake quaternions for a keyframe array in-place.
+ * Call once when creating a keyframed sign — not every frame.
+ * @param {Array} frames — array of {t, R, L} keyframe objects
+ */
+function prebakeFrameQuats(frames) {
+  for (let i = 0; i < frames.length; i++) {
+    const f = frames[i];
+    f._Rq = armToQuat(f.R);
+    f._Lq = armToQuat(f.L);
+  }
+}
+
+/**
+ * Binary-search the keyframe array for the pair bracketing t [0..1].
+ * @param {Array}  frames — keyframe array (must be sorted by t, pre-baked)
+ * @param {number} t      — normalized time [0..1]
+ * @returns {{ a, b, localT }} — adjacent frames and local blend factor
+ */
+function findFrame(frames, t) {
+  const lastIndex = frames.length - 1;
+
+  // Clamp to the ends so user data whose last frame isn't exactly t=1.0
+  // (rounding, hand-authored) never extrapolates past the pose range.
+  if (t <= frames[0].t) {
+    return { a: frames[0], b: frames[0], localT: 0 };
+  }
+  if (t >= frames[lastIndex].t) {
+    return { a: frames[lastIndex], b: frames[lastIndex], localT: 1 };
+  }
+
+  let lo = 0, hi = lastIndex;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  const a = frames[hi - 1], b = frames[hi];
+  const span = b.t - a.t;
+  const localT = span < 1e-6 ? 1.0 : Math.max(0, Math.min(1, (t - a.t) / span));
+  return { a, b, localT };
+}
+
+/**
+ * Factory for keyframed signs (real motion-capture or recorded data).
+ * The first/last frames are copied to the top-level R/L/_Rq/_Lq so
+ * the inter-sign coarticulation path in TransitionEngine continues to work.
+ *
+ * @param {string}  name
+ * @param {string}  shape      — handshape description
+ * @param {string}  desc       — human description
+ * @param {number}  conf       — confidence 1–5
+ * @param {Array}   frames     — [{t, R:{sh,el,wr,hand}, L:{sh,el,wr,hand}}, ...]
+ * @param {number}  durationMs — sign play duration in ms
+ * @param {Object}  [nmm]      — non-manual markers {browLift,browFurrow,mouthOpen,headShake,headNod}
+ */
+function signWithFrames(name, shape, desc, conf, frames, durationMs, nmm) {
+  if (!frames || frames.length < 2) {
+    throw new Error(`signWithFrames("${name}"): need at least 2 keyframes`);
+  }
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new Error(`signWithFrames("${name}"): durationMs must be a positive number, got ${durationMs}`);
+  }
+  for (const f of frames) {
+    if (!Number.isFinite(f.t) || !f.R || !f.L) {
+      throw new Error(`signWithFrames("${name}"): every frame needs numeric t and R/L poses`);
+    }
+  }
+  frames.sort((a, b) => a.t - b.t);
+  prebakeFrameQuats(frames);
+  const first = frames[0];
+  const last  = frames[frames.length - 1];
+  return {
+    name, shape, desc, conf,
+    frames,
+    duration: durationMs,
+    nmm: nmm || null,
+    // Top-level R/L = final pose (for hold display and coarticulation blending out)
+    R: last.R,
+    L: last.L,
+    // Top-level quaternions: start = first frame, end = last frame
+    _Rq: { start: first._Rq, end: last._Rq },
+    _Lq: { start: first._Lq, end: last._Lq },
+    osc: null,
+    isFingerspell: false,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SECTION 9 — THE TRANSITION ENGINE
 // Call TransitionEngine.begin() when moving to a new sign.
@@ -436,6 +536,10 @@ const TransitionEngine = {
   _easing:   Easing.easeInOutCubic,
   _done:     true,
   _onComplete: null,
+  // Keyframe playback state (used when _to.frames is present)
+  _inSignPhase:  false,
+  _signElapsed:  0,
+  _signDuration: 0,
 
   /**
    * Begin a transition from one sign to another.
@@ -460,6 +564,15 @@ const TransitionEngine = {
     this._easing = (fromSign && fromSign.isFingerspell)
       ? Easing.easeOutQuad
       : Easing.easeInOutCubic;
+
+    // Keyframe mode: if toSign has real motion data, play through its frames
+    if (toSign && toSign.frames && toSign.frames.length >= 2 && toSign.duration) {
+      this._inSignPhase  = true;
+      this._signElapsed  = 0;
+      this._signDuration = toSign.duration / 1000;  // ms → s
+    } else {
+      this._inSignPhase = false;
+    }
   },
 
   /**
@@ -475,6 +588,43 @@ const TransitionEngine = {
       return this._to ? this._buildPose(this._to, 1.0) : null;
     }
 
+    // ── KEYFRAME PATH ─────────────────────────────────────────────
+    // For keyframed destination signs: first transition from the previous
+    // sign into the destination's first keyframe, THEN play the keyframes,
+    // then mark done. (Playing frames before the transition would end at
+    // the last keyframe and SLERP backwards to the first — a visible jump.)
+    if (this._inSignPhase) {
+      this._elapsed += deltaTime;
+      const rawT = Math.min(this._elapsed / this._duration, 1.0);
+
+      // Phase 1: travel to the destination sign's first keyframe pose.
+      // No coarticulation pull here — the sign hasn't played yet, so
+      // reaching for the sign AFTER it would distort the entry path.
+      if (rawT < 1.0) {
+        return this._interpolate(this._from, this._to, this._easing(rawT));
+      }
+
+      // Phase 2: play the keyframes. Carry any overshoot from the tick
+      // that completed the transition so no time is lost mid-frame.
+      const signDelta = Math.max(this._elapsed - this._duration, 0);
+      this._elapsed = this._duration;
+      this._signElapsed += signDelta;
+
+      const signT = Math.min(this._signElapsed / this._signDuration, 1.0);
+      const { a, b, localT } = findFrame(this._to.frames, signT);
+      // localT is linear on purpose: mocap keyframe spacing already encodes
+      // acceleration; easing every segment would add artificial pulsing.
+      const pose = slerpBetweenFrames(a, b, localT);
+
+      if (signT >= 1.0) {
+        this._inSignPhase = false;
+        this._done = true;
+        if (this._onComplete) this._onComplete();
+      }
+      return pose;
+    }
+
+    // ── EXISTING SLERP PATH ────────────────────────────────────────
     this._elapsed += deltaTime;
     const rawT = Math.min(this._elapsed / this._duration, 1.0);
 
@@ -530,13 +680,19 @@ const TransitionEngine = {
    * Joint limits are applied after SLERP.
    */
   _interpolate(fromSign, toSign, t) {
+    // For keyframed signs the entry target is the FIRST keyframe's pose;
+    // top-level R/L hold the LAST frame (for hold display / transition out).
+    const toFirst = (toSign.frames && toSign.frames.length) ? toSign.frames[0] : null;
+    const toRHand = toFirst ? toFirst.R.hand : toSign.R.hand;
+    const toLHand = toFirst ? toFirst.L.hand : toSign.L.hand;
+
     // Right arm — SLERP between end pose of fromSign and start pose of toSign
     const R = slerpArmPose(fromSign._Rq.end, toSign._Rq.start, t, 'R');
-    R.hand = lerpHandShape(fromSign.R.hand, toSign.R.hand, t);
+    R.hand = lerpHandShape(fromSign.R.hand, toRHand, t);
 
     // Left arm
     const L = slerpArmPose(fromSign._Lq.end, toSign._Lq.start, t, 'L');
-    L.hand = lerpHandShape(fromSign.L.hand, toSign.L.hand, t);
+    L.hand = lerpHandShape(fromSign.L.hand, toLHand, t);
 
     return { R, L };
   },
@@ -1578,6 +1734,8 @@ if (typeof module !== 'undefined' && module.exports) {
     sentenceToSigns, fingerspell, getSign, getAllSignNames, getSignsByCategory,
     // Functions — transition engine (new in v2)
     TransitionEngine, getTransitionHint,
+    // Functions — keyframe support (new in v3)
+    signWithFrames, prebakeFrameQuats, findFrame, slerpBetweenFrames,
     // Functions — math utils (exposed for custom use)
     eulerToQuat, quatToEuler, slerp, normaliseQuat,
     lerpHandShape, slerpArmPose, armToQuat,
@@ -1591,6 +1749,7 @@ if (typeof window !== 'undefined') {
     JOINT_LIMITS, TRANSITION_HINTS,
     sentenceToSigns, fingerspell, getSign, getAllSignNames, getSignsByCategory,
     TransitionEngine, getTransitionHint,
+    signWithFrames, prebakeFrameQuats, findFrame, slerpBetweenFrames,
     eulerToQuat, quatToEuler, slerp, normaliseQuat,
     lerpHandShape, slerpArmPose, armToQuat,
     Easing, applyJointLimits,

@@ -6,7 +6,7 @@ A "spike" is any iteration where the loss increases by more than
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List
 import csv
 from pathlib import Path

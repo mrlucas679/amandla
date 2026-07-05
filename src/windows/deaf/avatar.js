@@ -758,6 +758,18 @@
     if (el) el.textContent = text || ''
   }
 
+  // Map a sign's structured NMM object (from real-data keyframes) to the
+  // string markers understood by setNMMs()
+  function buildNMMMarkers(nmm) {
+    const out = []
+    if (nmm.browLift   > 0)  out.push('raised eyebrows')
+    if (nmm.browFurrow > 0)  out.push('furrowed brows')
+    if (nmm.mouthOpen  > 0)  out.push('mouth open')
+    if (nmm.headShake)       out.push('head shake')
+    if (nmm.headNod)         out.push('head nod')
+    return out
+  }
+
   // ── START NEXT TRANSITION ─────────────────────────────────
   function startNextTransition(fromOverride) {
     const TE = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.TransitionEngine
@@ -770,6 +782,13 @@
     animState = 'transitioning'
     updateLabel(currentSign ? currentSign.name : '')
     computeHeadTarget(currentSign)
+
+    // Apply sign-level non-manual markers if the sign data includes them
+    if (currentSign && currentSign.nmm) {
+      const markers = buildNMMMarkers(currentSign.nmm)
+      const signDur = currentSign.duration ? currentSign.duration / 1000 : SIGN_HOLD
+      if (markers.length > 0) setNMMs(markers, signDur)
+    }
 
     // UX-2: Notify progress listener each time a sign begins
     currentSignIndex++

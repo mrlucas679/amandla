@@ -8,7 +8,6 @@ frames and signals when a sufficient window is ready.
 
 from __future__ import annotations
 from collections import deque
-from typing import List, Optional
 import numpy as np
 
 

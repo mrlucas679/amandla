@@ -16,7 +16,6 @@ when the checkpoint doesn't exist yet (training hasn't been run).
 """
 
 from __future__ import annotations
-import asyncio
 import json
 import logging
 import os
@@ -81,7 +80,6 @@ class HARPSSignRecognizer:
             logger.warning("HARPS checkpoint not found at %s — falling back to Ollama", _CKPT_PATH)
             return False
         try:
-            import torch
             from backend.harps.train.checkpoint import load_checkpoint
             from backend.harps.models           import MLPClassifier
             from backend.harps.utils.scaler     import FeatureScaler

@@ -64,6 +64,8 @@ async def upload_speech(
             "signs": sasl["signs"],
             "language": result.get("language", "en"),
             "confidence": result.get("confidence", 0.0),
+            "sign_coverage": sasl.get("sign_coverage", 1.0),
+            "fingerspelled_words": sasl.get("fingerspelled", []),
         }
     except HTTPException:
         raise

@@ -16,7 +16,6 @@ Each __getitem__ call returns a dict::
 """
 
 from typing import Protocol, Dict, Any, List, Tuple, Optional
-import numpy as np
 
 # Canonical sample type used throughout HARPS
 Sample = Dict[str, Any]  # {"X": np.ndarray(T,J,C), "y": int, "meta": dict}

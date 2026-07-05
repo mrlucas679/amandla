@@ -120,7 +120,7 @@ async def run_tests():
         result(
             "emergency broadcast",
             resp.get("type") == "emergency",
-            f"received back as broadcast",
+            "received back as broadcast",
         )
 
         # 7. text → signs pipeline (no deaf connected, so turn msg comes back)
@@ -173,7 +173,7 @@ async def run_tests():
     if FAIL_COUNT > 0:
         print(f"  ⚠ {FAIL_COUNT} test(s) FAILED")
     else:
-        print(f"  🎉 ALL TESTS PASSED")
+        print("  🎉 ALL TESTS PASSED")
     print(f"{'='*42}\n")
     return FAIL_COUNT == 0
 

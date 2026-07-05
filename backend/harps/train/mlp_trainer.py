@@ -8,7 +8,6 @@ Thin wrapper over Trainer that uses TrainConfigMLP defaults
 from __future__ import annotations
 from dataclasses import dataclass
 
-import numpy as np
 import torch.nn as nn
 
 from .trainer import Trainer, TrainConfig

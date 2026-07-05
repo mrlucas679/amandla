@@ -12,7 +12,7 @@ If only one hand is detected the missing hand is zeroed out.
 """
 
 from __future__ import annotations
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 import numpy as np
 
 # Number of MediaPipe landmarks per hand

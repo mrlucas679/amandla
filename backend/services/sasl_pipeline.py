@@ -214,6 +214,8 @@ async def text_to_sasl_signs(text: str, language: str | None = None) -> dict:
             return _build_result(
                 sign_names, response.gloss_text, text,
                 non_manual_markers=response.non_manual_markers or [],
+                sign_coverage=response.sign_coverage,
+                fingerspelled=response.fingerspelled_words,
             )
     except Exception as exc:
         logger.warning("[SASL] Transformer failed, falling back: %s", exc)
@@ -231,6 +233,8 @@ async def text_to_sasl_signs(text: str, language: str | None = None) -> dict:
             return _build_result(
                 rule_signs, rule_response.gloss_text, text,
                 non_manual_markers=rule_response.non_manual_markers or [],
+                sign_coverage=rule_response.sign_coverage,
+                fingerspelled=rule_response.fingerspelled_words,
             )
     except Exception as rule_err:
         logger.warning("[SASL] Rule-based fallback failed: %s", rule_err)

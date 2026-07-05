@@ -34,7 +34,6 @@ Notes:
 
 import bpy
 import os
-import math
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR  = os.path.dirname(os.path.realpath(__file__))

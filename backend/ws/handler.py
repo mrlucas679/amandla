@@ -193,6 +193,8 @@ async def _handle_text(websocket, session, session_id, msg):
         "original_input":   sasl.get("original_input"),
         "session_id":       session_id,
         "non_manual_markers": sasl.get("non_manual_markers", []),
+        "sign_coverage":      sasl.get("sign_coverage", 1.0),
+        "fingerspelled_words": sasl.get("fingerspelled", []),
     }
     await broadcast(session, websocket, out)
     await broadcast_all(session, {"type": "turn", "speaker": "hearing"})
@@ -497,6 +499,8 @@ async def _handle_speech_upload(websocket, session, session_id, msg):
                 "original_input":   sasl.get("original_input"),
                 "session_id":       session_id,
                 "non_manual_markers": sasl.get("non_manual_markers", []),
+                "sign_coverage":      sasl.get("sign_coverage", 1.0),
+                "fingerspelled_words": sasl.get("fingerspelled", []),
             }
             await broadcast(session, websocket, signs_msg)
             await broadcast_all(session, {"type": "turn", "speaker": "hearing"})

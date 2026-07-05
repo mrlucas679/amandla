@@ -9,7 +9,6 @@ Covers all code paths documented in TEST-2 of PRODUCTION_READINESS.md:
   - Edge cases (empty input, punctuation, mixed case)
 """
 
-import pytest
 import sys
 import os
 

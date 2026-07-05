@@ -10,8 +10,8 @@ Implements the exact training protocol from the HARPS paper:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Optional, List, Tuple
+from dataclasses import dataclass
+from typing import Optional, List
 import math
 
 import torch

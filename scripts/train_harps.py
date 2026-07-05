@@ -18,7 +18,6 @@ by the AMANDLA backend (HARPSSignRecognizer) on next startup.
 
 import argparse
 import json
-import os
 import sys
 import numpy as np
 from pathlib import Path
@@ -117,7 +116,7 @@ def main():
     args = parse_args()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"HARPS Training")
+    print("HARPS Training")
     print(f"  feature_set : {args.feature_set}")
     print(f"  hidden_dim  : {args.hidden_dim}")
     print(f"  epochs      : {args.epochs}")
@@ -226,7 +225,7 @@ def main():
         fig.savefig(str(OUTPUT_DIR / "convergence.png"), dpi=100)
         import matplotlib.pyplot as plt
         plt.close(fig)
-        print(f"  convergence plot saved")
+        print("  convergence plot saved")
     except Exception:
         pass
 

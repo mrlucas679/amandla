@@ -14,7 +14,6 @@ import json
 import os
 import tempfile
 import pytest
-from pathlib import Path
 
 from sasl_transformer.models import (
     GlossToken,

@@ -13,7 +13,6 @@ The primary avatar.glb is loaded by avatar.js via AvatarDriver / GLTFLoader.
 
 import bpy
 import os
-import sys
 
 # ── Paths ─────────────────────────────────────────────────────────────
 SCRIPT_DIR  = os.path.dirname(os.path.realpath(__file__))

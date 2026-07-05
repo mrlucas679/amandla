@@ -62,6 +62,10 @@ class GlossToken(BaseModel):
         default="",
         description="Optional rendering notes for the avatar",
     )
+    uncertain: bool = Field(
+        default=False,
+        description="True when the LLM is unsure this gloss exists in SASL — will fingerspell",
+    )
 
 
 class TranslationRequest(BaseModel):
@@ -133,4 +137,13 @@ class TranslationResponse(BaseModel):
     translation_notes: str = Field(
         default="",
         description="Notes about translation choices",
+    )
+    sign_coverage: float = Field(
+        default=1.0,
+        description="Fraction of tokens that have a known sign (0.0–1.0). "
+                    "Tokens below threshold will be fingerspelled.",
+    )
+    fingerspelled_words: list[str] = Field(
+        default_factory=list,
+        description="Gloss words that will be fingerspelled (not signed) due to missing signs.",
     )

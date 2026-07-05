@@ -11,7 +11,6 @@ All require iisignature. Gracefully raises ImportError on __init__ (not import).
 """
 
 from __future__ import annotations
-from typing import Optional
 import numpy as np
 
 try:

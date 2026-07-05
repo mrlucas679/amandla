@@ -16,7 +16,6 @@ instantiation (not at module import time) so the rest of the code can load.
 """
 
 from __future__ import annotations
-from typing import Optional
 import numpy as np
 
 try:
