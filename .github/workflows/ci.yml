@@ -64,6 +64,7 @@ jobs:
             pytest \
             pytest-asyncio \
             websockets \
+            python-multipart \
             numpy
 
       - name: Run tests
