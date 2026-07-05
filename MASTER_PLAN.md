@@ -362,3 +362,12 @@ on ours. License check before every download.
   `.aiassistant` blobs, 5MB wasm). These are mined feature-by-feature from the tag with
   tests during Phases 1–2, not merged wholesale. Mining checklist lives here until
   each item ships or is explicitly rejected.
+- 2026-07-05 — Phase 1 golden harness landed: 24 translation fixtures + 6
+  reconstruction fixtures, word-order-aware scorer (`tests/golden/scoring.py`), CI
+  gate (criticals must pass 100%). First run caught and fixed four real grammar bugs
+  ('need'→'NE' stemming, false FINISH from -s/-ing forms, 'walking'→'WALKE',
+  RIGHTS→RIGHT library-sign mangling) and one vocabulary hole (NEED absent from the
+  avatar — added as a review-flagged placeholder, conf 2). **Phase 3 vocabulary
+  debt (measured):** 16 transformer signs the avatar cannot play — BOOK, BUY, FEEL,
+  HE, LEARN, LIKE, LIVE, MAKE, MILK, MY, NAME, PHONE, SOUTH AFRICA, TEACH, THINK,
+  YOUR. Record real signer data for these (plus CALL, HERE) before expanding further.

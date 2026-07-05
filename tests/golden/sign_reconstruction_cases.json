@@ -1,0 +1,60 @@
+{
+  "description": "Golden deaf→hearing sign-reconstruction fixtures (MASTER_PLAN Phase 1). Scored at INTENT level against the deterministic fallback (simple_signs_to_english) — English fluency may vary, meaning may not.",
+  "review_status": "draft — awaiting SASL interpreter review (D15/D16)",
+  "cases": [
+    {
+      "id": "recon-help-001",
+      "group": "medical",
+      "priority": "critical",
+      "input_signs": ["ME", "NEED", "HELP"],
+      "expected_text_contains": ["help"],
+      "forbidden_text_contains": ["fine", "no help", "not"],
+      "notes": "Urgent help intent must survive; wording may vary."
+    },
+    {
+      "id": "recon-hungry-001",
+      "group": "daily",
+      "priority": "high",
+      "input_signs": ["ME", "HUNGRY"],
+      "expected_text_contains": ["hungry"],
+      "forbidden_text_contains": ["not"],
+      "notes": "State report."
+    },
+    {
+      "id": "recon-doctor-where-001",
+      "group": "medical",
+      "priority": "critical",
+      "input_signs": ["DOCTOR", "WHERE"],
+      "expected_text_contains": ["doctor", "where"],
+      "forbidden_text_contains": [],
+      "notes": "Location question about a doctor — both concepts must appear."
+    },
+    {
+      "id": "recon-water-001",
+      "group": "daily",
+      "priority": "high",
+      "input_signs": ["ME", "WANT", "WATER"],
+      "expected_text_contains": ["water"],
+      "forbidden_text_contains": ["no water"],
+      "notes": "Request for water. KNOWN QUIRK: fallback currently phrases WANT as 'need' — intent preserved, flagged for interpreter review."
+    },
+    {
+      "id": "recon-yes-001",
+      "group": "daily",
+      "priority": "high",
+      "input_signs": ["YES"],
+      "expected_text_contains": ["yes"],
+      "forbidden_text_contains": ["no"],
+      "notes": "Single-sign answer must never invert."
+    },
+    {
+      "id": "recon-single-help-001",
+      "group": "emergency",
+      "priority": "critical",
+      "input_signs": ["HELP"],
+      "expected_text_contains": ["help"],
+      "forbidden_text_contains": ["not", "fine"],
+      "notes": "Bare HELP is an emergency signal — must expand to a help request, never soften."
+    }
+  ]
+}

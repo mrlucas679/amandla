@@ -1374,6 +1374,15 @@ const SIGN_LIBRARY = {
     IL.sh,IL.el,IL.wr, NL,
     {j:'R_el', ax:'x', amp:0.18, freq:2.0}),
 
+  // PLACEHOLDER pending Deaf review (MASTER_PLAN D15/D16): NEED shares the
+  // downward X-hand family with MUST, signed softer/single motion. Added
+  // because NEED is the highest-frequency clinic verb and was missing from
+  // the avatar vocabulary entirely (caught by the golden fixture harness).
+  'NEED': sign('NEED','X-hand bends downward, single soft motion','Right X-hand dips downward once — need (placeholder, review required)',2,
+    {x:-0.45,y:0,z:-0.22},{x:-0.60,y:0,z:0},{x:0,y:0,z:0}, HS.xhand,
+    IL.sh,IL.el,IL.wr, NL,
+    {j:'R_el', ax:'x', amp:0.12, freq:1.2}),
+
   'VERY': sign('VERY','Both V-hands spread apart','V-hands separate from each other — intensifier',4,
     {x:-0.52,y:0,z:-0.35},{x:-0.28,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
     {x:-0.52,y:0,z:0.35},{x:-0.28,y:0,z:0},{x:0,y:0,z:0}, HS.vhand,
