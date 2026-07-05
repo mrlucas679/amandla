@@ -1,0 +1,11 @@
+iteration	metric_value	delta	delta_pct	status	description	evaluator_source	timestamp
+0	0	-	-	baseline	Initial unproven-app audit identified runtime blockers and critical protocol/UI/security risks	agent	2026-07-05T00:00:00+02:00
+1	1	1	-	kept	Created cleanup proposal, Phase 1 rescue plan, and proposed product design brief	agent	2026-07-05T00:30:00+02:00
+2	2	1	100%	kept	Created React migration plan, verification matrix, and evaluation harness plan	agent	2026-07-05T01:00:00+02:00
+3	3	1	50%	kept	Created 2026 AI model strategy and paper refresh; updated Ollama/model and evaluation plans	agent	2026-07-05T05:10:00+02:00
+4	4	1	33%	kept	Created application ability map, model decision matrix, and cloud/local deployment options; corrected runtime status	agent	2026-07-05T05:45:00+02:00
+5	5	1	25%	kept	Created model evaluation fixture spec and first benchmark runbook; linked them into the harness plan	agent	2026-07-05T06:00:00+02:00
+6	6	1	20%	kept	Updated current model recommendation to qwen3.5:4b and added objective completion audit	agent	2026-07-05T06:30:00+02:00
+7	7	1	17%	kept	Created approval-ready Phase 1 implementation plan with exact files, functions, tests, and stop conditions	agent	2026-07-05T07:00:00+02:00
+8	8	1	14%	kept	Added research README and objective traceability matrix tying original request to evidence and remaining gates	agent	2026-07-05T07:30:00+02:00
+9	9	1	13%	kept	Pivoted strategy to cloud-assisted dataset-first SASL foundation model path and downgraded small local LLMs to fallback benchmarks	agent	2026-07-05T12:45:00+02:00
