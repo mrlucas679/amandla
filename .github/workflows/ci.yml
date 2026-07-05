@@ -63,6 +63,7 @@ jobs:
             httpx \
             pytest \
             pytest-asyncio \
+            websockets \
             numpy
 
       - name: Run tests
