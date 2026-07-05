@@ -46,9 +46,9 @@ async def run_tests():
     print("\n=== AMANDLA WebSocket Handler Tests ===\n")
 
     token = _fetch_session_secret()
-    ws_uri = f"ws://localhost:8000/ws/test-handlers/hearing?token={token}"
+    ws_uri = "ws://localhost:8000/ws/test-handlers/hearing"
 
-    async with websockets.connect(ws_uri) as ws:
+    async with websockets.connect(ws_uri, subprotocols=[f"amandla-{token}"]) as ws:
         # 1. Connection test — expect status message
         raw = await asyncio.wait_for(ws.recv(), timeout=TIMEOUT_SECONDS)
         msg = json.loads(raw)

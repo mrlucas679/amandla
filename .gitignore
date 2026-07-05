@@ -49,3 +49,8 @@ desktop.ini
 tmp/
 temp/
 *.tmp
+
+# Runtime-generated SQLite data (D12 in MASTER_PLAN.md) — never track
+data/*.db
+data/*.db-shm
+data/*.db-wal

@@ -26,7 +26,7 @@ SOURCES = [
         'scale':  1.0,
     },
     {
-        'fbx':    os.path.join(ROOT_DIR, 'SASL DOCUMEENTS', 'SG ASL ADHD 1 2023-8-16 No Mesh Full.fbx'),
+        'fbx':    os.path.join(ROOT_DIR, 'docs', 'research', 'sasl-sources', 'SG ASL ADHD 1 2023-8-16 No Mesh Full.fbx'),
         'out':    'avatar_sasl.glb',      # SASL skeleton reference
         'scale':  0.01,                   # FBX cm → m
     },

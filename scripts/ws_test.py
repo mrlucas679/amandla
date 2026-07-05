@@ -14,8 +14,8 @@ def _fetch_session_secret():
 
 async def deaf_client():
     token = _fetch_session_secret()
-    uri = f"{URI_BASE}/demo/deaf?token={token}"
-    async with websockets.connect(uri) as ws:
+    uri = f"{URI_BASE}/demo/deaf"
+    async with websockets.connect(uri, subprotocols=[f"amandla-{token}"]) as ws:
         print('[Test] Deaf connected')
         try:
             async for msg in ws:
@@ -27,8 +27,8 @@ async def hearing_client():
     # wait a short moment to allow deaf to connect
     await asyncio.sleep(0.5)
     token = _fetch_session_secret()
-    uri = f"{URI_BASE}/demo/hearing?token={token}"
-    async with websockets.connect(uri) as ws:
+    uri = f"{URI_BASE}/demo/hearing"
+    async with websockets.connect(uri, subprotocols=[f"amandla-{token}"]) as ws:
         print('[Test] Hearing connected')
         payload = { 'type': 'text', 'text': 'Hello, how are you?', 'sender': 'hearing' }
         await ws.send(json.dumps(payload))

@@ -28,8 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, WebSocket
 
 # ── Logging: console + rotating file ────────────────────────────────────────
 _log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "logs")
@@ -106,13 +105,20 @@ app.include_router(health_router)
 app.include_router(speech_router)
 app.include_router(rights_router)
 
-# ── CORS — must stay ["*"] for Electron desktop apps ──────────────
-app.add_middleware(
-    CORSMiddleware,  # type: ignore[arg-type]
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ── CORS: intentionally NOT registered (D10 in MASTER_PLAN.md) ─────
+# The Electron renderer never fetches the backend directly (preload-only
+# bridge), so no browser origin needs CORS headers. Registering a wildcard
+# here would let any web page read responses from localhost:8000 —
+# including the session secret. No CORS middleware means browsers block
+# cross-origin reads by default, which is exactly what we want.
+
+# ── Session-token gate for mutating HTTP requests (D10) ────────────
+try:
+    from backend.middleware import SessionTokenMiddleware
+    app.add_middleware(SessionTokenMiddleware)
+    logger.info("Session token middleware registered")
+except Exception as _st_err:
+    logger.warning("Session token middleware not loaded: %s", _st_err)
 
 # ── Rate limiting middleware — prevents abuse of AI endpoints ─────
 try:
@@ -129,8 +135,11 @@ async def ws_endpoint(
     websocket: WebSocket,
     sessionId: str,
     role: str,
-    token: str = Query(default=""),
 ):
-    """WebSocket entry point — delegates to the handler module."""
+    """WebSocket entry point — delegates to the handler module.
+
+    Auth: subprotocol ``amandla-<secret>`` (D9 in MASTER_PLAN.md).
+    Query-string tokens are not accepted.
+    """
     from backend.ws.handler import websocket_endpoint
-    await websocket_endpoint(websocket, sessionId, role, token)
+    await websocket_endpoint(websocket, sessionId, role)

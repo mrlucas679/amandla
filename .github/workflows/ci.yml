@@ -64,6 +64,7 @@ jobs:
             pytest \
             pytest-asyncio \
             websockets \
+            python-multipart \
             numpy
 
       - name: Run tests
@@ -200,3 +201,49 @@ jobs:
 
       - name: Run structural check
         run: node "$GITHUB_WORKSPACE/check_lib.js"
+
+  # ── 6. Static forbidden-pattern gate (MASTER_PLAN Phase 0) ─────────
+  static-patterns:
+    name: Forbidden pattern check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Raw exception details in HTTP responses
+        run: |
+          ! grep -rnE 'detail=str\(e|"error": str\(e' backend/ sasl_transformer/ --include="*.py"
+
+      - name: Direct renderer backend fetches
+        run: |
+          ! grep -rnE "fetch\((\"|')http://localhost" signs_library.js src/
+
+      - name: Renderer require() (preload-only boundary)
+        run: |
+          ! grep -rn "require(" src/windows/
+
+      - name: Query-string WebSocket tokens (D9)
+        run: |
+          ! grep -rn '?token=' src/ scripts/ docs/
+
+      - name: CORS middleware must not return (D10)
+        run: |
+          ! grep -rnE 'CORSMiddleware|allow_origins' backend/ --include="*.py"
+
+      - name: load_dotenv only in entry points
+        run: |
+          ! grep -rnE '^\s*load_dotenv\(\)' backend/ sasl_transformer/ --include="*.py" \
+            | grep -v 'backend/main.py' | grep -v 'backend/boot.py'
+
+  # ── 7. Production dependency audit ─────────────────────────────────
+  npm-audit:
+    name: npm production audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Audit production dependencies (moderate+)
+        run: npm audit --omit=dev --audit-level=moderate

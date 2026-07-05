@@ -79,8 +79,12 @@ async def translate_to_sasl(request: TranslationRequest) -> TranslationResponse:
         return response
 
     except ValueError as e:
+        # Log the specifics server-side; never expose raw internals to clients
         logger.error("Translation value error: %s", e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid translation request. Please check the input text and try again.",
+        )
 
     except Exception as e:
         logger.error("Translation failed: %s", e, exc_info=True)

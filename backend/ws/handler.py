@@ -22,7 +22,7 @@ import json
 import logging
 import time as _time
 
-from fastapi import WebSocket, WebSocketDisconnect, Query
+from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.shared import (
     sessions,
@@ -44,11 +44,28 @@ logger = logging.getLogger(__name__)
 _VALID_ROLES = {"hearing", "deaf", "rights"}
 
 
+_SUBPROTOCOL_PREFIX = "amandla-"
+
+
+def _token_from_subprotocols(websocket: WebSocket) -> tuple[str, str | None]:
+    """Extract the session token from the WebSocket subprotocol offer.
+
+    D9 (MASTER_PLAN): auth travels in the Sec-WebSocket-Protocol header as
+    ``amandla-<secret>`` — never in the URL, where it would leak into logs.
+
+    Returns:
+        (token, selected_subprotocol) — empty token if no amandla-* offer.
+    """
+    for proto in websocket.scope.get("subprotocols") or []:
+        if proto.startswith(_SUBPROTOCOL_PREFIX):
+            return proto[len(_SUBPROTOCOL_PREFIX):], proto
+    return "", None
+
+
 async def websocket_endpoint(
     websocket: WebSocket,
     sessionId: str,
     role: str,
-    token: str = Query(default=""),
 ):
     """Main WebSocket endpoint for real-time communication.
 
@@ -56,9 +73,9 @@ async def websocket_endpoint(
         websocket: The WebSocket connection.
         sessionId: The session identifier shared between hearing + deaf windows.
         role:      One of 'hearing', 'deaf', or 'rights'.
-        token:     Session authentication token (query parameter).
     """
-    # ── Token validation ─────────────────────────────────────────────────
+    # ── Token validation (subprotocol only; query tokens are rejected) ───
+    token, selected_subprotocol = _token_from_subprotocols(websocket)
     if not verify_session_token(token):
         await websocket.close(code=1008, reason="Invalid or missing session token")
         logger.warning("[WS] Rejected connection — bad token session=%s role=%s", sessionId, role)
@@ -79,7 +96,9 @@ async def websocket_endpoint(
         )
         return
 
-    await websocket.accept()
+    # Echo the negotiated subprotocol — browsers abort the connection if the
+    # server does not select one of the offered protocols.
+    await websocket.accept(subprotocol=selected_subprotocol)
     logger.info("[WS] connect session=%s role=%s", sessionId, role)
 
     session = sessions.setdefault(sessionId, {"users": {}, "queue": []})

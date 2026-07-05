@@ -120,12 +120,14 @@ async def run_tests():
         print("   Start the backend first: python -m uvicorn backend.main:app --port 8000")
         return False
 
-    ws_url_hearing = "{}/{}/hearing?token={}".format(WS_BASE, SESSION_ID, token)
-    ws_url_deaf = "{}/{}/deaf?token={}".format(WS_BASE, SESSION_ID, token)
+    # D9 (MASTER_PLAN): auth travels in the WebSocket subprotocol, not the URL
+    ws_url_hearing = "{}/{}/hearing".format(WS_BASE, SESSION_ID)
+    ws_url_deaf = "{}/{}/deaf".format(WS_BASE, SESSION_ID)
+    auth_subprotocols = ["amandla-{}".format(token)]
 
     # -- Connect BOTH windows to the same session --------------
-    async with websockets.connect(ws_url_hearing) as hearing_ws, \
-               websockets.connect(ws_url_deaf) as deaf_ws:
+    async with websockets.connect(ws_url_hearing, subprotocols=auth_subprotocols) as hearing_ws, \
+               websockets.connect(ws_url_deaf, subprotocols=auth_subprotocols) as deaf_ws:
 
         # Both should receive a status message on connect
         hearing_status = await recv_until(hearing_ws, "status", timeout=5)
@@ -283,8 +285,8 @@ async def run_tests():
         print("")
         print("  Security checks:")
         try:
-            bad_role_url = "{}/{}/hacker?token={}".format(WS_BASE, SESSION_ID, token)
-            async with websockets.connect(bad_role_url) as bad_ws:
+            bad_role_url = "{}/{}/hacker".format(WS_BASE, SESSION_ID)
+            async with websockets.connect(bad_role_url, subprotocols=auth_subprotocols) as bad_ws:
                 # Should be closed immediately by backend
                 try:
                     raw = await asyncio.wait_for(bad_ws.recv(), timeout=3)
@@ -298,8 +300,8 @@ async def run_tests():
 
         # Bad token test
         try:
-            bad_token_url = "{}/bad-session/hearing?token=wrong-token".format(WS_BASE)
-            async with websockets.connect(bad_token_url) as bad_ws:
+            bad_token_url = "{}/bad-session/hearing".format(WS_BASE)
+            async with websockets.connect(bad_token_url, subprotocols=["amandla-wrong-token"]) as bad_ws:
                 try:
                     raw = await asyncio.wait_for(bad_ws.recv(), timeout=3)
                     result("15. Bad token rejected", False, "Received: {}".format(raw))

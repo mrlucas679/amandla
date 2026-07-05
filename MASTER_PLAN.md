@@ -349,3 +349,16 @@ on ours. License check before every download.
   today's keyframe-pipeline merge (PR #2), the defect-register validation (3 of 4 code
   defects already fixed; `routes.py:83` survivor scheduled in Phase 0), and the product
   rescope. All decisions in Section 2 are in force.
+- 2026-07-05 — Phase 0 executed (PR #5): rules-first pipeline + order tests (D4),
+  generic route errors, subprotocol WS auth + query-token rejection (D9), CORS removal
+  + X-Amandla-Token gate on mutating HTTP (D10), repo cleanup (D12), static-pattern and
+  npm-audit CI gates. Branch consolidation (D11): `dev` and
+  `codex/modernization-research` deleted; fully preserved as tags `rescue/dev-2026-07`
+  and `research-2026-07`. **D11 execution note:** `dev` was found to contain real
+  features absent from `main` — interpreter role window, offline phrase library
+  (`backend/data/offline_phrases.json` + pipeline step), multi-user hearing role,
+  expanded `sign_maps.py` phrase maps, vendored TalkingHead/MediaPipe assets,
+  `scripts/generate_modelfile.py` — mixed with noise (unrelated AMD dossier, duplicated
+  `.aiassistant` blobs, 5MB wasm). These are mined feature-by-feature from the tag with
+  tests during Phases 1–2, not merged wholesale. Mining checklist lives here until
+  each item ships or is explicitly rejected.
