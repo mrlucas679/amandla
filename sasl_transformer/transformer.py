@@ -398,9 +398,16 @@ class SASLTransformer:
                 question_markers.append(clean.upper())
                 continue
 
-            # Convert verbs to base form
+            # Convert verbs to base form. Only -ed forms and irregular past
+            # verbs signal past tense — stripping plural/3rd-person 's' or
+            # progressive '-ing' must NOT add a FINISH aspect marker
+            # (was: 'My chest hurts' → '... HURT FINISH').
             base = self._to_base_form(clean)
-            if base != clean:
+            if (
+                base != clean
+                and not clean.endswith("ing")  # progressives are not past tense
+                and (clean.endswith("ed") or clean in IRREGULAR_VERB_BASE_FORMS)
+            ):
                 has_past_tense = True
 
             content_words.append(base.upper())
@@ -468,23 +475,38 @@ class SASLTransformer:
         if clean in IRREGULAR_VERB_BASE_FORMS:
             return IRREGULAR_VERB_BASE_FORMS[clean]
 
+        # If the word as-typed is already a known sign, never mangle it —
+        # suffix stripping would turn the library sign RIGHTS into RIGHT
+        # (not a sign) and silently downgrade it to fingerspelling.
+        if self._sign_library.has_sign(clean.upper()):
+            return clean
+
         # Regular verb suffix stripping
         if clean.endswith("ing"):
-            # running → run (double consonant)
             stem = clean[:-3]
-            if len(stem) >= 2 and stem[-1] == stem[-2]:
+            if len(stem) < 2:
+                return clean
+            # running → run (double consonant)
+            if stem[-1] == stem[-2]:
                 return stem[:-1]
-            # driving → drive (silent e)
-            if stem and stem[-1] not in "aeiou":
+            # Prefer whichever candidate the sign library actually knows;
+            # otherwise the bare stem is the safer fingerspell (walking→walk,
+            # not 'walke'). Silent-e verbs are handled by the irregular map.
+            if self._sign_library.has_sign(stem.upper()):
+                return stem
+            if self._sign_library.has_sign((stem + "e").upper()):
                 return stem + "e"
-            return stem if stem else clean
+            return stem
 
         if clean.endswith("ed"):
             stem = clean[:-2]
-            if stem and stem[-1] == stem[-2]:
-                return stem[:-1]
-            if not stem:
+            # 'need'/'feed'/'speed' are not past tenses — the 'ed' belongs to
+            # the stem. Require a plausible stem length so we never emit
+            # fragments like 'ne' (was: 'I need help' → 'I NE HELP').
+            if len(stem) < 3 or clean.endswith("eed"):
                 return clean
+            if len(stem) >= 2 and stem[-1] == stem[-2]:
+                return stem[:-1]
             return stem
 
         if clean.endswith("ies"):

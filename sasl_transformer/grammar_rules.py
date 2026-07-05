@@ -259,6 +259,26 @@ IRREGULAR_VERB_BASE_FORMS = {
     "came": "come",
     "saw": "see",
     "seen": "see",
+    # Common silent-e progressives — suffix stripping cannot recover the 'e'
+    # (walking→walk is right, but making→mak is not), so map them explicitly.
+    # NOTE: these are progressive (-ing) forms, NOT past tense; the caller
+    # must not derive a FINISH marker from them.
+    "making": "make",
+    "taking": "take",
+    "coming": "come",
+    "having": "have",
+    "giving": "give",
+    "writing": "write",
+    "living": "live",
+    "moving": "move",
+    "using": "use",
+    "losing": "lose",
+    "choosing": "choose",
+    "driving": "drive",
+    "hoping": "hope",
+    "closing": "close",
+    "sharing": "share",
+    "leaving": "leave",
     "took": "take",
     "taken": "take",
     "gave": "give",
