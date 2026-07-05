@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AMANDLA — Sign Validator</title>
+  <style>
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2a2d3a;
+      --text:      #e8eaf6;
+      --muted:     #8892b0;
+      --accent:    #7c6af5;
+      --green:     #4caf82;
+      --yellow:    #f5c842;
+      --red:       #e55656;
+      --card-r:    8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    #progress-bar-wrap {
+      flex: 1;
+      min-width: 180px;
+      background: var(--border);
+      border-radius: 99px;
+      height: 6px;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      border-radius: 99px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    #progress-text {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .btn {
+      padding: 7px 14px;
+      border-radius: var(--card-r);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn:hover { background: var(--border); border-color: var(--accent); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: #6a5ae0; }
+
+    /* ── Category tabs ── */
+    #cat-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 12px 24px;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      scrollbar-width: none;
+    }
+    #cat-tabs::-webkit-scrollbar { display: none; }
+
+    .cat-tab {
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .cat-tab:hover { color: var(--text); border-color: var(--accent); }
+    .cat-tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* ── Stats bar ── */
+    #stats-bar {
+      display: flex;
+      gap: 20px;
+      padding: 10px 24px;
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-item span { font-weight: 700; }
+    .stat-item.green span { color: var(--green); }
+    .stat-item.yellow span { color: var(--yellow); }
+    .stat-item.red span { color: var(--red); }
+    .stat-item.muted span { color: var(--text); }
+
+    /* ── Main layout ── */
+    main {
+      flex: 1;
+      display: flex;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* ── Sign list sidebar ── */
+    #sign-list {
+      width: 220px;
+      min-width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+
+    .sign-list-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+      transition: background 0.1s;
+    }
+    .sign-list-item:hover { background: rgba(124,106,245,0.08); color: var(--text); }
+    .sign-list-item.active {
+      background: rgba(124,106,245,0.16);
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .sign-badge {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+    }
+    .sign-badge.correct { background: var(--green); }
+    .sign-badge.partial { background: var(--yellow); }
+    .sign-badge.wrong   { background: var(--red); }
+    .sign-badge.skipped { background: var(--border); }
+    .sign-badge.pending { background: var(--border); opacity: 0.4; }
+
+    /* ── Main sign card ── */
+    #sign-card {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--card-r);
+      padding: 20px;
+    }
+
+    /* Sign name + meta */
+    #sign-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    #sign-name {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    #sign-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-top: 4px;
+    }
+
+    #sign-shape {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    #sign-desc {
+      font-size: 13px;
+      color: var(--muted);
+      max-width: 500px;
+      line-height: 1.5;
+    }
+
+    #sign-conf {
+      display: flex;
+      gap: 3px;
+      padding-top: 2px;
+    }
+
+    .conf-star { font-size: 12px; }
+    .conf-star.filled { color: var(--yellow); }
+    .conf-star.empty  { color: var(--border); }
+
+    /* How to test */
+    .how-to {
+      background: rgba(124,106,245,0.06);
+      border: 1px solid rgba(124,106,245,0.2);
+      border-radius: var(--card-r);
+      padding: 14px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .how-to strong { color: var(--text); }
+    .how-to code {
+      background: rgba(124,106,245,0.15);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      background: rgba(124,106,245,0.15);
+      border: 1px solid rgba(124,106,245,0.3);
+      color: var(--accent);
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: rgba(124,106,245,0.28); }
+    .copy-btn.copied { color: var(--green); border-color: var(--green); }
+
+    /* Handshape info */
+    #handshape-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .hs-grid {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .hs-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    .hs-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .hs-value { font-size: 13px; font-weight: 700; color: var(--text); font-family: monospace; }
+
+    /* NMM section */
+    .nmm-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .nmm-chip {
+      padding: 3px 10px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .nmm-chip.active {
+      background: rgba(124,106,245,0.12);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* Rating */
+    #rating-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    #rating-btns {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .rating-btn {
+      padding: 10px 20px;
+      border-radius: var(--card-r);
+      border: 2px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rating-btn:hover { border-color: currentColor; }
+    .rating-btn.selected { color: var(--bg); }
+
+    .rating-btn[data-r="correct"]  { --rc: var(--green); }
+    .rating-btn[data-r="partial"]  { --rc: var(--yellow); }
+    .rating-btn[data-r="wrong"]    { --rc: var(--red); }
+    .rating-btn[data-r="skip"]     { --rc: var(--muted); }
+
+    .rating-btn:hover, .rating-btn.selected {
+      border-color: var(--rc);
+      color: var(--rc);
+    }
+    .rating-btn.selected {
+      background: var(--rc);
+      color: var(--bg) !important;
+    }
+
+    /* Notes */
+    #notes-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    #notes-field {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--card-r);
+      color: var(--text);
+      font-size: 13px;
+      padding: 10px 14px;
+      resize: vertical;
+      min-height: 60px;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    #notes-field:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    #notes-field::placeholder { color: var(--muted); opacity: 0.6; }
+
+    /* Navigation */
+    #nav-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+    }
+
+    #sign-counter {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* Search */
+    #search-wrap {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    #search-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 10px;
+    }
+    #search-input:focus { outline: none; border-color: var(--accent); }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--card-r);
+      padding: 10px 16px;
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* Report modal */
+    #modal-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-bg.show { display: flex; }
+    #modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--card-r);
+      padding: 24px;
+      width: 90%;
+      max-width: 620px;
+      max-height: 80vh;
+      overflow: auto;
+    }
+    #modal h2 {
+      font-size: 16px;
+      margin-bottom: 16px;
+      color: var(--accent);
+    }
+    #report-text {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 11px;
+      font-family: monospace;
+      white-space: pre;
+      overflow-x: auto;
+      max-height: 40vh;
+      color: var(--muted);
+    }
+    #modal-btns { display: flex; gap: 10px; margin-top: 14px; }
+
+    .section-divider {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 6px 16px 2px;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>AMANDLA Sign Validator</h1>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+  <span id="progress-text">Loading…</span>
+  <button class="btn" onclick="clearProgress()">Reset</button>
+  <button class="btn primary" onclick="showReport()">Export Report</button>
+</header>
+
+<div id="cat-tabs"></div>
+
+<div id="stats-bar">
+  <div class="stat-item green">✓ Correct: <span id="st-correct">0</span></div>
+  <div class="stat-item yellow">~ Partial: <span id="st-partial">0</span></div>
+  <div class="stat-item red">✗ Wrong: <span id="st-wrong">0</span></div>
+  <div class="stat-item muted">⏭ Skipped: <span id="st-skip">0</span></div>
+  <div class="stat-item muted">— Pending: <span id="st-pending">0</span></div>
+</div>
+
+<main>
+  <div id="sign-list">
+    <div id="search-wrap">
+      <input id="search-input" type="text" placeholder="Search signs…" oninput="filterList(this.value)">
+    </div>
+    <div id="list-items"></div>
+  </div>
+
+  <div id="sign-card">
+    <div id="loading-msg" style="color:var(--muted);text-align:center;padding:60px 0">
+      Loading sign library…
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<div id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div id="modal">
+    <h2>Validation Report</h2>
+    <pre id="report-text"></pre>
+    <div id="modal-btns">
+      <button class="btn primary" onclick="downloadReport()">Download JSON</button>
+      <button class="btn" onclick="copyReport()">Copy to Clipboard</button>
+      <button class="btn" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="../signs_library.js"></script>
+<script>
+// ─── State ─────────────────────────────────────────────────────────────────────
+
+const STORAGE_KEY = 'amandla_sign_validator_v1';
+
+const CATEGORIES = [
+  { id: 'ALL',          label: 'All Signs' },
+  { id: 'GREETINGS',    label: 'Greetings' },
+  { id: 'MEDICAL',      label: 'Medical' },
+  { id: 'EMOTIONS',     label: 'Emotions' },
+  { id: 'QUESTIONS',    label: 'Questions' },
+  { id: 'ACTIONS',      label: 'Actions' },
+  { id: 'DESCRIPTIONS', label: 'Descriptions' },
+  { id: 'GRAMMAR',      label: 'Grammar' },
+  { id: 'PLACES',       label: 'Places' },
+  { id: 'FAMILY',       label: 'Family' },
+  { id: 'RIGHTS',       label: 'Rights' },
+  { id: 'TRANSPORT',    label: 'Transport' },
+];
+
+let lib = null;
+let allSignNames = [];
+let currentCategory = 'ALL';
+let currentIndex = 0;
+let filteredNames = [];
+let results = {};     // { signName: { rating, notes, timestamp } }
+let searchQuery = '';
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
+
+function waitForLib() {
+  return new Promise(resolve => {
+    if (window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.SIGN_LIBRARY) { resolve(); return; }
+    const t = setInterval(() => {
+      if (window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.SIGN_LIBRARY) {
+        clearInterval(t); resolve();
+      }
+    }, 50);
+    setTimeout(() => { clearInterval(t); resolve(); }, 5000); // timeout fallback
+  });
+}
+
+async function init() {
+  await waitForLib();
+  lib = window.AMANDLA_SIGNS.SIGN_LIBRARY;
+  allSignNames = Object.keys(lib).sort();
+
+  loadSaved();
+  buildCatTabs();
+  setCategory('ALL');
+  document.getElementById('loading-msg').style.display = 'none';
+}
+
+// ─── Persistence ──────────────────────────────────────────────────────────────
+
+function loadSaved() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) results = JSON.parse(raw);
+  } catch { results = {}; }
+}
+
+function saveResults() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(results)); } catch {}
+}
+
+function clearProgress() {
+  if (!confirm('Clear all validation progress? This cannot be undone.')) return;
+  results = {};
+  saveResults();
+  renderAll();
+  showToast('Progress cleared');
+}
+
+// ─── Category / Filter ────────────────────────────────────────────────────────
+
+function buildCatTabs() {
+  const tabs = document.getElementById('cat-tabs');
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement('button');
+    btn.className = 'cat-tab' + (cat.id === 'ALL' ? ' active' : '');
+    btn.textContent = cat.label;
+    btn.onclick = () => setCategory(cat.id);
+    btn.dataset.catId = cat.id;
+    tabs.appendChild(btn);
+  });
+}
+
+function setCategory(catId) {
+  currentCategory = catId;
+  document.querySelectorAll('.cat-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.catId === catId);
+  });
+  applyFilter();
+}
+
+function filterList(q) {
+  searchQuery = q.trim().toLowerCase();
+  applyFilter();
+}
+
+function applyFilter() {
+  let names;
+
+  if (currentCategory === 'ALL') {
+    names = allSignNames;
+  } else {
+    const catSigns = window.AMANDLA_SIGNS.getSignsByCategory(currentCategory);
+    names = catSigns.map(s => s && s.name).filter(Boolean);
+    // fallback: sort to match allSignNames order
+    names = names.filter(n => allSignNames.includes(n));
+  }
+
+  if (searchQuery) {
+    names = names.filter(n =>
+      n.toLowerCase().includes(searchQuery) ||
+      (lib[n] && lib[n].desc && lib[n].desc.toLowerCase().includes(searchQuery))
+    );
+  }
+
+  filteredNames = names;
+  currentIndex = 0;
+  renderAll();
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+
+function renderAll() {
+  renderList();
+  renderCard(filteredNames[currentIndex] || allSignNames[0]);
+  updateStats();
+  updateProgress();
+}
+
+function renderList() {
+  const container = document.getElementById('list-items');
+  container.innerHTML = '';
+
+  if (filteredNames.length === 0) {
+    container.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--muted);text-align:center">No signs found</div>';
+    return;
+  }
+
+  // Group by category for visual separation when showing ALL
+  let lastCat = null;
+
+  filteredNames.forEach((name, idx) => {
+    const sign = lib[name];
+    if (!sign) return;
+
+    const r = results[name];
+    const badge = makeBadge(r && r.rating);
+
+    const item = document.createElement('div');
+    item.className = 'sign-list-item' + (idx === currentIndex ? ' active' : '');
+    item.dataset.idx = idx;
+    item.innerHTML = `${badge} <span>${name}</span>`;
+    item.onclick = () => goTo(idx);
+    container.appendChild(item);
+  });
+}
+
+function makeBadge(rating) {
+  const cls = rating || 'pending';
+  const icons = { correct: '✓', partial: '~', wrong: '✗', skip: '⏭', pending: '·' };
+  return `<span class="sign-badge ${cls}">${icons[cls] || '·'}</span>`;
+}
+
+function renderCard(signName) {
+  if (!signName || !lib[signName]) return;
+  const sign = lib[signName];
+  const r = results[signName] || {};
+  const idx = filteredNames.indexOf(signName);
+
+  const card = document.getElementById('sign-card');
+  card.innerHTML = `
+    <div class="card">
+      <div id="sign-header">
+        <div id="sign-name">${signName}</div>
+        <div id="sign-meta">
+          <div id="sign-shape">${sign.shape || '—'}</div>
+          <div id="sign-desc">${sign.desc || '—'}</div>
+          <div id="sign-conf">${confStars(sign.conf || 0)}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="how-to">
+      <strong>How to test this sign:</strong><br>
+      1. Start AMANDLA app (<code>npm start</code> in terminal)<br>
+      2. In the <strong>Hearing</strong> window, type <code>${signName}</code> and press Enter<br>
+      3. Watch the avatar in the <strong>Deaf</strong> window<br>
+      4. Compare with a SASL reference video (YouTube: search "SASL ${signName}")<br>
+      <button class="copy-btn" id="copy-name-btn" onclick="copySignName('${signName}')">📋 Copy "${signName}"</button>
+    </div>
+
+    <div class="card" id="handshape-section">
+      <h3>Sign Details</h3>
+      ${renderHandshapeGrid(sign)}
+    </div>
+
+    <div class="card" id="nmm-section">
+      <h3>Non-Manual Markers</h3>
+      ${renderNMMChips(sign.nmm)}
+    </div>
+
+    <div class="card" id="rating-section">
+      <h3>Your Rating</h3>
+      <div id="rating-btns">
+        ${['correct','partial','wrong','skip'].map(r2 => `
+          <button class="rating-btn ${r.rating === r2 ? 'selected' : ''}" data-r="${r2}" onclick="rate('${signName}', '${r2}')">
+            ${{correct:'✓', partial:'~', wrong:'✗', skip:'⏭'}[r2]}
+            ${{correct:'Correct', partial:'Needs Tweaking', wrong:'Wrong', skip:'Skip'}[r2]}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="card" id="notes-section">
+      <h3>Notes (what's wrong / what to fix)</h3>
+      <textarea id="notes-field" placeholder="e.g. Handshape should be C-hand not B-hand · Arm too low · Movement direction reversed…"
+        onblur="saveNote('${signName}', this.value)">${r.notes || ''}</textarea>
+    </div>
+
+    <div id="nav-row">
+      <button class="btn" onclick="goPrev()" ${idx <= 0 ? 'disabled' : ''}>← Prev</button>
+      <span id="sign-counter">${idx + 1} / ${filteredNames.length}</span>
+      <button class="btn" onclick="goNext()" ${idx >= filteredNames.length - 1 ? 'disabled' : ''}>Next →</button>
+    </div>
+  `;
+}
+
+function confStars(n) {
+  return [1,2,3,4,5].map(i =>
+    `<span class="conf-star ${i <= n ? 'filled' : 'empty'}">★</span>`
+  ).join('');
+}
+
+function renderHandshapeGrid(sign) {
+  const items = [];
+
+  const hands = [];
+  if (sign.R && sign.R.hand) hands.push({ label: 'Right hand', hs: sign.R.hand });
+  if (sign.L && sign.L.hand && sign.L.hand !== sign.R?.hand) hands.push({ label: 'Left hand', hs: sign.L.hand });
+
+  // Get handshape name by matching against HS presets
+  const HSlib = window.AMANDLA_SIGNS && window.AMANDLA_SIGNS.HS;
+  function hsName(hand) {
+    if (!HSlib || !hand) return 'unknown';
+    for (const [name, preset] of Object.entries(HSlib)) {
+      if (JSON.stringify(preset.i) === JSON.stringify(hand.i)) return name;
+    }
+    return 'custom';
+  }
+
+  if (sign.R) {
+    const sh = sign.R.sh || {};
+    items.push({ label: 'R shoulder (x)', value: (sh.x || 0).toFixed(2) });
+    items.push({ label: 'R elbow (x)', value: (sign.R.el && sign.R.el.x || 0).toFixed(2) });
+    items.push({ label: 'R wrist (y)', value: (sign.R.wr && sign.R.wr.y || 0).toFixed(2) });
+    items.push({ label: 'Right hand', value: hsName(sign.R.hand) });
+  }
+  if (sign.L && sign.L.sh) {
+    items.push({ label: 'L shoulder (z)', value: (sign.L.sh.z || 0).toFixed(2) });
+    items.push({ label: 'Left hand', value: hsName(sign.L.hand) });
+  }
+  if (sign.osc) {
+    items.push({ label: 'Motion', value: sign.osc.j + ' ' + sign.osc.ax });
+    items.push({ label: 'Frequency', value: sign.osc.freq + ' Hz' });
+  }
+  if (!items.length) items.push({ label: 'Type', value: 'Static pose' });
+
+  return `<div class="hs-grid">${items.map(it =>
+    `<div class="hs-box"><div class="hs-label">${it.label}</div><div class="hs-value">${it.value}</div></div>`
+  ).join('')}</div>`;
+}
+
+function renderNMMChips(nmm) {
+  if (!nmm) nmm = { brow: 'neutral', mouth: 'neutral', head: 'neutral' };
+  const chips = [
+    { label: 'Brow: ' + (nmm.brow || 'neutral'), active: nmm.brow && nmm.brow !== 'neutral' },
+    { label: 'Mouth: ' + (nmm.mouth || 'neutral'), active: nmm.mouth && nmm.mouth !== 'neutral' },
+    { label: 'Head: ' + (nmm.head || 'neutral'), active: nmm.head && nmm.head !== 'neutral' },
+  ];
+  if (nmm.phases) {
+    chips.push({ label: 'Phases: ' + JSON.stringify(nmm.phases), active: true });
+  }
+  return `<div class="nmm-chips">${chips.map(c =>
+    `<span class="nmm-chip ${c.active ? 'active' : ''}">${c.label}</span>`
+  ).join('')}</div>`;
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+
+function rate(signName, rating) {
+  if (!results[signName]) results[signName] = {};
+  results[signName].rating = rating;
+  results[signName].timestamp = new Date().toISOString();
+  saveResults();
+  updateStats();
+  updateProgress();
+  renderList();
+  // Re-render just the rating section
+  document.querySelectorAll('.rating-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.r === rating);
+  });
+  // Update badge in sidebar
+  const idx = filteredNames.indexOf(signName);
+  const items = document.querySelectorAll('.sign-list-item');
+  items.forEach(item => {
+    if (parseInt(item.dataset.idx) === idx) {
+      const badge = item.querySelector('.sign-badge');
+      if (badge) {
+        badge.className = 'sign-badge ' + rating;
+        badge.textContent = {correct:'✓', partial:'~', wrong:'✗', skip:'⏭'}[rating] || '·';
+      }
+    }
+  });
+  // Auto-advance after rating (except skip which stays)
+  if (rating !== 'skip') {
+    setTimeout(() => goNext(), 400);
+  }
+}
+
+function saveNote(signName, text) {
+  if (!results[signName]) results[signName] = {};
+  results[signName].notes = text;
+  saveResults();
+}
+
+function copySignName(name) {
+  navigator.clipboard.writeText(name).then(() => {
+    const btn = document.getElementById('copy-name-btn');
+    if (btn) { btn.classList.add('copied'); btn.textContent = '✓ Copied!'; }
+    showToast(`Copied "${name}" to clipboard`);
+    setTimeout(() => {
+      if (btn) { btn.classList.remove('copied'); btn.textContent = `📋 Copy "${name}"`; }
+    }, 2000);
+  }).catch(() => showToast('Copy failed — copy manually: ' + name));
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+
+function goTo(idx) {
+  if (idx < 0 || idx >= filteredNames.length) return;
+  // Save current notes before navigating
+  const notesEl = document.getElementById('notes-field');
+  if (notesEl && filteredNames[currentIndex]) {
+    saveNote(filteredNames[currentIndex], notesEl.value);
+  }
+  currentIndex = idx;
+  renderList();
+  renderCard(filteredNames[currentIndex]);
+  // Scroll list item into view
+  const activeItem = document.querySelector('.sign-list-item.active');
+  if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
+}
+
+function goNext() {
+  goTo(currentIndex + 1);
+}
+
+function goPrev() {
+  goTo(currentIndex - 1);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goNext(); }
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); goPrev(); }
+  if (e.key === '1') rate(filteredNames[currentIndex], 'correct');
+  if (e.key === '2') rate(filteredNames[currentIndex], 'partial');
+  if (e.key === '3') rate(filteredNames[currentIndex], 'wrong');
+  if (e.key === '4') rate(filteredNames[currentIndex], 'skip');
+  if (e.key === 'c') copySignName(filteredNames[currentIndex]);
+});
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+function updateStats() {
+  const counts = { correct: 0, partial: 0, wrong: 0, skip: 0, pending: 0 };
+  for (const name of allSignNames) {
+    const r = results[name];
+    counts[r && r.rating ? r.rating : 'pending']++;
+  }
+  document.getElementById('st-correct').textContent = counts.correct;
+  document.getElementById('st-partial').textContent = counts.partial;
+  document.getElementById('st-wrong').textContent   = counts.wrong;
+  document.getElementById('st-skip').textContent    = counts.skip;
+  document.getElementById('st-pending').textContent = counts.pending;
+}
+
+function updateProgress() {
+  const rated = Object.values(results).filter(r => r.rating && r.rating !== 'skip').length;
+  const total = allSignNames.length;
+  const pct = total > 0 ? (rated / total * 100).toFixed(0) : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = `${rated}/${total} validated (${pct}%)`;
+}
+
+// ─── Report ───────────────────────────────────────────────────────────────────
+
+function showReport() {
+  const report = buildReport();
+  document.getElementById('report-text').textContent = JSON.stringify(report, null, 2);
+  document.getElementById('modal-bg').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('show');
+}
+
+function buildReport() {
+  const now = new Date().toISOString();
+  const counts = { correct: 0, partial: 0, wrong: 0, skip: 0, pending: 0 };
+  const byStatus = { correct: [], partial: [], wrong: [], pending: [] };
+
+  for (const name of allSignNames) {
+    const r = results[name];
+    const status = (r && r.rating) ? r.rating : 'pending';
+    counts[status] = (counts[status] || 0) + 1;
+    if (status !== 'skip') byStatus[status] && byStatus[status].push({
+      sign: name,
+      notes: r && r.notes ? r.notes : '',
+      timestamp: r && r.timestamp ? r.timestamp : null,
+    });
+  }
+
+  return {
+    generated: now,
+    summary: { total: allSignNames.length, ...counts },
+    wrong_signs: byStatus.wrong,
+    partial_signs: byStatus.partial,
+    correct_signs: byStatus.correct.map(s => s.sign),
+    pending_signs: byStatus.pending.map(s => s.sign),
+    all_results: results,
+  };
+}
+
+function downloadReport() {
+  const report = buildReport();
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sasl_validation_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Report downloaded');
+}
+
+function copyReport() {
+  const text = document.getElementById('report-text').textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('Report copied'));
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+
+let _toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+
+init();
+</script>
+</body>
+</html>

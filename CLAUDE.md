@@ -121,7 +121,8 @@ If you see these mentioned in any other doc file, ignore it — those docs are s
 - Session roles are exactly: `"hearing"`, `"deaf"`, `"rights"`
 - Message types (lowercase): `text`, `speech_upload`, `signs`, `sign`, `translating`,
   `deaf_speech`, `sasl_text`, `assist_phrase`, `landmarks`, `emergency`, `status_request`,
-  `rights_analyze`, `rights_letter`, `history_request`, `history_response`, `sasl_ack`, `turn`
+  `rights_analyze`, `rights_letter`, `history_request`, `history_response`, `sasl_ack`, `turn`,
+  `speech_correct`, `speech_corrected`
 - All request/response pairs include a `request_id` field for promise resolution in preload.js
 - Broadcast messages (`signs`, `deaf_speech`, `turn`) do NOT include `request_id`
 

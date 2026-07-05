@@ -161,6 +161,20 @@ async def get_filler_words() -> dict:
     }
 
 
+@router.get("/offline-phrases")
+async def get_offline_phrases() -> dict:
+    """Return the pre-mapped offline medical/emergency phrases (FEAT-2).
+
+    Frontend (signs_library.js) fetches this at startup. When the backend
+    is unreachable, the hardcoded fallback in offline_phrases.json is used.
+
+    Returns:
+        { offline_phrases: { "phrase text": ["SIGN", ...], ... } }
+    """
+    from backend.services.sasl_pipeline import _OFFLINE_PHRASES
+    return {"offline_phrases": _OFFLINE_PHRASES}
+
+
 @router.post("/cache/clear")
 async def clear_cache(request: Request) -> dict:
     """

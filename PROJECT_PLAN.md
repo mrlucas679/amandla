@@ -1,4 +1,5 @@
 # AMANDLA — Master Investigation Report & Implementation Plan
+
 > Generated: April 1, 2026 by 5 parallel AI agents (deep codebase investigation)
 > This file is the SINGLE SOURCE OF TRUTH for what needs to be done next.
 > Source of truth for architecture: CLAUDE.md | Source of truth for security: this file
@@ -9,6 +10,7 @@
 ## Executive Summary
 
 Five specialist agents performed a full audit of the AMANDLA codebase covering:
+
 - Agent 1: SASL sign mapping & translation pipeline
 - Agent 2: Database & conversation history
 - Agent 3: Security (full OWASP Top 10)
@@ -30,6 +32,7 @@ These cause real data loss, security breaches, or broken UX **right now**.
 ---
 
 ### FIX-1: Assist-mode messages logged with empty session_id
+
 **Agent:** 2 (Database) | **Severity:** CRITICAL | **Effort:** 5 min | **Status:** DONE
 
 Every message a deaf user sends via the assist-mode phrase bank is stored in the database
@@ -37,6 +40,7 @@ with `session_id=""`, permanently orphaning it from its session. History queries
 session will never return those messages.
 
 **File:** `backend/ws/handler.py` (around line 385)
+
 ```python
 # CURRENT (broken):
 await log_message(
@@ -57,6 +61,7 @@ async def _handle_assist_phrase(session, session_id, msg):
 ---
 
 ### FIX-2: Any authenticated user can read any session's history
+
 **Agent:** 3 (Security) | **Severity:** CRITICAL | **Effort:** 10 min | **Status:** DONE
 
 The `history_request` WebSocket message accepts an arbitrary `session_id` with no ownership
@@ -64,6 +69,7 @@ check. Any authenticated client can read anyone else's conversation history (inc
 medical/legal conversations).
 
 **File:** `backend/ws/handler.py` (around line 633)
+
 ```python
 # CURRENT (broken):
 target_session = msg.get("session_id", session_id)  # User can specify any session!
@@ -82,6 +88,7 @@ if target_session != session_id and not msg.get("list_sessions"):
 ---
 
 ### FIX-3: showDetectedSign() called but never defined — ReferenceError in browser
+
 **Agent:** 4 (Frontend) | **Severity:** CRITICAL | **Effort:** 15 min | **Status:** DONE (was already implemented)
 
 `deaf.js` calls `showDetectedSign(sign, 1.0)` but the function is never defined anywhere.
@@ -107,12 +114,17 @@ function showDetectedSign(sign, confidence) {
 ---
 
 ### FIX-4: Off-by-one in sentenceToSigns() — last 3-word phrase never matched
+
 **Agent:** 1 (SASL) | **Severity:** CRITICAL | **Effort:** 5 min | **Status:** DONE
+
+**Note:** The same off-by-one existed in `backend/services/sign_maps.py:sentence_to_sign_names()`
+(Python backend) and was fixed April 7, 2026 — `if i + 2 < len(words)` → `if i + 3 <= len(words)`.
 
 When a sentence ends with a 3-word phrase, it is never matched because the loop boundary
 condition is wrong.
 
 **File:** `signs_library.js` (around line 1440)
+
 ```javascript
 // CURRENT (broken):
 if (i + 2 < words.length) {  // Misses last 3-word phrase
@@ -124,7 +136,8 @@ if (i + 3 <= words.length) {  // Correct
 ---
 
 ### FIX-5: No rate limiting on WebSocket endpoint — DoS vector
-**Agent:** 3 (Security) | **Severity:** CRITICAL | **Effort:** 30 min | **Status:** TODO
+
+**Agent:** 3 (Security) | **Severity:** CRITICAL | **Effort:** 30 min | **Status:** DONE
 
 The HTTP rate-limit middleware only covers HTTP routes. The WebSocket endpoint
 `/ws/{sessionId}/{role}` has no connection-rate limit. An attacker can open thousands
@@ -133,8 +146,10 @@ of connections per second, exhausting memory and blocking legitimate users.
 **File:** `backend/shared.py` + `backend/ws/handler.py`
 
 **Plan:**
+
 1. Add per-IP connection tracking dict to `shared.py`
 2. In `websocket_endpoint()`, before accepting connection:
+
 ```python
 MAX_WS_CONNECTIONS_PER_IP = 5
 client_ip = websocket.client.host if websocket.client else "unknown"
@@ -146,6 +161,7 @@ if not _check_ws_connection_limit(client_ip):
 ---
 
 ### FIX-6: All database exceptions silently swallowed — failures invisible
+
 **Agent:** 2 (Database) | **Severity:** HIGH | **Effort:** 10 min | **Status:** DONE
 
 Every `log_message()` call is wrapped in a bare `except Exception: pass`. If the
@@ -168,6 +184,7 @@ except Exception as e:
 ---
 
 ### FIX-7: Modelfile only lists 20 signs — Ollama cannot recognize 80+ app signs
+
 **Agent:** 5 (Performance/AI) | **Severity:** CRITICAL | **Effort:** 45 min | **Status:** DONE
 
 The `Modelfile` teaches Ollama only 20 sign names. `sign_maps.py` defines 100+ signs.
@@ -176,6 +193,7 @@ Ollama currently fails to recognize 80% of the app's signs.
 **Files:** `Modelfile`, new `scripts/generate_modelfile.py`
 
 **Plan:**
+
 1. Write `scripts/generate_modelfile.py` that reads all WORD_MAP values from `sign_maps.py`
 2. Generates a new Modelfile system prompt listing all signs with examples
 3. Rebuild model: `ollama create amandla -f Modelfile`
@@ -183,12 +201,14 @@ Ollama currently fails to recognize 80% of the app's signs.
 ---
 
 ### FIX-8: Ollama URL not validated — SSRF vulnerability
+
 **Agent:** 3 (Security) | **Severity:** CRITICAL | **Effort:** 15 min | **Status:** DONE
 
 `OLLAMA_BASE_URL` is read from `.env` without validating it points to localhost.
 A misconfigured or compromised env file can point requests to arbitrary internal services.
 
 **File:** `backend/main.py` (add after `load_dotenv()`)
+
 ```python
 from urllib.parse import urlparse
 
@@ -203,6 +223,7 @@ if _parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
 ---
 
 ### FIX-9: No max length validation on audio or text in hearing window
+
 **Agent:** 4 (Frontend) | **Severity:** HIGH | **Effort:** 20 min | **Status:** DONE
 
 Backend enforces 10 MB audio and 5000 char text limits but the frontend sends without
@@ -229,6 +250,7 @@ if (blob.size > MAX_AUDIO_BYTES) {
 ---
 
 ### FIX-10: Deaf and rights windows never disconnect WebSocket on close
+
 **Agent:** 4 (Frontend) | **Severity:** HIGH | **Effort:** 10 min | **Status:** DONE (was already implemented)
 
 `hearing.js` correctly calls `window.amandla.disconnect()` on `beforeunload`.
@@ -252,15 +274,18 @@ These cause incorrect behavior, data divergence, or significant reliability risk
 ---
 
 ### ARCH-1: Unify WORD_MAP — single source of truth
+
 **Agent:** 1 (SASL) | **Severity:** HIGH | **Effort:** 2-3 hours | **Status:** DONE
 
 `WORD_MAP` and `PHRASE_MAP` exist in both `backend/services/sign_maps.py` (Python)
 and `signs_library.js` (JavaScript) and have already diverged:
+
 - "need to" maps to MUST in backend, missing in frontend
 - "afternoon" maps to MORNING in frontend, intentionally omitted in backend
 - "would" maps to WILL in backend only
 
 **Plan:**
+
 1. Create `backend/data/word_map.json` as the canonical source
 2. Load it in `sign_maps.py` at startup
 3. Add HTTP endpoint `GET /api/sasl/word-map` that serves the JSON
@@ -270,12 +295,14 @@ and `signs_library.js` (JavaScript) and have already diverged:
 ---
 
 ### ARCH-2: Unify filler word lists
+
 **Agent:** 1 (SASL) | **Severity:** MEDIUM | **Effort:** 1-2 hours | **Status:** DONE
 
 Backend `FILLER` set has 50+ words. Frontend `signs_library.js` hardcodes ~30.
 Words like "some", "between", "about" are dropped on backend but fingerspelled on frontend.
 
 **Plan:**
+
 1. Create `backend/data/filler_words.json`
 2. Backend loads from JSON; expose via `GET /api/sasl/filler-words`
 3. Frontend fetches and uses same set in `sentenceToSigns()`
@@ -283,12 +310,14 @@ Words like "some", "between", "about" are dropped on backend but fingerspelled o
 ---
 
 ### ARCH-3: Fix modal verbs in rule-based fallback
+
 **Agent:** 1 (SASL) | **Severity:** MEDIUM | **Effort:** 1 hour | **Status:** DONE
 
 When Ollama is offline, modal verbs (`can`, `must`, `will`) are silently dropped.
 "I can help" becomes "I HELP" offline.
 
 **File:** `sasl_transformer/transformer.py` (around line 351)
+
 ```python
 MODAL_VERBS = {"can", "could", "must", "should", "will", "would", "may", "might"}
 if clean in MODAL_VERBS:
@@ -301,12 +330,14 @@ if clean in MODAL_VERBS:
 ---
 
 ### ARCH-4: Add missing composite database index
+
 **Agent:** 2 (Database) | **Severity:** MEDIUM | **Effort:** 5 min | **Status:** DONE
 
 Every session history query scans `session_id` index then sorts. Composite index
 eliminates the sort: 10-100x speedup for sessions with large histories.
 
 **File:** `backend/services/history_db.py` (in `_init_tables()`)
+
 ```sql
 CREATE INDEX IF NOT EXISTS idx_conversations_session_time
 ON conversations (session_id, timestamp DESC)
@@ -315,6 +346,7 @@ ON conversations (session_id, timestamp DESC)
 ---
 
 ### ARCH-5: Add database retention policy
+
 **Agent:** 2 (Database) | **Severity:** MEDIUM | **Effort:** 30 min | **Status:** DONE
 
 The database grows forever with no deletion mechanism. In a busy clinic it will
@@ -327,7 +359,8 @@ call it weekly from the session reaper in `backend/ws/session.py`.
 ---
 
 ### ARCH-6: Session metadata table
-**Agent:** 2 (Database) | **Severity:** LOW | **Effort:** 1 hour | **Status:** TODO
+
+**Agent:** 2 (Database) | **Severity:** LOW | **Effort:** 1 hour | **Status:** DONE
 
 No way to query session duration, roles, or message counts without scanning
 all `conversations` rows. A `sessions` table enables analytics.
@@ -345,23 +378,27 @@ CREATE TABLE IF NOT EXISTS sessions (
 ---
 
 ### ARCH-7: Session token in URL query parameter — visible in logs
+
 **Agent:** 3 (Security) | **Severity:** HIGH | **Effort:** 1-2 hours | **Status:** DONE
 
 `?token=<value>` appears in server access logs, reverse proxy logs, and browser history.
 Move to `Sec-WebSocket-Protocol` header or custom handshake header.
 
 **Plan:**
+
 1. In `src/preload/preload.js`: pass token as custom WS header
 2. In `backend/ws/handler.py`: read from header instead of query param
 
 ---
 
 ### ARCH-8: Validate and whitelist incident_type field
+
 **Agent:** 3 (Security) | **Severity:** MEDIUM | **Effort:** 15 min | **Status:** DONE
 
 `incident_type` is user-controlled with no whitelist, enabling prompt injection into Ollama.
 
 **File:** `backend/ws/handler.py` (around line 555)
+
 ```python
 VALID_INCIDENT_TYPES = {"workplace", "hospital", "school", "public", "other"}
 incident_type = sanitise_text(msg.get("incident_type", "workplace"))
@@ -372,6 +409,7 @@ if incident_type not in VALID_INCIDENT_TYPES:
 ---
 
 ### ARCH-9: Startup fail-fast if critical services unavailable
+
 **Agent:** 3 (Security) | **Severity:** MEDIUM | **Effort:** 30 min | **Status:** DONE
 
 If database or Ollama pool fail to initialize, the server still starts, silently
@@ -387,6 +425,7 @@ accepts connections, then fails per-request. Should fail immediately with a clea
 ---
 
 ### QUAL-1: Add translation caching
+
 **Agent:** 5 (Performance) | **Severity:** HIGH | **Effort:** 1-2 hours | **Status:** DONE
 
 Every `classify_text_to_signs()` and `text_to_sasl_signs()` call makes a fresh Ollama
@@ -409,7 +448,8 @@ def _cached_classify(text: str) -> tuple:
 ---
 
 ### QUAL-2: Update Modelfile with full sign inventory
-**Agents:** 1 & 5 | **Severity:** CRITICAL | **Effort:** 45 min | **Status:** TODO
+
+**Agents:** 1 & 5 | **Severity:** CRITICAL | **Effort:** 45 min | **Status:** DONE (script at scripts/generate_modelfile.py — run: python scripts/generate_modelfile.py && ollama create amandla -f Modelfile)
 
 (Also FIX-7 in Phase 1 — highest priority)
 
@@ -419,6 +459,7 @@ and auto-generate the Modelfile system prompt, then rebuild with `ollama create 
 ---
 
 ### QUAL-3: Fix FINISH/WILL markers for perfect aspect
+
 **Agent:** 1 (SASL) | **Severity:** MEDIUM | **Effort:** 1 hour | **Status:** DONE
 
 "I have eaten" produces "EAT I" (no FINISH marker) because "have + past participle"
@@ -429,6 +470,7 @@ pattern is not detected in the rule-based fallback.
 ---
 
 ### QUAL-4: Add yes/no question marker in rule-based fallback
+
 **Agent:** 1 (SASL) | **Severity:** MEDIUM | **Effort:** 1 hour | **Status:** DONE
 
 "Are you happy?" produces "YOU HAPPY" with no question indicator.
@@ -440,9 +482,11 @@ SASL requires raised-eyebrow non-manual marker for yes/no questions.
 ---
 
 ### QUAL-5: South African English dialect extensions
-**Agent:** 1 (SASL) | **Severity:** LOW | **Effort:** 4-6 hours | **Status:** TODO
+
+**Agent:** 1 (SASL) | **Severity:** LOW | **Effort:** 4-6 hours | **Status:** DONE
 
 Common SA English terms have no sign mapping:
+
 - "robot" (traffic light), "just now" (later), "lekker" (nice), "shame" (empathy)
 
 **Plan:** Create `backend/data/sa_english_extensions.json` and merge at startup.
@@ -454,26 +498,27 @@ Common SA English terms have no sign mapping:
 ---
 
 ### HARPS-1: Current model trained on synthetic data — unusable in production
-**Agent:** 5 (Performance) | **Severity:** CRITICAL | **Status:** TODO
+
+**Agent:** 5 (Performance) | **Severity:** CRITICAL | **Status:** DONE (Option A applied)
 
 The `model.pth` was trained with `--demo` flag on 21 generic synthetic classes
 (`SIGN_00` through `SIGN_20`). Real-world accuracy: ~0%.
 
-**Decision required — pick one:**
-1. **Remove HARPS from real-time path** — rely on quick-sign buttons + typed SASL gloss (1 hour)
-2. **Collect real training data** — film 200+ video clips per sign with deaf signers, retrain (3-6 months)
-3. **Hand geometry heuristics** for 20 most common signs as stopgap (2-3 weeks)
-
-**Recommendation:** Option 1 now, Option 2 as a funded project phase with community partnership.
+**Applied:** Option A — HARPS ML tier removed from `_handle_landmarks()` in `handler.py`.
+Landmark frames now go directly to Ollama. The `harps_recognizers` dict and all cleanup
+code removed from `handler.py` and `shared.py`.
+Option B (real training data) remains open as a future funded community project.
 
 ---
 
 ### HARPS-2: Session expiry too short for medical appointments
+
 **Agent:** 5 | **Severity:** MEDIUM | **Effort:** 5 min | **Status:** DONE
 
 30-minute expiry cuts off mid-appointment. Medical appointments run 45-90 min.
 
 **File:** `backend/shared.py`
+
 ```python
 SESSION_EXPIRY_S: int = int(os.getenv("SESSION_EXPIRY_S", "3600"))  # 1 hour default
 ```
@@ -481,12 +526,14 @@ SESSION_EXPIRY_S: int = int(os.getenv("SESSION_EXPIRY_S", "3600"))  # 1 hour def
 ---
 
 ### HARPS-3: Emergency messages exempt from rate limiting
+
 **Agent:** 5 | **Severity:** MEDIUM | **Effort:** 15 min | **Status:** DONE
 
 Emergency phrases can be rate-limited if user taps rapidly in distress. Emergency
 messages must never be throttled.
 
 **File:** `backend/shared.py`
+
 ```python
 RATE_LIMIT_EXEMPT_TYPES = {"emergency", "assist_phrase"}
 
@@ -502,40 +549,34 @@ def check_rate_limit(session_id: str, msg_type: str) -> bool:
 
 Implement after Phases 1-3 are complete.
 
-| # | Feature | Impact | Effort |
-|---|---------|--------|--------|
-| 1 | Conversation export (PDF/text) | HIGH — medical/legal record | 3-4h |
-| 2 | Offline phrase library (50 medical phrases, no Ollama) | VERY HIGH — rural clinics | 1 week |
-| 3 | Real-time character counter on text input | LOW | 30 min |
-| 4 | MediaPipe hand recognition (after HARPS-1 decision) | MEDIUM | 2-3 weeks |
-| 5 | Interpreter role (3rd participant) | HIGH — government/hospital | 1 week |
-| 6 | Adjustable avatar signing speed | LOW — learners | 2h |
-| 7 | Android mobile app (React Native) | CRITICAL FOR SCALE | 3-6 months |
-| 8 | Multi-user session (multiple hearing staff) | MEDIUM | 1 week |
-| 9 | Search conversation history | MEDIUM | 3-4h |
-| 10 | Avatar appearance customization | LOW — representation | 1-2 weeks |
+
+| #  | Feature                                                | Impact                       | Effort     | Status |
+| -- | ------------------------------------------------------ | ---------------------------- | ---------- | ------ |
+| 1  | Conversation export (PDF/text)                         | HIGH — medical/legal record | 3-4h       | DONE   |
+| 2  | Offline phrase library (50 medical phrases, no Ollama) | VERY HIGH — rural clinics   | 1 week     | DONE   |
+| 3  | Real-time character counter on text input              | LOW                          | 30 min     | DONE   |
+| 4  | MediaPipe hand recognition (after HARPS-1 decision)    | MEDIUM                       | 2-3 weeks  | TODO   |
+| 5  | Interpreter role (3rd participant)                     | HIGH — government/hospital  | 1 week     | DONE   |
+| 6  | Adjustable avatar signing speed                        | LOW — learners              | 2h         | DONE   |
+| 7  | Android mobile app (React Native)                      | CRITICAL FOR SCALE           | 3-6 months | TODO   |
+| 8  | Multi-user session (multiple hearing staff)            | MEDIUM                       | 1 week     | DONE   |
+| 9  | Search conversation history                            | MEDIUM                       | 3-4h       | DONE   |
+| 10 | Avatar appearance customization                        | LOW — representation        | 1-2 weeks  | DONE   |
 
 ---
 
 ## Sprint Plan
 
 ### Sprint 1 — This Week (All Critical Bugs ~2.5 hours total)
-| Fix | File | Time |
-|-----|------|------|
-| FIX-1: Assist-mode empty session_id | ws/handler.py | 5 min |
-| FIX-2: History query access control | ws/handler.py | 10 min |
-| FIX-3: showDetectedSign() undefined | deaf.js | 15 min |
-| FIX-4: Off-by-one in sentenceToSigns() | signs_library.js | 5 min |
-| FIX-6: Log DB exceptions | handler.py + sign_reconstruction.py | 10 min |
-| FIX-7: Modelfile full sign inventory | Modelfile + new script | 45 min |
-| FIX-8: SSRF Ollama URL validation | main.py | 15 min |
-| FIX-9: Audio/text size validation | hearing.js | 20 min |
-| FIX-10: Deaf/rights disconnect on close | deaf.js + rights.js | 10 min |
+
+
 
 ### Sprint 2 — Next Week (~12-15 hours)
+
 ARCH-1 through ARCH-9, QUAL-1 through QUAL-4, HARPS-2, HARPS-3
 
 ### Sprint 3 — Following Week
+
 FIX-5 (WS rate limiting), ARCH-6 (session metadata), QUAL-5 (SA dialect words),
 FEAT-1 (export), FEAT-2 (offline phrases)
 

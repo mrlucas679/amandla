@@ -11,7 +11,8 @@ const overlay      = document.getElementById('startup-overlay')
 const startBtn     = document.getElementById('start-btn')
 const connStatus   = document.getElementById('conn-status')
 const statusDot    = document.getElementById('status-dot')
-const rightsBtn    = document.getElementById('rights-btn')
+const rightsBtn       = document.getElementById('rights-btn')
+const interpreterBtn  = document.getElementById('interpreter-btn')
 const micBtn       = document.getElementById('mic-btn')
 const recTimer     = document.getElementById('rec-timer')
 const textInput    = document.getElementById('text-input')
@@ -183,6 +184,28 @@ function setTurnIndicator(speaker) {
 // Maximum text message length enforced by the backend
 const MAX_TEXT_LENGTH = 5000
 
+// ── LANGUAGE SELECTOR ────────────────────────────────────
+const langSelect = document.getElementById('lang-select')
+
+/** Return the currently selected language code, or null for auto-detect. */
+function getSelectedLanguage() {
+  return (langSelect && langSelect.value) ? langSelect.value : null
+}
+
+// When user manually picks a language, update the badge immediately
+if (langSelect) {
+  langSelect.addEventListener('change', function () {
+    const code = langSelect.value
+    if (code && SA_LANGUAGES[code]) {
+      const badge = document.getElementById('lang-badge')
+      if (badge) badge.textContent = SA_LANGUAGES[code].label
+    } else {
+      const badge = document.getElementById('lang-badge')
+      if (badge) badge.textContent = ''
+    }
+  })
+}
+
 function sendText(text, detectedLang) {
   if (!text) return
   if (!wsConnected) {
@@ -193,13 +216,15 @@ function sendText(text, detectedLang) {
     transcriptEl.textContent = `Message too long (${text.length}/${MAX_TEXT_LENGTH} chars)`
     return
   }
+  // Manual language selection takes precedence over Whisper-detected language
+  const lang = getSelectedLanguage() || detectedLang || null
   transcriptEl.textContent = '🎙 ' + text
-  if (detectedLang) setDetectedLanguage(detectedLang)
+  if (lang) setDetectedLanguage(lang)
   addMessage(text, 'out')
   window.amandla.send({
     type:      'text',
     text:      text,
-    language:  detectedLang || null,
+    language:  lang,
     sender:    'hearing',
     timestamp: Date.now()
   })
@@ -211,11 +236,29 @@ function sendText(text, detectedLang) {
 sendBtn.addEventListener('click', function () {
   const t = textInput.value.trim()
   if (!t) return
-  sendText(t)
   textInput.value = ''
+  updateCharCounter(0)
+  if (speechAssistMode) {
+    sendSpeechAssist(t)
+  } else {
+    sendText(t)
+  }
 })
 textInput.addEventListener('keypress', function (e) {
   if (e.key === 'Enter') sendBtn.click()
+})
+
+// ── FEAT-3: REAL-TIME CHARACTER COUNTER ───────────────────
+const charCounter = document.getElementById('char-counter')
+
+function updateCharCounter(len) {
+  if (!charCounter) return
+  charCounter.textContent = len + ' / ' + MAX_TEXT_LENGTH
+  charCounter.className = len > MAX_TEXT_LENGTH * 0.9 ? 'warn' : ''
+}
+
+textInput.addEventListener('input', function () {
+  updateCharCounter(textInput.value.length)
 })
 
 // ── MICROPHONE RECORDING ──────────────────────────────────
@@ -307,7 +350,7 @@ async function uploadAudio(blob, mimeType) {
   }, SLOW_LOAD_DELAY_MS)
 
   try {
-    const data = await window.amandla.uploadSpeech(blob, mimeType)
+    const data = await window.amandla.uploadSpeech(blob, mimeType, getSelectedLanguage())
     clearTimeout(whisperLoadTimer) // result arrived — cancel the slow-load message
     if (data.text) {
       // The speech_upload handler on the backend already ran the full
@@ -345,6 +388,94 @@ micBtn.addEventListener('click', startRecording)
 
 // ── RIGHTS WINDOW ─────────────────────────────────────────
 rightsBtn.addEventListener('click', function () { window.amandla.openRights() })
+
+// ── INTERPRETER WINDOW (FEAT-5) ───────────────────────────
+if (interpreterBtn) {
+  interpreterBtn.addEventListener('click', function () { window.amandla.openInterpreter() })
+}
+
+// ── SPEECH ASSIST MODE ────────────────────────────────────
+// For hearing users who have speech impediments or articulation difficulties.
+// When ON: text is sent to AI for correction, displayed here ONLY — NOT sent
+// to the deaf window. Helps the speech-impaired person be understood by other
+// hearing people around them.
+let speechAssistMode = false
+
+const speechAssistBtn    = document.getElementById('speech-assist-btn')
+const speechAssistBanner = document.getElementById('speech-assist-banner')
+const speechAssistOff    = document.getElementById('speech-assist-off')
+
+function setSpeechAssistMode(on) {
+  speechAssistMode = on
+  if (speechAssistBtn) speechAssistBtn.classList.toggle('active', on)
+  if (speechAssistBanner) speechAssistBanner.style.display = on ? 'flex' : 'none'
+}
+
+if (speechAssistBtn) {
+  speechAssistBtn.addEventListener('click', function () {
+    setSpeechAssistMode(!speechAssistMode)
+  })
+}
+if (speechAssistOff) {
+  speechAssistOff.addEventListener('click', function () { setSpeechAssistMode(false) })
+}
+
+/**
+ * Run the hearing user's text through AI speech correction, then display
+ * the result in the message log. Does NOT send anything to the deaf window.
+ * Falls back to displaying the original text if the correction fails.
+ *
+ * @param {string} rawText - The garbled or incomplete input from the user.
+ */
+async function sendSpeechAssist(rawText) {
+  if (!wsConnected) {
+    transcriptEl.textContent = '⚠ Not connected — is the backend running?'
+    return
+  }
+  if (rawText.length > MAX_TEXT_LENGTH) {
+    transcriptEl.textContent = `Message too long (${rawText.length}/${MAX_TEXT_LENGTH} chars)`
+    return
+  }
+
+  transcriptEl.textContent = '🗣 Correcting speech…'
+
+  try {
+    const result = await window.amandla.correctSpeech(rawText)
+    const corrected = result.corrected || rawText
+
+    // Build a message bubble that shows both what was said and what it meant
+    const item = document.createElement('div')
+    item.className = 'msg-item msg-out'
+
+    const correctedEl = document.createElement('div')
+    correctedEl.className = 'msg-assist-corrected'
+    correctedEl.textContent = corrected
+    item.appendChild(correctedEl)
+
+    if (corrected !== rawText) {
+      const originalEl = document.createElement('div')
+      originalEl.className = 'msg-assist-original'
+      originalEl.textContent = 'You said: "' + rawText + '"'
+      item.appendChild(originalEl)
+    }
+
+    const metaEl = document.createElement('div')
+    metaEl.className = 'msg-meta'
+    metaEl.textContent = result.fallback ? 'Speech Assist (no AI — showing original)' : 'Speech Assist'
+    item.appendChild(metaEl)
+
+    msgLog.appendChild(item)
+    msgLog.scrollTop = msgLog.scrollHeight
+    const MAX_LOG_ITEMS = 60
+    while (msgLog.children.length > MAX_LOG_ITEMS) msgLog.removeChild(msgLog.firstChild)
+
+    transcriptEl.textContent = '🗣 ' + corrected
+  } catch (err) {
+    // Show the original text anyway so the user isn't left hanging
+    addMessage(rawText, 'out', 'Speech Assist (correction failed)')
+    transcriptEl.textContent = '⚠ Correction failed — showing original'
+  }
+}
 
 // ── FEAT-4: PRINT TRANSCRIPT ──────────────────────────────
 // Opens the browser's print dialog showing only the message log
@@ -549,6 +680,98 @@ if (historyOverlay) {
   })
 }
 
+// ── FEAT-9: HISTORY SEARCH ────────────────────────────────
+var historySearch = document.getElementById('history-search')
+var historySearchCount = document.getElementById('history-search-count')
+
+if (historySearch) {
+  historySearch.addEventListener('input', function () {
+    renderHistoryMessages(_lastHistoryMessages)
+  })
+}
+
+/**
+ * Render a (possibly filtered) list of messages into the history list.
+ * Also updates the search result count badge.
+ * @param {Array} messages - All loaded messages (unfiltered).
+ */
+function renderHistoryMessages(messages) {
+  if (!historyList) return
+  historyList.innerHTML = ''
+
+  // FEAT-9: Apply search filter
+  var query = historySearch ? historySearch.value.trim().toLowerCase() : ''
+  var filtered = query
+    ? messages.filter(function (m) {
+        var haystack = [m.original_text, m.translated_text, m.sasl_gloss]
+          .filter(Boolean).join(' ').toLowerCase()
+        return haystack.indexOf(query) !== -1
+      })
+    : messages
+
+  // Update result count badge
+  if (historySearchCount) {
+    historySearchCount.textContent = query
+      ? filtered.length + ' of ' + messages.length
+      : ''
+  }
+
+  if (filtered.length === 0) {
+    var emptyEl = document.createElement('p')
+    emptyEl.className = 'history-empty'
+    emptyEl.textContent = query ? 'No messages match your search.' : 'No conversation history yet.'
+    historyList.appendChild(emptyEl)
+    return
+  }
+
+  filtered.forEach(function (msg) {
+    var msgEl = document.createElement('div')
+    msgEl.className = 'history-msg ' + (msg.direction || 'hearing-to-deaf')
+
+    // Direction label
+    var dirEl = document.createElement('div')
+    dirEl.className = 'history-direction'
+    dirEl.textContent = msg.direction === 'deaf_to_hearing'
+      ? '🤟 Deaf → Hearing'
+      : '🎙 Hearing → Deaf'
+    msgEl.appendChild(dirEl)
+
+    // Main text content
+    var textEl = document.createElement('div')
+    textEl.className = 'history-text'
+    textEl.textContent = msg.original_text || msg.translated_text || '(empty)'
+    msgEl.appendChild(textEl)
+
+    // SASL gloss if available
+    if (msg.sasl_gloss) {
+      var glossEl = document.createElement('div')
+      glossEl.className = 'history-meta'
+      glossEl.textContent = 'SASL: ' + msg.sasl_gloss
+      msgEl.appendChild(glossEl)
+    }
+
+    // Translated text if different from original
+    if (msg.translated_text && msg.translated_text !== msg.original_text) {
+      var transEl = document.createElement('div')
+      transEl.className = 'history-meta'
+      transEl.textContent = '→ ' + msg.translated_text
+      msgEl.appendChild(transEl)
+    }
+
+    // Timestamp + source
+    var metaEl = document.createElement('div')
+    metaEl.className = 'history-meta'
+    var timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''
+    var sourceStr = msg.source ? ' via ' + msg.source : ''
+    metaEl.textContent = timeStr + sourceStr
+    msgEl.appendChild(metaEl)
+
+    historyList.appendChild(msgEl)
+  })
+
+  historyList.scrollTop = historyList.scrollHeight
+}
+
 /**
  * Fetch conversation history from the backend and render it in the overlay.
  * Uses the preload bridge's requestHistory() method (WebSocket-based).
@@ -556,6 +779,9 @@ if (historyOverlay) {
 async function loadAndShowHistory() {
   if (!historyOverlay || !historyList) return
   historyOverlay.style.display = 'flex'
+  // Clear search when opening
+  if (historySearch) historySearch.value = ''
+  if (historySearchCount) historySearchCount.textContent = ''
   historyList.innerHTML = ''
 
   // Show loading indicator
@@ -566,7 +792,6 @@ async function loadAndShowHistory() {
 
   try {
     var data = await window.amandla.requestHistory()
-    historyList.innerHTML = ''
 
     var messages = data.messages || []
 
@@ -575,61 +800,10 @@ async function loadAndShowHistory() {
     var footerEl = document.getElementById('history-footer')
     if (footerEl) footerEl.style.display = messages.length > 0 ? 'flex' : 'none'
 
-    if (messages.length === 0) {
-      var emptyEl = document.createElement('p')
-      emptyEl.className = 'history-empty'
-      emptyEl.textContent = 'No conversation history yet.'
-      historyList.appendChild(emptyEl)
-      return
-    }
+    renderHistoryMessages(messages)
 
-    messages.forEach(function (msg) {
-      var msgEl = document.createElement('div')
-      msgEl.className = 'history-msg ' + (msg.direction || 'hearing-to-deaf')
-
-      // Direction label
-      var dirEl = document.createElement('div')
-      dirEl.className = 'history-direction'
-      dirEl.textContent = msg.direction === 'deaf_to_hearing'
-        ? '🤟 Deaf → Hearing'
-        : '🎙 Hearing → Deaf'
-      msgEl.appendChild(dirEl)
-
-      // Main text content
-      var textEl = document.createElement('div')
-      textEl.className = 'history-text'
-      textEl.textContent = msg.original_text || msg.translated_text || '(empty)'
-      msgEl.appendChild(textEl)
-
-      // SASL gloss if available
-      if (msg.sasl_gloss) {
-        var glossEl = document.createElement('div')
-        glossEl.className = 'history-meta'
-        glossEl.textContent = 'SASL: ' + msg.sasl_gloss
-        msgEl.appendChild(glossEl)
-      }
-
-      // Translated text if different from original
-      if (msg.translated_text && msg.translated_text !== msg.original_text) {
-        var transEl = document.createElement('div')
-        transEl.className = 'history-meta'
-        transEl.textContent = '→ ' + msg.translated_text
-        msgEl.appendChild(transEl)
-      }
-
-      // Timestamp + source
-      var metaEl = document.createElement('div')
-      metaEl.className = 'history-meta'
-      var timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''
-      var sourceStr = msg.source ? ' via ' + msg.source : ''
-      metaEl.textContent = timeStr + sourceStr
-      msgEl.appendChild(metaEl)
-
-      historyList.appendChild(msgEl)
-    })
-
-    // Scroll to bottom (newest messages)
-    historyList.scrollTop = historyList.scrollHeight
+    // Focus the search box so the user can immediately start typing
+    if (historySearch && messages.length > 0) historySearch.focus()
   } catch (err) {
     _lastHistoryMessages = []
     var footerErrEl = document.getElementById('history-footer')

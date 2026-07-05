@@ -45,6 +45,9 @@ matplotlib>=3.7
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
 
+# Anthropic Claude API — used for rights analysis when ANTHROPIC_API_KEY is set
+anthropic>=0.40.0
+
 # Build tools (for packaging the backend as a standalone executable)
 pyinstaller>=6.0
 

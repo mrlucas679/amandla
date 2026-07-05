@@ -28,16 +28,16 @@ try {
 // to the backend — no direct fetch/XHR from renderer code.
 // ──────────────────────────────────────────────────────────────────
 
-// Content-Security-Policy — restricts what scripts and connections are allowed.
-// style-src includes fonts.googleapis.com so Google Fonts <link> tags work.
-// font-src includes fonts.gstatic.com so the actual font files can be downloaded.
-// ISSUE 1 FIX: added https://cdn.jsdelivr.net to connect-src so MediaPipe
-// can download its WASM binary and model files from the jsdelivr CDN at runtime.
-const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' ws://localhost:8000 http://localhost:8000 https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com;"
+// Content-Security-Policy — all assets (Three.js, TalkingHead, MediaPipe, fonts, jsPDF)
+// are now vendored locally under vendor/ and src/fonts/, so no external CDN hosts needed.
+// blob: in worker-src and connect-src is still required for TalkingHead's GLTFLoader
+// texture blobs and Web Workers used by Three.js / MediaPipe WASM.
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src blob:; connect-src 'self' ws://localhost:8002 http://localhost:8002 blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self';"
 
 let hearingWin = null
 let deafWin = null
 let rightsWin = null
+let interpreterWin = null
 
 // Generate a cryptographically secure session ID once when the app starts.
 // 32 random bytes = 256 bits of entropy — safe even if the backend is ever
@@ -116,7 +116,7 @@ function _waitForBackend() {
         return
       }
 
-      const req = http.get('http://localhost:8000/health', { timeout: 2000 }, (res) => {
+      const req = http.get('http://localhost:8002/health', { timeout: 2000 }, (res) => {
         res.resume() // drain
         if (res.statusCode === 200) {
           console.log('[Main] Backend health check passed (' + elapsed + 'ms)')
@@ -183,7 +183,7 @@ function _stopBackend() {
  */
 async function fetchSessionSecret() {
   return new Promise((resolve, reject) => {
-    http.get('http://localhost:8000/auth/session-secret', (res) => {
+    http.get('http://localhost:8002/auth/session-secret', (res) => {
       let body = ''
       res.on('data', (chunk) => { body += chunk })
       res.on('end', () => {
@@ -312,6 +312,34 @@ ipcMain.handle('open-rights', () => {
   })
   _applyCSP(rightsWin)
   rightsWin.on('closed', () => { rightsWin = null })
+})
+
+// IPC: Open INTERPRETER window (FEAT-5) — read-only observer for human interpreters
+ipcMain.handle('open-interpreter', () => {
+  if (interpreterWin && !interpreterWin.isDestroyed()) {
+    interpreterWin.focus()
+    return
+  }
+  interpreterWin = new BrowserWindow({
+    width: 600,
+    height: 800,
+    title: 'AMANDLA — Interpreter View',
+    backgroundColor: '#0D0D0D',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload/preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  })
+  interpreterWin.loadFile('src/windows/interpreter/index.html')
+  interpreterWin.webContents.on('did-finish-load', () => {
+    interpreterWin.webContents.send('session-id', SESSION_ID)
+    interpreterWin.webContents.send('session-secret', SESSION_SECRET)
+    interpreterWin.webContents.send('role', 'interpreter')
+  })
+  _applyCSP(interpreterWin)
+  interpreterWin.on('closed', () => { interpreterWin = null })
 })
 
 // IPC: Allow renderer to ask for the session ID at any time

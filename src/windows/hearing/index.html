@@ -35,10 +35,18 @@
     <div class="right">
       <span id="conn-status">connecting…</span>
       <div id="status-dot" title="AI status: checking…"></div>
+      <button id="speech-assist-btn" title="Speech Assist — correct and clarify your speech before displaying">🗣 Speech Assist</button>
       <button id="history-btn" title="View conversation history">📋 History</button>
       <button id="print-btn" title="Print conversation transcript">🖨 Print</button>
+      <button id="interpreter-btn" title="Open interpreter view — read-only observer window">INTERPRETER</button>
       <button id="rights-btn">RIGHTS</button>
     </div>
+  </div>
+
+  <!-- Speech Assist mode banner — shown when the mode is active -->
+  <div id="speech-assist-banner" style="display:none">
+    <span>🗣 <strong>Speech Assist ON</strong> — your messages will be clarified before displaying. Nothing is sent to the deaf window.</span>
+    <button id="speech-assist-off" title="Turn off Speech Assist">Turn off</button>
   </div>
 
   <!-- FEAT-3: Conversation history overlay -->
@@ -47,6 +55,11 @@
       <div class="history-header">
         <h2>Conversation History</h2>
         <button id="history-close" title="Close history">✕</button>
+      </div>
+      <!-- FEAT-9: Search history -->
+      <div class="history-search-row">
+        <input id="history-search" type="search" placeholder="Search messages…" autocomplete="off" />
+        <span id="history-search-count"></span>
       </div>
       <div id="history-list" class="history-list">
         <p class="history-empty">No conversation history yet.</p>
@@ -82,12 +95,28 @@
   <div id="controls">
     <button id="mic-btn" title="Click to record" disabled>🎙</button>
     <span id="rec-timer"></span>
+    <select id="lang-select" title="Select input language (Auto = Whisper auto-detects from speech)" aria-label="Input language">
+      <option value="">Auto-detect</option>
+      <option value="en">English</option>
+      <option value="af">Afrikaans</option>
+      <option value="zu">isiZulu</option>
+      <option value="xh">isiXhosa</option>
+      <option value="st">Sesotho</option>
+      <option value="tn">Setswana</option>
+      <option value="nso">Sepedi</option>
+      <option value="ts">Xitsonga</option>
+      <option value="ve">Tshivenda</option>
+      <option value="nr">isiNdebele</option>
+      <option value="ss">siSwati</option>
+    </select>
     <input id="text-input" type="text"
            aria-label="Type a message to send"
            placeholder="Or type a message and press Enter…"
            autocomplete="off" />
     <button id="send-btn">Send</button>
   </div>
+  <!-- FEAT-3: Character counter -->
+  <div id="char-counter">0 / 5000</div>
 
   <script src="hearing.js"></script>
 </body>

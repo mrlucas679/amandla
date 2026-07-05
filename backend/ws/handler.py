@@ -28,20 +28,21 @@ from backend.shared import (
     sessions,
     sign_buffers,
     sign_tasks,
-    harps_recognizers,
     last_heavy_call,
     sanitise_text,
     check_rate_limit,
     verify_session_token,
+    acquire_ws_connection,
+    release_ws_connection,
     MAX_AUDIO_BYTES,
     MAX_CONCURRENT_SESSIONS,
 )
-from backend.ws.helpers import send_safe, broadcast, broadcast_all
+from backend.ws.helpers import send_safe, broadcast, broadcast_all, get_role_ws
 
 logger = logging.getLogger(__name__)
 
 # Valid WebSocket roles
-_VALID_ROLES = {"hearing", "deaf", "rights"}
+_VALID_ROLES = {"hearing", "deaf", "rights", "interpreter"}
 
 
 async def websocket_endpoint(
@@ -59,19 +60,30 @@ async def websocket_endpoint(
         sessionId: The session identifier shared between hearing + deaf windows.
         role:      One of 'hearing', 'deaf', or 'rights'.
     """
-    # ── Token extraction from Sec-WebSocket-Protocol header (ARCH-7) ─────
+    # ── Token extraction from WebSocket subprotocols (ARCH-7) ────────────
     # Client sends: new WebSocket(url, ['amandla-<TOKEN>'])
-    # We echo back the chosen subprotocol in websocket.accept() so the browser
-    # doesn't close the connection after the handshake.
-    _protocol_header = websocket.headers.get("sec-websocket-protocol", "")
+    # ASGI stores negotiated subprotocols in scope["subprotocols"] — this is
+    # the canonical source in Starlette 0.20+. The raw Sec-WebSocket-Protocol
+    # header is consumed by uvicorn and may not appear in websocket.headers.
     _token = ""
     _accepted_subprotocol = None
-    for _part in _protocol_header.split(","):
-        _part = _part.strip()
-        if _part.startswith("amandla-"):
-            _token = _part[len("amandla-"):]
-            _accepted_subprotocol = _part
+
+    # Primary: ASGI scope["subprotocols"]
+    for _proto in websocket.scope.get("subprotocols", []):
+        if _proto.startswith("amandla-"):
+            _token = _proto[len("amandla-"):]
+            _accepted_subprotocol = _proto
             break
+
+    # Fallback: raw Sec-WebSocket-Protocol header (older uvicorn versions)
+    if not _token:
+        _protocol_header = websocket.headers.get("sec-websocket-protocol", "")
+        for _part in _protocol_header.split(","):
+            _part = _part.strip()
+            if _part.startswith("amandla-"):
+                _token = _part[len("amandla-"):]
+                _accepted_subprotocol = _part
+                break
 
     # ── Token validation ─────────────────────────────────────────────────
     if not verify_session_token(_token):
@@ -85,8 +97,19 @@ async def websocket_endpoint(
         logger.warning("[WS] Rejected connection — invalid role='%s' session=%s", role, sessionId)
         return
 
+    # ── Per-IP connection rate limit (FIX-5) ──────────────────────────
+    _client_ip = websocket.client.host if websocket.client else "unknown"
+    if not acquire_ws_connection(_client_ip):
+        await websocket.close(code=1008, reason="Too many connections from this address")
+        logger.warning(
+            "[WS] Rejected connection — per-IP limit reached ip=%s session=%s",
+            _client_ip, sessionId,
+        )
+        return
+
     # ── Concurrent session cap ─────────────────────────────────────────
     if sessionId not in sessions and len(sessions) >= MAX_CONCURRENT_SESSIONS:
+        release_ws_connection(_client_ip)
         await websocket.close(code=1013, reason="Too many active sessions")
         logger.warning(
             "[WS] Rejected connection — concurrent session limit (%d) reached, session=%s",
@@ -98,9 +121,31 @@ async def websocket_endpoint(
     logger.info("[WS] connect session=%s role=%s", sessionId, role)
 
     session = sessions.setdefault(sessionId, {"users": {}, "queue": []})
-    if role in session["users"]:
-        logger.warning("[WS] Role '%s' already taken in session %s — replacing stale connection", role, sessionId)
-    session["users"][role] = websocket
+
+    # FEAT-8: hearing supports multiple simultaneous connections (multiple staff).
+    # All other roles allow only one connection; a second replaces the stale one.
+    if role == "hearing":
+        existing = session["users"].get("hearing")
+        if existing is None:
+            session["users"]["hearing"] = websocket
+        elif isinstance(existing, list):
+            existing.append(websocket)
+            logger.info("[WS] Added hearing connection #%d in session %s", len(existing), sessionId)
+        else:
+            # Upgrade single socket to list
+            session["users"]["hearing"] = [existing, websocket]
+            logger.info("[WS] Multiple hearing staff joined session %s", sessionId)
+    else:
+        if role in session["users"]:
+            logger.warning("[WS] Role '%s' already taken in session %s — replacing stale connection", role, sessionId)
+        session["users"][role] = websocket
+
+    # ARCH-6: track session metadata (fire-and-forget, must not block connection)
+    try:
+        from backend.services.history_db import upsert_session
+        await upsert_session(sessionId, role)
+    except Exception:
+        pass
 
     try:
         await websocket.send_json({"type": "status", "status": "connected", "session_id": sessionId})
@@ -115,6 +160,14 @@ async def websocket_endpoint(
                 msg = {"type": "raw", "data": data}
 
             msg_type = msg.get("type")
+
+            # ── INTERPRETER: read-only role — only status_request allowed ─
+            # Interpreters observe all broadcasts but cannot inject messages.
+            if role == "interpreter":
+                if msg_type == "status_request":
+                    await _handle_status_request(websocket, msg)
+                # All other message types silently ignored for interpreter
+                continue
 
             # ── HEARING TEXT → SASL SIGNS → DEAF ──────────────────────
             if msg_type in ("text", "speech_text") and role == "hearing":
@@ -133,7 +186,7 @@ async def websocket_endpoint(
 
             # ── ASSIST-MODE PHRASE → HEARING ──────────────────────────
             if msg_type == "assist_phrase" and role == "deaf":
-                await _handle_assist_phrase(session, session_id, msg)
+                await _handle_assist_phrase(session, sessionId, msg)
                 continue
 
             # ── DEAF QUICK-SIGN BUTTON ────────────────────────────────
@@ -172,6 +225,11 @@ async def websocket_endpoint(
                 await _handle_history_request(websocket, sessionId, msg)
                 continue
 
+            # ── SPEECH ASSIST: correct garbled speech (hearing side only) ─
+            if msg_type == "speech_correct" and role == "hearing":
+                await _handle_speech_correct(websocket, sessionId, msg)
+                continue
+
             # Everything else: forward to other role(s)
             await broadcast(session, websocket, msg)
 
@@ -180,7 +238,8 @@ async def websocket_endpoint(
     except Exception as exc:
         logger.error("[WS] error session=%s role=%s: %s", sessionId, role, exc)
     finally:
-        _cleanup_session(sessionId, role, session)
+        release_ws_connection(_client_ip)
+        _cleanup_session(sessionId, role, session, websocket)
 
 
 # ── MESSAGE HANDLERS ──────────────────────────────────────────────────────────
@@ -193,7 +252,7 @@ async def _handle_text(websocket, session, session_id, msg):
     language = msg.get("language")
 
     # Tell the deaf window that translation is in progress
-    deaf_ws = session["users"].get("deaf")
+    deaf_ws = get_role_ws(session, "deaf")
     if deaf_ws:
         await send_safe(deaf_ws, {"type": "translating", "session_id": session_id})
 
@@ -238,10 +297,11 @@ async def _handle_text(websocket, session, session_id, msg):
 
 
 async def _handle_landmarks(websocket, session, session_id, msg):
-    """Handle MediaPipe hand landmarks → HARPS ML classifier (Ollama fallback).
+    """Handle MediaPipe hand landmarks → Ollama sign recognition.
 
-    Uses a per-session HARPSSignRecognizer for frame buffering and inference.
-    Falls back to Ollama-based recognition if the HARPS model is unavailable.
+    Debounces recognised signs into the shared sign buffer so the same
+    reconstruction path is used whether the sign came from a quick-sign
+    button or from the camera.
     """
     landmarks = msg.get("landmarks", [])
     handedness_raw = msg.get("handedness", "Right")
@@ -259,34 +319,20 @@ async def _handle_landmarks(websocket, session, session_id, msg):
     result = None
     method = "unknown"
 
-    # ── Tier 1: HARPS ML classifier (fast, no LLM needed) ──────────────
+    # ── Ollama LLM sign recognition (HARPS-1: synthetic ML model removed) ──
+    # The HARPS model was trained on synthetic demo data (SIGN_00–SIGN_20)
+    # and had ~0% real-world accuracy. Ollama provides better results until
+    # real SASL training data is collected (future funded phase).
     try:
-        from backend.services.harps_recognizer import HARPSSignRecognizer
-
-        recognizer = harps_recognizers.get(session_id)
-        if recognizer is None:
-            recognizer = HARPSSignRecognizer()
-            harps_recognizers[session_id] = recognizer
-
-        harps_result = recognizer.push_frame(landmarks, handedness_list)
-        if harps_result and harps_result.get("sign") not in (None, "PROCESSING"):
-            result = harps_result
-            method = "harps"
-    except Exception as harps_exc:
-        logger.debug("[HARPS] Inference error (falling back to Ollama): %s", harps_exc)
-
-    # ── Tier 2: Ollama LLM fallback (slower, less accurate) ────────────
-    if result is None:
-        try:
-            from backend.services.ollama_service import recognize_sign
-            result = await recognize_sign({
-                "landmarks": landmarks,
-                "handedness": handedness_raw,
-            })
-            method = result.get("method", "ollama")
-        except Exception as ollama_exc:
-            logger.warning("[WS] Landmark recognition error: %s", ollama_exc)
-            return
+        from backend.services.ollama_service import recognize_sign
+        result = await recognize_sign({
+            "landmarks": landmarks,
+            "handedness": handedness_raw,
+        })
+        method = result.get("method", "ollama") if result else "unknown"
+    except Exception as ollama_exc:
+        logger.warning("[WS] Landmark recognition error: %s", ollama_exc)
+        return
 
     if result is None:
         return
@@ -331,7 +377,7 @@ async def _handle_sasl_text(session, session_id, msg):
     if not sasl_text:
         return
 
-    hearing_ws = session["users"].get("hearing")
+    hearing_ws = get_role_ws(session, "hearing")
 
     # Step 1: immediately tell hearing a message is coming
     if hearing_ws:
@@ -390,7 +436,7 @@ async def _handle_assist_phrase(session, session_id, msg):
     phrase = sanitise_text(msg.get("text", "")).strip()
     if not phrase:
         return
-    hearing_ws = session["users"].get("hearing")
+    hearing_ws = get_role_ws(session, "hearing")
     await broadcast_all(session, {"type": "turn", "speaker": "deaf"})
     if hearing_ws:
         await send_safe(hearing_ws, {
@@ -469,7 +515,7 @@ async def _handle_speech_upload(websocket, session, session_id, msg):
         logger.info("[WS] speech_upload size=%d mime=%s", len(audio_bytes), mime_type)
 
         # Tell deaf window that translation is in progress
-        deaf_ws = session["users"].get("deaf")
+        deaf_ws = get_role_ws(session, "deaf")
         if deaf_ws:
             await send_safe(deaf_ws, {"type": "translating", "session_id": session_id})
 
@@ -479,8 +525,13 @@ async def _handle_speech_upload(websocket, session, session_id, msg):
         text = result.get("text", "").strip()
         detected_language = result.get("language", "en")
 
-        # Convert to SASL signs (FEAT-5: pass detected language for pre-translation)
-        sasl = await text_to_sasl_signs(text, language=detected_language)
+        # If the user manually selected a language (e.g. one of the 5 SA languages
+        # Whisper cannot auto-detect), use that override for the SASL pipeline.
+        manual_language = msg.get("language")
+        pipeline_language = manual_language if manual_language else detected_language
+
+        # Convert to SASL signs (FEAT-5: pass language for pre-translation)
+        sasl = await text_to_sasl_signs(text, language=pipeline_language)
 
         # Reply to the sender with transcription result (includes request_id)
         await send_safe(websocket, {
@@ -577,7 +628,8 @@ async def _handle_rights_analyze(websocket, session_id, msg):
             return
 
         # Whitelist incident_type to prevent prompt injection into Ollama (ARCH-8)
-        _VALID_INCIDENT_TYPES = {"workplace", "hospital", "school", "public", "other"}
+        # Values must match the <option value="..."> attributes in rights/index.html
+        _VALID_INCIDENT_TYPES = {"workplace", "hospital", "school", "public", "housing", "other"}
         incident_type = sanitise_text(msg.get("incident_type", "workplace"))
         if incident_type not in _VALID_INCIDENT_TYPES:
             incident_type = "workplace"
@@ -698,9 +750,97 @@ async def _handle_history_request(websocket, session_id, msg):
         })
 
 
+async def _handle_speech_correct(websocket, session_id, msg):
+    """Correct garbled speech/text for hearing users with speech impediments.
+
+    This handler is ONLY called for the hearing role and NEVER broadcasts
+    to the deaf window. The corrected text is returned only to the sender.
+
+    Uses Ollama to clean up incomplete or mis-articulated text so the hearing
+    person can communicate clearly with other hearing people around them.
+
+    Args:
+        websocket:  The requesting WebSocket (hearing role).
+        session_id: The current session identifier.
+        msg:        Message with 'text' field containing the garbled input.
+    """
+    request_id = msg.get("request_id")
+    raw_text = sanitise_text(msg.get("text", ""))
+
+    if not raw_text:
+        await send_safe(websocket, {
+            "request_id": request_id,
+            "type": "speech_corrected",
+            "error": "No text to correct.",
+        })
+        return
+
+    if not check_rate_limit(session_id, "speech_correct"):
+        await send_safe(websocket, {
+            "request_id": request_id,
+            "type": "speech_corrected",
+            "error": "Too many requests — please wait a moment.",
+        })
+        return
+
+    _SPEECH_CORRECT_SYSTEM = (
+        "You are a speech correction assistant helping someone with a speech impediment "
+        "or articulation difficulty communicate clearly. "
+        "The user's input may be incomplete, garbled, have missing words, or unusual phrasing. "
+        "Correct it into clear, natural English that preserves the original meaning. "
+        "Return ONLY the corrected sentence — no explanation, no quotation marks, no extra text."
+    )
+
+    try:
+        import os
+        _ollama_base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        _model = os.getenv("OLLAMA_MODEL", "amandla")
+
+        from backend.services.ollama_pool import get_client
+        client = get_client()
+        response = await client.post(
+            f"{_ollama_base}/api/generate",
+            json={
+                "model":       _model,
+                "prompt":      f"Correct this speech: {raw_text}",
+                "system":      _SPEECH_CORRECT_SYSTEM,
+                "stream":      False,
+                "temperature": 0.2,
+            },
+            timeout=10.0,
+        )
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Ollama HTTP {response.status_code}")
+
+        corrected = response.json().get("response", "").strip()
+        if not corrected:
+            corrected = raw_text  # fall back to original if Ollama returns nothing
+
+        logger.info("[Speech Assist] session=%s: '%s' → '%s'", session_id, raw_text[:60], corrected[:60])
+
+        await send_safe(websocket, {
+            "request_id": request_id,
+            "type":       "speech_corrected",
+            "original":   raw_text,
+            "corrected":  corrected,
+        })
+
+    except Exception as exc:
+        logger.warning("[Speech Assist] correction failed: %s — returning original", exc)
+        # On any failure, return the original text so the user is not left empty-handed
+        await send_safe(websocket, {
+            "request_id": request_id,
+            "type":       "speech_corrected",
+            "original":   raw_text,
+            "corrected":  raw_text,
+            "fallback":   True,
+        })
+
+
 # ── SESSION CLEANUP ───────────────────────────────────────────────────────────
 
-def _cleanup_session(session_id: str, role: str, session: dict) -> None:
+def _cleanup_session(session_id: str, role: str, session: dict, websocket=None) -> None:
     """Clean up session state when a WebSocket disconnects.
 
     Handles:
@@ -715,36 +855,42 @@ def _cleanup_session(session_id: str, role: str, session: dict) -> None:
         session:    The session dict.
     """
     try:
-        session["users"].pop(role, None)
+        # FEAT-8: hearing may have multiple sockets — remove only this one
+        existing = session["users"].get(role)
+        if isinstance(existing, list):
+            if websocket is not None:
+                try:
+                    existing.remove(websocket)
+                except ValueError:
+                    pass
+            if not existing:
+                del session["users"][role]
+        else:
+            session["users"].pop(role, None)
 
-        # If the deaf user disconnects, their pending sign-reconstruction
-        # task is stale — cancel it immediately
+        # If the deaf user disconnects, cancel pending sign-reconstruction task
         if role == "deaf":
             pending_task = sign_tasks.pop(session_id, None)
             if pending_task and not pending_task.done():
                 pending_task.cancel()
             sign_buffers.pop(session_id, None)
-            # Reset HARPS frame buffer so stale frames don't carry over
-            recognizer = harps_recognizers.pop(session_id, None)
-            if recognizer:
-                try:
-                    recognizer.reset()
-                except Exception:
-                    pass
 
         if not session["users"]:
             # Record when the session became empty so the reaper can expire it later
             session["_empty_since"] = _time.monotonic()
 
+            # ARCH-6: mark session closed in the metadata table
+            try:
+                import asyncio as _asyncio
+                from backend.services.history_db import close_session as _close_session
+                _asyncio.ensure_future(_close_session(session_id))
+            except Exception:
+                pass
+
             # Clean up rate-limit tracking for this session
             last_heavy_call.pop(session_id, None)
 
-            # Clean up HARPS recogniser if not already done by the deaf block above
-            if role != "deaf":
-                harps_recognizers.pop(session_id, None)
-
-            # Only clean up sign tasks/buffers here if the deaf-specific block
-            # above hasn't already done so
+            # Clean up sign tasks/buffers if not already done by the deaf block
             if role != "deaf":
                 pending_task = sign_tasks.pop(session_id, None)
                 if pending_task and not pending_task.done():

@@ -182,6 +182,7 @@
     avatarBones.torso = model.getObjectByName(boneMap.torso) || null;
     avatarBones.hips  = model.getObjectByName(boneMap.hips)  || null;
     avatarBones._rigType = rigType;
+    avatarBones._boneMap = boneMap;  // save resolved (namespaced) map for updateTwistBones()
 
     // ── Arms ───────────────────────────────────────────────────────
     for (var s = 0; s < 2; s++) {
@@ -217,7 +218,7 @@
   // Mixamo bone axes differ:
   //   AMANDLA sh.x  → Mixamo shoulder .x  (elevation, same direction)
   //   AMANDLA sh.z  → Mixamo shoulder .z  (adduction, same direction)
-  //   AMANDLA el.x  → Mixamo ForeArm  .y  (elbow bend; mirrored for left)
+  //   AMANDLA el.x  → Mixamo ForeArm  .z  (elbow bend; same axis both sides)
   //   AMANDLA wr.*  → Mixamo Hand.*        (direct map)
   // Returns nothing — modifies avatarBones rotations directly.
   function remapPoseForMixamo (pose, avatarBones) {
@@ -236,13 +237,13 @@
         arm.shoulder.rotation.z = src.sh.z || 0;
       }
 
-      // Elbow — AMANDLA el.x becomes Mixamo ForeArm rotation.y
-      // Left arm is mirrored, so negate
+      // Elbow — AMANDLA el.x (bend) → Mixamo ForeArm rotation.z
+      // Mixamo uses .z for flexion/extension (same as applyHandshapeGLTF for fingers).
+      // No left/right mirroring — Mixamo symmetric rig uses same axis on both sides.
       if (src.el && arm.elbow) {
-        var elbowSign = (side === 'R') ? 1 : -1;
         arm.elbow.rotation.x = 0;
-        arm.elbow.rotation.y = (src.el.x || 0) * elbowSign;
-        arm.elbow.rotation.z = src.el.z || 0;
+        arm.elbow.rotation.y = src.el.z || 0;   // el.z lateral twist (rare)
+        arm.elbow.rotation.z = src.el.x || 0;   // el.x elbow bend → .z axis
       }
 
       // Wrist — direct
@@ -281,10 +282,15 @@
       if (!arm || !arm.wrist) continue;
 
       if (!arm._twistBone && scene) {
-        var twistName = BONE_MAP[side].forearmTwist;
-        scene.traverse(function (n) {
-          if (n.name === twistName) arm._twistBone = n;
-        });
+        // Use the resolved namespaced bone map (stored during bindBonesFromGLTF) so that
+        // mixamorig2: and galtis rigs get the correct prefixed bone name.
+        var resolvedMap = (avatarBones && avatarBones._boneMap) || BONE_MAP;
+        var twistName = resolvedMap[side] && resolvedMap[side].forearmTwist;
+        if (twistName) {
+          scene.traverse(function (n) {
+            if (n.name === twistName) arm._twistBone = n;
+          });
+        }
       }
 
       if (arm._twistBone && arm.wrist) {

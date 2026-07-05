@@ -7,6 +7,15 @@
   <link rel="stylesheet" href="../../styles/design-system.css">
   <link rel="stylesheet" href="../../styles/animations.css">
   <link rel="stylesheet" href="deaf.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../../../node_modules/three/build/three.module.js",
+      "three/addons/": "../../../node_modules/three/examples/jsm/",
+      "talkinghead": "../../../vendor/talkinghead.mjs"
+    }
+  }
+  </script>
 </head>
 <body>
 
@@ -37,8 +46,71 @@
     <div class="brand">AMANDLA — Deaf</div>
     <div class="right">
       <button id="modeToggleBtn" title="Switch between Sign mode and Assist mode">Assist Mode</button>
+      <button id="appearance-btn" title="Customise avatar appearance">🎨</button>
+      <button id="history-btn" title="View conversation history">📋 History</button>
+      <button id="rights-btn-deaf" title="Know Your Rights — South African disability rights">RIGHTS</button>
       <span id="conn-status">connecting…</span>
       <div id="status-dot" title="AI status"></div>
+    </div>
+  </div>
+
+  <!-- Conversation history overlay (mirrored from hearing window) -->
+  <div id="history-overlay" class="history-overlay" style="display:none">
+    <div class="history-panel">
+      <div class="history-header">
+        <h2>Conversation History</h2>
+        <button id="history-close" title="Close history">✕</button>
+      </div>
+      <div class="history-search-row">
+        <input id="history-search" type="search" placeholder="Search messages…" autocomplete="off" />
+        <span id="history-search-count"></span>
+      </div>
+      <div id="history-list" class="history-list">
+        <p class="history-empty">No conversation history yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEAT-10: Avatar appearance customisation panel -->
+  <div id="appearance-overlay" style="display:none">
+    <div id="appearance-panel">
+      <div class="appearance-header">
+        <h2>Avatar Appearance</h2>
+        <button id="appearance-close" title="Close">✕</button>
+      </div>
+      <div class="appearance-body">
+        <div class="appearance-section">
+          <div class="appearance-section-title">Skin Tone</div>
+          <div class="swatch-row" id="skin-swatches">
+            <button class="swatch" data-type="skin" data-hex="0xFAD7A0" style="background:#FAD7A0" title="Light"></button>
+            <button class="swatch" data-type="skin" data-hex="0xD4A574" style="background:#D4A574" title="Medium Light"></button>
+            <button class="swatch active" data-type="skin" data-hex="0xA8734A" style="background:#A8734A" title="Medium"></button>
+            <button class="swatch" data-type="skin" data-hex="0x7D5232" style="background:#7D5232" title="Medium Dark"></button>
+            <button class="swatch" data-type="skin" data-hex="0x4E2F1A" style="background:#4E2F1A" title="Dark"></button>
+            <button class="swatch" data-type="skin" data-hex="0x2C1A0E" style="background:#2C1A0E" title="Deepest"></button>
+          </div>
+        </div>
+        <div class="appearance-section">
+          <div class="appearance-section-title">Shirt Colour</div>
+          <div class="swatch-row" id="shirt-swatches">
+            <button class="swatch active" data-type="shirt" data-hex="0x1A1A2E" style="background:#1A1A2E" title="Navy"></button>
+            <button class="swatch" data-type="shirt" data-hex="0x2EA880" style="background:#2EA880" title="Teal"></button>
+            <button class="swatch" data-type="shirt" data-hex="0x8B6FD4" style="background:#8B6FD4" title="Purple"></button>
+            <button class="swatch" data-type="shirt" data-hex="0xD8D8D8" style="background:#D8D8D8" title="White"></button>
+            <button class="swatch" data-type="shirt" data-hex="0xC0392B" style="background:#C0392B" title="Red"></button>
+            <button class="swatch" data-type="shirt" data-hex="0xD35400" style="background:#D35400" title="Orange"></button>
+          </div>
+        </div>
+        <div class="appearance-section">
+          <div class="appearance-section-title">Background</div>
+          <div class="swatch-row" id="bg-swatches">
+            <button class="swatch active" data-type="bg" data-hex="0x0d0d0d" style="background:#0d0d0d;border-color:#555" title="Dark"></button>
+            <button class="swatch" data-type="bg" data-hex="0x0A2520" style="background:#0A2520" title="Teal Mist"></button>
+            <button class="swatch" data-type="bg" data-hex="0x12102A" style="background:#12102A" title="Deep Purple"></button>
+            <button class="swatch" data-type="bg" data-hex="0x2A2A2A" style="background:#2A2A2A" title="Charcoal"></button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -54,6 +126,7 @@
   <!-- Avatar (incoming signs from hearing person) -->
   <div id="avatar-panel">
     <div id="avatar-canvas"></div>
+    <div id="avatar-status" style="font-size:0.75rem;text-align:center;padding:4px;"></div>
     <div id="avatar-sign-label"></div>
     <div id="detected-sign"></div>
     <div id="gloss-display"></div>
@@ -82,6 +155,12 @@
       <button id="sasl-send-btn">Send</button>
     </div>
     <div id="sasl-send-status"></div>
+    <!-- FEAT-6: Signing speed control -->
+    <div id="speed-control-row">
+      <label for="speed-slider" id="speed-label">Sign speed: <span id="speed-value">Normal</span></label>
+      <input id="speed-slider" type="range" min="25" max="200" step="25" value="100"
+             title="Adjust how fast the avatar signs" />
+    </div>
   </div>
 
   <!-- Category tabs + quick-sign reply buttons -->
@@ -89,18 +168,14 @@
   <div id="quick-signs" role="toolbar" aria-label="Quick signs"></div>
 
   <!-- ── SCRIPTS ── -->
-  <!-- PERF-2: Three.js loaded from local bundle — no CDN dependency on critical path -->
-  <script src="../../../assets/js/three.min.js"></script>
-  <!-- FEAT-2: GLTFLoader for loading GLB avatar model (must load after three.min.js) -->
-  <script src="../../../assets/js/GLTFLoader.js"></script>
   <!-- PERF-2: MediaPipe loaded async — optional for camera mode, must not block initial render -->
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js"></script>
+  <script async src="../../../vendor/mediapipe-hands/hands.min.js"></script>
+  <script async src="../../../vendor/mediapipe-camera/camera_utils.js"></script>
   <!-- PERF-3: signs_library loaded with defer — parsed after HTML, before DOMContentLoaded -->
   <script defer src="../../../signs_library.js"></script>
-  <!-- FEAT-2: Avatar driver maps AMANDLA poses → Mixamo GLB bone rotations -->
+  <!-- FEAT-2: TalkingHead avatar engine — ES module, auto-initialises on load -->
   <script defer src="avatar_driver.js"></script>
-  <script defer src="avatar.js"></script>
+  <script type="module" src="avatar.js"></script>
   <script defer src="mode_controller.js"></script>
   <script defer src="deaf.js"></script>
 </body>

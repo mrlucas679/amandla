@@ -50,9 +50,9 @@ def _get_connection() -> sqlite3.Connection:
 
 
 def _init_tables() -> None:
-    """Create the conversations table if it doesn't already exist.
+    """Create the conversations and sessions tables if they don't already exist.
 
-    Schema:
+    conversations schema:
         id              — auto-incrementing primary key
         session_id      — WebSocket session identifier
         timestamp       — ISO 8601 UTC timestamp
@@ -61,18 +61,40 @@ def _init_tables() -> None:
         sasl_gloss      — the SASL gloss representation (sign names)
         translated_text — the translated output text
         source          — how the message was created (text, speech, sign, assist)
+        sign_count      — number of SASL signs in this utterance (derived from sasl_gloss)
+        animation_version — signs_library.js version used to produce these signs
+
+    sessions schema (ARCH-6):
+        session_id      — primary key, matches conversations.session_id
+        created_at      — ISO 8601 UTC timestamp when session was first seen
+        closed_at       — ISO 8601 UTC when last role disconnected (NULL = open)
+        roles_present   — comma-separated list of roles that joined (e.g. 'hearing,deaf')
+        message_count   — total messages logged for this session
     """
     conn = _get_connection()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id      TEXT    NOT NULL,
-            timestamp       TEXT    NOT NULL,
-            direction       TEXT    NOT NULL,
-            original_text   TEXT    DEFAULT '',
-            sasl_gloss      TEXT    DEFAULT '',
-            translated_text TEXT    DEFAULT '',
-            source          TEXT    DEFAULT 'text'
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id        TEXT    NOT NULL,
+            timestamp         TEXT    NOT NULL,
+            direction         TEXT    NOT NULL,
+            original_text     TEXT    DEFAULT '',
+            sasl_gloss        TEXT    DEFAULT '',
+            translated_text   TEXT    DEFAULT '',
+            source            TEXT    DEFAULT 'text',
+            sign_count        INTEGER DEFAULT 0,
+            animation_version TEXT    DEFAULT 'v2'
+        )
+    """)
+
+    # ARCH-6: session metadata table — enables analytics without scanning all conversations
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id    TEXT PRIMARY KEY,
+            created_at    TEXT NOT NULL,
+            closed_at     TEXT,
+            roles_present TEXT DEFAULT '',
+            message_count INTEGER DEFAULT 0
         )
     """)
     # Index on session_id for fast per-session lookups
@@ -90,6 +112,17 @@ def _init_tables() -> None:
         CREATE INDEX IF NOT EXISTS idx_conversations_session_time
         ON conversations (session_id, timestamp DESC)
     """)
+
+    # ── Migration: add new columns to existing databases ──────────────────────
+    # SQLite does not support IF NOT EXISTS on ALTER TABLE, so we catch the error.
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+    if "sign_count" not in existing_cols:
+        conn.execute("ALTER TABLE conversations ADD COLUMN sign_count INTEGER DEFAULT 0")
+        logger.info("[HistoryDB] Migration: added sign_count column")
+    if "animation_version" not in existing_cols:
+        conn.execute("ALTER TABLE conversations ADD COLUMN animation_version TEXT DEFAULT 'v2'")
+        logger.info("[HistoryDB] Migration: added animation_version column")
+
     conn.commit()
     logger.info("[HistoryDB] Tables initialised")
 
@@ -124,15 +157,34 @@ def _sync_log_message(
         sasl_gloss:      The SASL sign names generated/sent.
         translated_text: The translated output (English sentence or SASL text).
         source:          How the message originated: 'text', 'speech', 'sign', 'assist'.
+
+    sign_count is auto-derived from sasl_gloss word count so callers don't need
+    to compute it — sasl_gloss is already the space-separated list of sign names.
+    animation_version is pinned to the current signs_library.js version.
     """
     try:
         conn = _get_connection()
         now = datetime.now(timezone.utc).isoformat()
+        # Count SASL signs from the gloss string (each token is one sign name)
+        sign_count = len(sasl_gloss.split()) if sasl_gloss and sasl_gloss.strip() else 0
+        animation_version = "v2"
         conn.execute(
             """INSERT INTO conversations
-               (session_id, timestamp, direction, original_text, sasl_gloss, translated_text, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (session_id, now, direction, original_text, sasl_gloss, translated_text, source),
+               (session_id, timestamp, direction, original_text, sasl_gloss,
+                translated_text, source, sign_count, animation_version)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, now, direction, original_text, sasl_gloss,
+             translated_text, source, sign_count, animation_version),
+        )
+        # ARCH-6: keep session message_count in sync
+        conn.execute(
+            """INSERT OR IGNORE INTO sessions (session_id, created_at)
+               VALUES (?, ?)""",
+            (session_id, now),
+        )
+        conn.execute(
+            "UPDATE sessions SET message_count = message_count + 1 WHERE session_id = ?",
+            (session_id,),
         )
         conn.commit()
     except Exception as exc:
@@ -180,7 +232,8 @@ def _sync_get_session_history(
         conn = _get_connection()
         cursor = conn.execute(
             """SELECT id, session_id, timestamp, direction,
-                      original_text, sasl_gloss, translated_text, source
+                      original_text, sasl_gloss, translated_text, source,
+                      sign_count, animation_version
                FROM conversations
                WHERE session_id = ?
                ORDER BY id DESC
@@ -211,21 +264,38 @@ async def get_session_history(
 
 
 def _sync_get_all_sessions() -> List[Dict[str, Any]]:
-    """List all sessions with message counts (synchronous).
+    """List all sessions with metadata (synchronous).
+
+    Reads from the sessions table (ARCH-6) for O(1) per row instead of
+    scanning all conversations. Falls back to the conversations aggregate
+    if a session was logged before the sessions table existed.
 
     Returns:
-        List of dicts: { session_id, message_count, first_message, last_message }.
+        List of dicts: { session_id, created_at, closed_at, roles_present,
+                         message_count }.
     """
     try:
         conn = _get_connection()
+        # Primary: sessions table (fast, no scan)
+        cursor = conn.execute(
+            """SELECT session_id, created_at, closed_at, roles_present, message_count
+               FROM sessions
+               ORDER BY created_at DESC
+               LIMIT 50"""
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        if rows:
+            return rows
+        # Fallback: sessions table empty (pre-migration DB) — aggregate from conversations
         cursor = conn.execute(
             """SELECT session_id,
                       COUNT(*) as message_count,
-                      MIN(timestamp) as first_message,
-                      MAX(timestamp) as last_message
+                      MIN(timestamp) as created_at,
+                      MAX(timestamp) as closed_at,
+                      '' as roles_present
                FROM conversations
                GROUP BY session_id
-               ORDER BY last_message DESC
+               ORDER BY closed_at DESC
                LIMIT 50"""
         )
         return [dict(row) for row in cursor.fetchall()]
@@ -266,6 +336,81 @@ def _sync_delete_old_messages(days: int = 90) -> int:
     except Exception as exc:
         logger.error("[HistoryDB] Failed to delete old messages: %s", exc)
         return 0
+
+
+def _sync_upsert_session(session_id: str, role: str) -> None:
+    """Create or update the sessions row when a role joins (synchronous).
+
+    On first join: inserts the row with created_at = now.
+    On subsequent joins: appends the role to roles_present if not already listed.
+
+    Args:
+        session_id: The WebSocket session ID.
+        role:       The role that connected ('hearing', 'deaf', 'rights').
+    """
+    try:
+        conn = _get_connection()
+        now = datetime.now(timezone.utc).isoformat()
+        # Insert if not exists (first role to join)
+        conn.execute(
+            """INSERT OR IGNORE INTO sessions (session_id, created_at, roles_present)
+               VALUES (?, ?, '')""",
+            (session_id, now),
+        )
+        # Append role if not already in the comma-separated list
+        row = conn.execute(
+            "SELECT roles_present FROM sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row:
+            existing = row["roles_present"] or ""
+            roles = set(r for r in existing.split(",") if r)
+            roles.add(role)
+            conn.execute(
+                "UPDATE sessions SET roles_present = ?, closed_at = NULL WHERE session_id = ?",
+                (",".join(sorted(roles)), session_id),
+            )
+        conn.commit()
+    except Exception as exc:
+        logger.warning("[HistoryDB] Failed to upsert session: %s", exc)
+
+
+async def upsert_session(session_id: str, role: str) -> None:
+    """Create or update the sessions row when a role joins (async).
+
+    Args:
+        session_id: The WebSocket session ID.
+        role:       The role that connected.
+    """
+    await asyncio.to_thread(_sync_upsert_session, session_id, role)
+
+
+def _sync_close_session(session_id: str) -> None:
+    """Mark the session as closed when the last role disconnects (synchronous).
+
+    Args:
+        session_id: The WebSocket session ID.
+    """
+    try:
+        conn = _get_connection()
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "UPDATE sessions SET closed_at = ? WHERE session_id = ?",
+            (now, session_id),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.warning("[HistoryDB] Failed to close session: %s", exc)
+
+
+async def close_session(session_id: str) -> None:
+    """Mark the session as closed when the last role disconnects (async).
+
+    Args:
+        session_id: The WebSocket session ID.
+    """
+    await asyncio.to_thread(_sync_close_session, session_id)
+
 
 
 async def delete_old_messages(days: int = 90) -> int:
