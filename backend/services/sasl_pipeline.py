@@ -19,9 +19,11 @@ the SASL pipeline.  English input bypasses translation entirely.
 All AI runs locally via Ollama — no cloud API keys needed.
 """
 
+import json
 import logging
 import os
 import time as _time
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,68 @@ _EMPTY_RESULT = {"signs": [], "text": "", "original_english": ""}
 # D4 (MASTER_PLAN): the LLM assist is consulted only when the deterministic
 # rules leave sign coverage below this fraction of tokens.
 LLM_ASSIST_COVERAGE_THRESHOLD = 0.70
+
+# ── Offline phrase library (mined from tag rescue/dev-2026-07, FEAT-2) ──────
+# Exact-match phrase → SASL gloss sequence, checked before any other tier.
+# Loaded once at import time from backend/data/offline_phrases.json.
+_OFFLINE_PHRASES: dict[str, list[str]] = {}
+_OFFLINE_PHRASES_PATH = Path(__file__).resolve().parent.parent / "data" / "offline_phrases.json"
+
+
+def _load_offline_phrases() -> None:
+    global _OFFLINE_PHRASES
+    try:
+        with open(_OFFLINE_PHRASES_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        _OFFLINE_PHRASES = {k: v for k, v in data.items() if not k.startswith("_")}
+        logger.info("[SASL] Loaded %d offline phrases", len(_OFFLINE_PHRASES))
+    except Exception as exc:
+        logger.warning("[SASL] Could not load offline phrases: %s", exc)
+
+
+_load_offline_phrases()
+
+# ── Contraction / SA slang normalisation map (mined from rescue/dev-2026-07) ─
+_CONTRACTIONS: dict[str, str] = {
+    "i'm": "i am", "i'll": "i will", "i've": "i have", "i'd": "i would",
+    "you're": "you are", "you'll": "you will", "you've": "you have",
+    "he's": "he is", "she's": "she is", "it's": "it is",
+    "we're": "we are", "we'll": "we will", "we've": "we have",
+    "they're": "they are", "they'll": "they will", "they've": "they have",
+    "don't": "do not", "doesn't": "does not", "didn't": "did not",
+    "won't": "will not", "wouldn't": "would not", "couldn't": "could not",
+    "shouldn't": "should not", "can't": "cannot", "isn't": "is not",
+    "aren't": "are not", "wasn't": "was not", "weren't": "were not",
+    "haven't": "have not", "hasn't": "has not", "hadn't": "had not",
+    "gonna": "going to", "wanna": "want to", "gotta": "got to",
+    # SA informal words
+    "howzit": "hello how are you",
+    "eish": "", "yoh": "",
+    "lekker": "good", "sharp": "okay",
+    "ja": "yes", "nee": "no",
+}
+
+
+def _normalize_informal(text: str) -> str:
+    """Expand contractions and normalise SA informal words before the pipeline.
+
+    Multi-word keys are replaced as substrings first (longest first); then
+    single-word tokens are expanded. Empty expansions drop the word.
+    """
+    text_lower = text.lower()
+    for phrase, expansion in sorted(_CONTRACTIONS.items(), key=lambda x: len(x[0]), reverse=True):
+        if " " in phrase and phrase in text_lower:
+            text_lower = text_lower.replace(phrase, expansion if expansion else "", 1)
+
+    words = text_lower.split()
+    result = []
+    for w in words:
+        expanded = _CONTRACTIONS.get(w)
+        if expanded is None:
+            result.append(w)
+        elif expanded:
+            result.extend(expanded.split())
+    return " ".join(result)
 
 # ── FEAT-5: Multilingual constants ─────────────────────────────────────────
 
@@ -207,6 +271,24 @@ async def text_to_sasl_signs(text: str, language: str | None = None) -> dict:
 
     # Import once — used by both tier 1 and tier 2
     from sasl_transformer.models import TranslationRequest
+
+    # ── Step 0: normalise informal input, then exact offline phrase match ─
+    # Checked after normalisation so contractions expand first:
+    # "I'm in pain!" → "i am in pain" → matches the offline entry.
+    text = _normalize_informal(text)
+    _phrase_key = text.lower().strip(" .!?,")
+    if _phrase_key in _OFFLINE_PHRASES:
+        _signs = _OFFLINE_PHRASES[_phrase_key]
+        _gloss = " ".join(_signs)
+        _lib = _sasl_transformer.sign_library
+        _known = sum(1 for s in _signs if _lib.has_sign(s))
+        _coverage = round(_known / len(_signs), 3) if _signs else 1.0
+        logger.info("[SASL] Tier 0 (phrase) '%s' → '%s' coverage=%.2f", _phrase_key, _gloss, _coverage)
+        return _build_result(
+            _signs, _gloss, text,
+            sign_coverage=_coverage,
+            fingerspelled=[s for s in _signs if not _lib.has_sign(s)],
+        )
 
     # ── D4 (MASTER_PLAN): deterministic rules run FIRST. ──────────────────
     # The LLM is an optional assist consulted only when rules leave too many
