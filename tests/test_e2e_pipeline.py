@@ -120,12 +120,14 @@ async def run_tests():
         print("   Start the backend first: python -m uvicorn backend.main:app --port 8000")
         return False
 
-    ws_url_hearing = "{}/{}/hearing?token={}".format(WS_BASE, SESSION_ID, token)
-    ws_url_deaf = "{}/{}/deaf?token={}".format(WS_BASE, SESSION_ID, token)
+    # D9 (MASTER_PLAN): auth travels in the WebSocket subprotocol, not the URL
+    ws_url_hearing = "{}/{}/hearing".format(WS_BASE, SESSION_ID)
+    ws_url_deaf = "{}/{}/deaf".format(WS_BASE, SESSION_ID)
+    auth_subprotocols = ["amandla-{}".format(token)]
 
     # -- Connect BOTH windows to the same session --------------
-    async with websockets.connect(ws_url_hearing) as hearing_ws, \
-               websockets.connect(ws_url_deaf) as deaf_ws:
+    async with websockets.connect(ws_url_hearing, subprotocols=auth_subprotocols) as hearing_ws, \
+               websockets.connect(ws_url_deaf, subprotocols=auth_subprotocols) as deaf_ws:
 
         # Both should receive a status message on connect
         hearing_status = await recv_until(hearing_ws, "status", timeout=5)

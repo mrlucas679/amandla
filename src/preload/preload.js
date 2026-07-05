@@ -67,6 +67,14 @@ function connect(sessionId, role, secret) {
   currentRole = role
   if (secret) currentSecret = secret
 
+  // Guard: never attempt an unauthenticated connection. The secret arrives
+  // via IPC shortly after window load; the IPC handlers below call connect()
+  // again once all three values (session, role, secret) are present.
+  if (!currentSecret) {
+    console.warn('[Preload] connect() called before session secret arrived — deferring')
+    return
+  }
+
   // Guard: don't open a second socket if one is already live for this session + role
   const sessionKey = sessionId + '/' + role
   if (
@@ -84,9 +92,11 @@ function connect(sessionId, role, secret) {
     ws.close()
   }
 
-  const url = `ws://localhost:8000/ws/${sessionId}/${role}?token=${encodeURIComponent(currentSecret || '')}`
+  // D9 (MASTER_PLAN): authenticate via WebSocket subprotocol, never a query
+  // string — tokens in URLs end up in server and proxy logs.
+  const url = `ws://localhost:8000/ws/${sessionId}/${role}`
   console.log(`[Preload] Connecting to ${url}`)
-  ws = new WebSocket(url)
+  ws = new WebSocket(url, [`amandla-${currentSecret}`])
   // Tag the socket so we can detect duplicates above
   ws._amandlaSession = sessionKey
 

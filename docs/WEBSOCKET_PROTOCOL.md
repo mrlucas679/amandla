@@ -1,6 +1,6 @@
 # AMANDLA WebSocket Protocol Reference
 
-> Last Updated: March 30, 2026  
+> Last Updated: July 5, 2026  
 > Authoritative source: `backend/ws/handler.py` + `src/preload/preload.js`
 
 ---
@@ -10,7 +10,24 @@
 ### Endpoint
 
 ```
-ws://localhost:8000/ws/{sessionId}/{role}?token={sessionSecret}
+ws://localhost:8000/ws/{sessionId}/{role}
+```
+
+Authentication travels in the WebSocket **subprotocol** header
+(`Sec-WebSocket-Protocol: amandla-<sessionSecret>`), never in the URL —
+query-string tokens leak into server and proxy logs and are rejected
+(D9 in `MASTER_PLAN.md`).
+
+```javascript
+const secret = /* GET /auth/session-secret */;
+const ws = new WebSocket(`ws://localhost:8000/ws/${sessionId}/${role}`,
+                         [`amandla-${secret}`]);
+```
+
+```python
+# Python (websockets library)
+async with websockets.connect(url, subprotocols=[f"amandla-{secret}"]) as ws:
+    ...
 ```
 
 ### Parameters
@@ -19,15 +36,15 @@ ws://localhost:8000/ws/{sessionId}/{role}?token={sessionSecret}
 |-----------|------|----------|-------------|
 | `sessionId` | string (path) | Yes | Shared session identifier (e.g. `amandla-<base64url>`) |
 | `role` | string (path) | Yes | One of: `hearing`, `deaf`, `rights` |
-| `token` | string (query) | Yes | Session secret from `GET /auth/session-secret` |
+| `amandla-<secret>` | string (subprotocol) | Yes | Session secret from `GET /auth/session-secret` |
 
 ### Connection lifecycle
 
-1. Client sends `?token=<secret>` — validated with constant-time `hmac.compare_digest()`
-2. If token is invalid → `close(1008, "Invalid or missing session token")`
+1. Client offers subprotocol `amandla-<secret>` — validated with constant-time `hmac.compare_digest()`
+2. If token is missing/invalid (including query-string-only attempts) → `close(1008, "Invalid or missing session token")`
 3. If role is invalid → `close(1008, "Invalid role '<role>'")`
 4. If session limit reached → `close(1013, "Too many active sessions")`
-5. On success → server sends: `{ "type": "status", "status": "connected", "session_id": "..." }`
+5. On success → server accepts, echoing the `amandla-<secret>` subprotocol, then sends: `{ "type": "status", "status": "connected", "session_id": "..." }`
 
 ### Reconnection
 
@@ -557,8 +574,9 @@ HTTP endpoints are additionally rate-limited per IP per endpoint via `backend/mi
 1. Backend generates `SESSION_SECRET` at startup (`secrets.token_urlsafe(32)`)
 2. Electron main fetches it: `GET /auth/session-secret` → `{ "session_secret": "..." }`
 3. Main process sends secret to each window via IPC
-4. Every WebSocket connection includes `?token=<secret>` in the URL
-5. Backend validates with `hmac.compare_digest()` (constant-time)
+4. Every WebSocket connection offers subprotocol `amandla-<secret>` (never a URL token)
+5. Backend validates with `hmac.compare_digest()` (constant-time) and echoes the subprotocol on accept
+6. Mutating HTTP requests (POST/PUT/PATCH/DELETE) require the `X-Amandla-Token: <secret>` header (`SessionTokenMiddleware`)
 
 ---
 

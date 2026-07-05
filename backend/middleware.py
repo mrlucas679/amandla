@@ -128,3 +128,36 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
+
+
+class SessionTokenMiddleware(BaseHTTPMiddleware):
+    """Require the session secret on all mutating HTTP requests (D10).
+
+    The Electron app talks to the backend through the preload WebSocket
+    bridge, so legitimate HTTP POSTs come only from local tooling and tests,
+    which fetch ``GET /auth/session-secret`` first and send it back as the
+    ``X-Amandla-Token`` header. Without this gate, any web page in a local
+    browser could fire blind cross-origin POSTs at localhost:8000 (audio
+    uploads, translation requests) even though it cannot read the responses.
+    """
+
+    _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        if request.method in self._MUTATING_METHODS:
+            from backend.shared import verify_session_token
+
+            token = request.headers.get("x-amandla-token", "")
+            if not verify_session_token(token):
+                logger.warning(
+                    "[SessionToken] Rejected %s %s — missing or bad X-Amandla-Token",
+                    request.method,
+                    request.url.path,
+                )
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Missing or invalid session token."},
+                )
+        return await call_next(request)
