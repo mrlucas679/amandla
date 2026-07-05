@@ -39,7 +39,7 @@ import os
 SCRIPT_DIR  = os.path.dirname(os.path.realpath(__file__))
 ROOT_DIR    = os.path.dirname(SCRIPT_DIR)
 
-SASL_FBX    = os.path.join(ROOT_DIR, 'SASL DOCUMEENTS',
+SASL_FBX    = os.path.join(ROOT_DIR, 'docs', 'research', 'sasl-sources',
                            'SG ASL ADHD 1 2023-8-16 No Mesh Full.fbx')
 MIXAMO_GLB  = os.path.join(ROOT_DIR, 'assets', 'models', 'avatar.glb')
 OUTPUT_GLB  = os.path.join(ROOT_DIR, 'assets', 'models', 'avatar_sasl_retargeted.glb')

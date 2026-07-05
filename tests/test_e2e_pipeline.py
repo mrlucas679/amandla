@@ -285,8 +285,8 @@ async def run_tests():
         print("")
         print("  Security checks:")
         try:
-            bad_role_url = "{}/{}/hacker?token={}".format(WS_BASE, SESSION_ID, token)
-            async with websockets.connect(bad_role_url) as bad_ws:
+            bad_role_url = "{}/{}/hacker".format(WS_BASE, SESSION_ID)
+            async with websockets.connect(bad_role_url, subprotocols=auth_subprotocols) as bad_ws:
                 # Should be closed immediately by backend
                 try:
                     raw = await asyncio.wait_for(bad_ws.recv(), timeout=3)
@@ -300,8 +300,8 @@ async def run_tests():
 
         # Bad token test
         try:
-            bad_token_url = "{}/bad-session/hearing?token=wrong-token".format(WS_BASE)
-            async with websockets.connect(bad_token_url) as bad_ws:
+            bad_token_url = "{}/bad-session/hearing".format(WS_BASE)
+            async with websockets.connect(bad_token_url, subprotocols=["amandla-wrong-token"]) as bad_ws:
                 try:
                     raw = await asyncio.wait_for(bad_ws.recv(), timeout=3)
                     result("15. Bad token rejected", False, "Received: {}".format(raw))

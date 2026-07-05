@@ -44,7 +44,7 @@ let rightsWin = null
 const SESSION_ID = 'amandla-' + crypto.randomBytes(32).toString('base64url')
 
 // Session secret fetched from the backend at startup.
-// Required by every WebSocket connection as a ?token= query parameter.
+// Offered by every WebSocket connection as the amandla-<secret> subprotocol (D9).
 let SESSION_SECRET = null
 
 // ── BUILD-3: Backend process management ───────────────────────────
